@@ -1,0 +1,16 @@
+[package]
+name = "datumesh-wasm-smoke"
+version = "0.0.0"
+edition = "2021"
+publish = false
+description = "Smoke test: datumesh-core verifies spec/vectors/receipt/stored-number.json on wasm32-unknown-unknown."
+
+[lib]
+crate-type = ["cdylib"]
+path = "src/lib.rs"
+
+[dependencies]
+datumesh-core = { path = "../crates/datumesh-core" }
+
+[profile.release]
+opt-level = "s"

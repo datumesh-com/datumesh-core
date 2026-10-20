@@ -175,7 +175,11 @@ fn unit_shape(v: &Value, path: &str) -> Result<()> {
                     _ => false,
                 };
                 if !ok {
-                    return err(ErrorCode::Schema, &member(path, side), "a rate side is a currency code or {\"arg\": name}");
+                    return err(
+                        ErrorCode::Schema,
+                        &member(path, side),
+                        "a rate side is a currency code or {\"arg\": name}",
+                    );
                 }
             }
             Ok(())
@@ -326,7 +330,11 @@ pub(crate) fn descriptor_canonical(v: &Value) -> Result<Descriptor> {
         Value::String(name) => {
             let ty = Type::parse(name, rp)?;
             if ty == Type::Number {
-                return err(ErrorCode::CanonUnit, rp, "a number return is written {\"type\": \"number\", \"unit\": ...}");
+                return err(
+                    ErrorCode::CanonUnit,
+                    rp,
+                    "a number return is written {\"type\": \"number\", \"unit\": ...}",
+                );
             }
             Returns { ty, unit: None }
         }
@@ -378,10 +386,16 @@ pub fn resolve_with(d: &Descriptor, cell: &Cell) -> Result<Option<String>> {
     let arg_value = |name: &str| -> Result<String> {
         let p = member("$.cell.args", name);
         match cell.args.get(name) {
-            None => err(ErrorCode::ArgMissing, &p, format!("the unit refers to argument {name:?}, which the cell does not bind")),
+            None => err(
+                ErrorCode::ArgMissing,
+                &p,
+                format!("the unit refers to argument {name:?}, which the cell does not bind"),
+            ),
             Some(Arg::Slice) => err(ErrorCode::Slice, &p, "a slice has no single unit"),
             Some(Arg::Value(Scalar::String(s))) => Ok(s.clone()),
-            Some(Arg::Value(other)) => err(ErrorCode::ArgType, &p, format!("bound as {}, not string", other.ty().as_str())),
+            Some(Arg::Value(other)) => {
+                err(ErrorCode::ArgType, &p, format!("bound as {}, not string", other.ty().as_str()))
+            }
         }
     };
     let side = |s: &RateSide| -> Result<String> {
@@ -390,7 +404,11 @@ pub fn resolve_with(d: &Descriptor, cell: &Cell) -> Result<Option<String>> {
             RateSide::Arg(n) => {
                 let v = arg_value(n)?;
                 if !lexical::is_currency(&v) {
-                    return err(ErrorCode::CanonUnit, &member("$.cell.args", n), format!("a rate side must be a currency code: {v:?}"));
+                    return err(
+                        ErrorCode::CanonUnit,
+                        &member("$.cell.args", n),
+                        format!("a rate side must be a currency code: {v:?}"),
+                    );
                 }
                 Ok(v)
             }
@@ -412,4 +430,3 @@ pub fn resolve_with(d: &Descriptor, cell: &Cell) -> Result<Option<String>> {
         }
     }))
 }
-

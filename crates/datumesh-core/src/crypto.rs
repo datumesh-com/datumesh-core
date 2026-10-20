@@ -69,7 +69,9 @@ mod tests {
 
     #[test]
     fn key_id_of_rates_key() {
-        let p = crate::lexical::decode_hex_lower::<32>("843baeb22bfd0364fb1b7262b367fb3202e7886c69a070fecf8e343fedb1eabf").unwrap();
+        let p =
+            crate::lexical::decode_hex_lower::<32>("843baeb22bfd0364fb1b7262b367fb3202e7886c69a070fecf8e343fedb1eabf")
+                .unwrap();
         assert_eq!(key_id(&p), "d712b32a2cc5cb7c");
     }
 }

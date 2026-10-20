@@ -4,3 +4,5 @@
 /fuzz/corpus
 /fuzz/artifacts
 /wasm-smoke/target
+/fuzz/logs
+/fuzz/Cargo.lock

@@ -17,7 +17,13 @@ pub(crate) fn object<'a>(v: &'a Value, path: &str) -> Result<&'a [(String, Value
 }
 
 /// Checks that an object has every `required` member and nothing outside `required` and `optional`.
-pub(crate) fn exact(m: &[(String, Value)], required: &[&str], optional: &[&str], path: &str, code: ErrorCode) -> Result<()> {
+pub(crate) fn exact(
+    m: &[(String, Value)],
+    required: &[&str],
+    optional: &[&str],
+    path: &str,
+    code: ErrorCode,
+) -> Result<()> {
     for r in required {
         if !m.iter().any(|(k, _)| k == r) {
             return err(code, path, format!("missing member '{r}'"));

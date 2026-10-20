@@ -124,7 +124,8 @@ fn fail(mut out: VerifyResult, e: Error) -> VerifyResult {
     out
 }
 
-type StepError = (Error, Option<Receipt>);
+/// A failure in steps 1-6, with the receipt when steps 1-4 passed.
+type StepError = (Error, Option<Box<Receipt>>);
 
 /// Steps 1-6 over JSON text.
 fn signature_valid(bytes: &[u8], keys: &Keys) -> core::result::Result<Receipt, StepError> {
@@ -137,14 +138,18 @@ pub(crate) fn signature_valid_value(v: &Value, keys: &Keys) -> core::result::Res
     let r = Receipt::from_value(v).map_err(|e| (e, None))?;
     match key_and_signature(&r, keys) {
         Ok(()) => Ok(r),
-        Err(e) => Err((e, Some(r))),
+        Err(e) => Err((e, Some(Box::new(r)))),
     }
 }
 
 fn key_and_signature(r: &Receipt, keys: &Keys) -> Result<()> {
     let doc = keys.get(r.signer_host()).map_err(|e| Error::new(e.code(), "$.computed_by", e.detail()))?;
     let Some(key) = doc.key(r.key_id()) else {
-        return err(ErrorCode::KeyUnknown, "$.computed_by", format!("{} publishes no key {}", r.signer_host(), r.key_id()));
+        return err(
+            ErrorCode::KeyUnknown,
+            "$.computed_by",
+            format!("{} publishes no key {}", r.signer_host(), r.key_id()),
+        );
     };
     if !key.usable_at(&r.issued) {
         return err(ErrorCode::KeyNotValid, "$.issued", "issued is outside the key's validity window");
@@ -190,7 +195,11 @@ fn recompute_steps(r: &Receipt, keys: &Keys, rc: &Recompute) -> Result<()> {
     let declared_valid: Vec<&String> = decl.iter().filter(|(_, x)| x.valid).map(|(k, _)| k).collect();
     let given_valid: Vec<&String> = r.valid.keys().collect();
     if declared_valid != given_valid {
-        return err(ErrorCode::ValidMismatch, "$.valid", "valid does not hold exactly the declared valid-time arguments");
+        return err(
+            ErrorCode::ValidMismatch,
+            "$.valid",
+            "valid does not hold exactly the declared valid-time arguments",
+        );
     }
     // 7.4
     if r.ty() != d.signature.returns.ty {
@@ -211,7 +220,11 @@ fn recompute_steps(r: &Receipt, keys: &Keys, rc: &Recompute) -> Result<()> {
             return err(ErrorCode::InputUnavailable, &p, "the receipt offered has another hash");
         }
         if !d.inputs.contains(&input.cell.function_name()) {
-            return err(ErrorCode::InputUndeclared, &p, format!("{} is not a declared input", input.cell.function_name()));
+            return err(
+                ErrorCode::InputUndeclared,
+                &p,
+                format!("{} is not a declared input", input.cell.function_name()),
+            );
         }
         if input.asof != r.asof {
             return err(ErrorCode::TimeOrder, &p, "an input has another asof");
@@ -240,7 +253,11 @@ fn check_blob(r: &Receipt, content: &[u8]) -> Result<()> {
         return err(ErrorCode::CanonBlob, "$.value", "not a blob");
     };
     if content.len() as u64 != len {
-        return err(ErrorCode::BlobMismatch, "$.value", format!("content has {} bytes, the blob states {len}", content.len()));
+        return err(
+            ErrorCode::BlobMismatch,
+            "$.value",
+            format!("content has {} bytes, the blob states {len}", content.len()),
+        );
     }
     if crypto::sha256(content) != hash {
         return err(ErrorCode::BlobMismatch, "$.value", "content does not hash to the blob's sha256");

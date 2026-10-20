@@ -1,0 +1,63 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: test (${{ matrix.toolchain }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        toolchain: ["1.97", "1.99"] # MSRV and stable
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - run: rustup toolchain install ${{ matrix.toolchain }} --profile minimal && rustup default ${{ matrix.toolchain }}
+      - run: cargo test --workspace --locked
+      - run: cargo test -p datumesh-core --features fetch --locked
+      - run: cargo run -q -p datumesh-cli -- check spec/vectors
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - run: rustup toolchain install 1.99 --profile minimal --component clippy,rustfmt && rustup default 1.99
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - run: cargo clippy -p datumesh-core --features fetch --all-targets --locked -- -D warnings
+      - name: tables are generated from spec/
+        run: python3 tools/gen_tables.py && git diff --exit-code crates/datumesh-core/src/tables.rs
+
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - run: rustup toolchain install 1.99 --profile minimal && rustup default 1.99
+      - run: cargo doc -p datumesh-core --no-deps --all-features --locked
+        env:
+          RUSTDOCFLAGS: -D warnings
+
+  wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - run: rustup toolchain install 1.99 --profile minimal --target wasm32-unknown-unknown && rustup default 1.99
+      - run: cargo build -p datumesh-core --target wasm32-unknown-unknown --locked
+      - run: cargo build --release --manifest-path wasm-smoke/Cargo.toml --target wasm32-unknown-unknown --locked
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node wasm-smoke/smoke.mjs wasm-smoke/target/wasm32-unknown-unknown/release/datumesh_wasm_smoke.wasm

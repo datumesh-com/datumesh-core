@@ -399,6 +399,11 @@ impl CellRef {
     /// The cell this reference denotes once its function name has resolved to `fn_hash`.
     pub fn resolve(&self, fn_hash: &str) -> Result<Cell> {
         lexical::check_hex(fn_hash, 64, "$.fn_hash")?;
-        Ok(Cell { ns: self.ns.clone(), fn_name: self.fn_name.clone(), fn_hash: fn_hash.into(), args: self.args.clone() })
+        Ok(Cell {
+            ns: self.ns.clone(),
+            fn_name: self.fn_name.clone(),
+            fn_hash: fn_hash.into(),
+            args: self.args.clone(),
+        })
     }
 }

@@ -209,7 +209,7 @@ fn days_in_month(y: u32, m: u32) -> u32 {
     match m {
         1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
         4 | 6 | 9 | 11 => 30,
-        2 if (y % 4 == 0 && y % 100 != 0) || y % 400 == 0 => 29,
+        2 if (y.is_multiple_of(4) && !y.is_multiple_of(100)) || y.is_multiple_of(400) => 29,
         2 => 28,
         _ => 0,
     }
@@ -262,9 +262,7 @@ pub fn check_instant(s: &str, path: &str) -> Result<()> {
 
 fn is_restricted_name(s: &str) -> bool {
     let b = s.as_bytes();
-    !b.is_empty()
-        && is_lower_digit(b[0])
-        && b.iter().all(|&c| is_lower_digit(c) || b"!#$&-^_.+".contains(&c))
+    !b.is_empty() && is_lower_digit(b[0]) && b.iter().all(|&c| is_lower_digit(c) || b"!#$&-^_.+".contains(&c))
 }
 
 /// A blob (3.7): its sha256, length and media type. Every failure is `E_CANON_BLOB`.
@@ -425,7 +423,8 @@ pub fn is_index_unit(s: &str) -> bool {
         _ => false,
     };
     // Shapes like "2015-1-01" must not slip through the padding above.
-    let shape_ok = period.bytes().enumerate().all(|(i, c)| if i == 4 || i == 7 { c == b'-' } else { c.is_ascii_digit() });
+    let shape_ok =
+        period.bytes().enumerate().all(|(i, c)| if i == 4 || i == 7 { c == b'-' } else { c.is_ascii_digit() });
     period_ok && shape_ok && is_number_grammar(value) && !value.starts_with('-') && value != "0"
 }
 
@@ -463,7 +462,15 @@ mod tests {
         assert!(is_index_unit("index:2015=100"));
         assert!(is_index_unit("index:1984-01-03=1000"));
         assert!(is_index_unit("index:2016-02-29=0.5"));
-        for bad in ["index:0000=1", "index:2015=0", "index:2015=-1", "index:2015-13=1", "index:2015-02-29=1", "index:2015=1.0", "index:15=1"] {
+        for bad in [
+            "index:0000=1",
+            "index:2015=0",
+            "index:2015=-1",
+            "index:2015-13=1",
+            "index:2015-02-29=1",
+            "index:2015=1.0",
+            "index:15=1",
+        ] {
             assert!(!is_index_unit(bad), "{bad}");
         }
     }

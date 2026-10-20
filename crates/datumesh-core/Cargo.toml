@@ -8,10 +8,10 @@ license.workspace = true
 repository.workspace = true
 homepage = "https://datumesh.com"
 documentation = "https://docs.rs/datumesh-core"
-readme = "README.md"
+readme = "../../README.md"
 keywords = ["datumesh", "receipt", "jcs", "ed25519", "verification"]
 categories = ["cryptography", "encoding"]
-include = ["src/**/*.rs", "Cargo.toml", "README.md", "LICENSE"]
+include = ["src/**/*.rs", "Cargo.toml", "LICENSE"]
 
 [features]
 default = []
@@ -21,7 +21,7 @@ fetch = ["dep:ureq"]
 curve25519-dalek = { version = "5", default-features = false }
 sha2 = { version = "0.11", default-features = false }
 unicode-normalization = { version = "0.1.26", default-features = false }
-ureq = { version = "3", optional = true }
+ureq = { version = "3", optional = true, default-features = false, features = ["rustls"] }
 
 [package.metadata.docs.rs]
 all-features = true

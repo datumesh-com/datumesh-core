@@ -10,13 +10,12 @@ use std::process::ExitCode;
 
 use datumesh_core::json::{self, Value};
 use datumesh_core::{
-    check_envelope, format_uri, https_url, key_id, parse_uri, resolved_unit_value, sha256_hex,
-    verify, Cell, CellRef, Descriptor, Error, ErrorCode, Keys, Recompute, Receipt, Request, Scalar,
+    check_envelope, format_uri, https_url, key_id, parse_uri, resolved_unit_value, sha256_hex, verify, Cell, CellRef,
+    Descriptor, Error, ErrorCode, Keys, Receipt, Recompute, Request, Scalar,
 };
 
 /// The mesh host URI vectors map to (SPEC 11).
 pub const MESH: &str = "mesh.example";
-
 
 fn s(v: &str) -> Value {
     Value::String(v.to_string())
@@ -80,7 +79,7 @@ fn input_bytes(v: &Value) -> Result<Vec<u8>, Error> {
 }
 
 fn decode_hex(h: &str) -> Option<Vec<u8>> {
-    if h.len() % 2 != 0 {
+    if !h.len().is_multiple_of(2) {
         return None;
     }
     (0..h.len()).step_by(2).map(|i| h.get(i..i + 2).and_then(|x| u8::from_str_radix(x, 16).ok())).collect()
@@ -151,7 +150,11 @@ pub fn run(v: &Value) -> Result<Outputs, Error> {
             let input = json::parse(&input_bytes(v)?)?;
             let shape_ok = matches!(&input, Value::Object(m) if m.len() == 2 && input.get("cell").is_some() && input.get("descriptor").is_some());
             if !shape_ok {
-                return Err(Error::new(ErrorCode::Schema, "$", "a unit input is an object with exactly cell and descriptor"));
+                return Err(Error::new(
+                    ErrorCode::Schema,
+                    "$",
+                    "a unit input is an object with exactly cell and descriptor",
+                ));
             }
             let d = input.get("descriptor").cloned().unwrap_or(Value::Null);
             let c = input.get("cell").cloned().unwrap_or(Value::Null);
@@ -254,10 +257,8 @@ pub fn check_vector(v: &Value) -> Vec<String> {
             }
         }
         (true, Err(e)) => problems.push(format!("expected success, got {e}")),
-        (false, Ok(_)) => problems.push(format!(
-            "expected {}, got success",
-            v.get("error").and_then(Value::as_str).unwrap_or("an error")
-        )),
+        (false, Ok(_)) => problems
+            .push(format!("expected {}, got success", v.get("error").and_then(Value::as_str).unwrap_or("an error"))),
         (false, Err(e)) => {
             let want = v.get("error").and_then(Value::as_str).unwrap_or("");
             if e.code_str() != want {
@@ -291,7 +292,10 @@ pub fn check(dir: &Path) -> ExitCode {
     files.sort();
     let mut passed = 0;
     for f in &files {
-        let problems = match std::fs::read(f).map_err(|e| e.to_string()).and_then(|b| json::parse(&b).map_err(|e| e.to_string())) {
+        let problems = match std::fs::read(f)
+            .map_err(|e| e.to_string())
+            .and_then(|b| json::parse(&b).map_err(|e| e.to_string()))
+        {
             Ok(v) => check_vector(&v),
             Err(e) => vec![format!("unreadable vector: {e}")],
         };

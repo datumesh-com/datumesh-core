@@ -33,7 +33,11 @@ fn percent_decode(raw: &str, path: &str) -> Result<String> {
             };
             let byte = (h << 4) | l;
             if is_literal(byte) {
-                return err(ErrorCode::CanonPercent, path, format!("{:?} must not be percent-encoded", char::from(byte)));
+                return err(
+                    ErrorCode::CanonPercent,
+                    path,
+                    format!("{:?} must not be percent-encoded", char::from(byte)),
+                );
             }
             out.push(byte);
             i += 3;
@@ -148,7 +152,11 @@ pub fn parse_uri(uri: &str, signature: &Value) -> Result<CellRef> {
     for (k, d) in jcs_sorted(decls) {
         let readable = matches!(d.get("type"), Some(Value::String(_))) && d.as_object().is_some();
         if !readable {
-            return err(ErrorCode::Schema, &format!("signature.args.{k}"), "a declaration is an object with a string type");
+            return err(
+                ErrorCode::Schema,
+                &format!("signature.args.{k}"),
+                "a declaration is an object with a string type",
+            );
         }
     }
     for &(name, _) in &params {

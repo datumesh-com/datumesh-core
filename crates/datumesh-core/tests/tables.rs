@@ -38,7 +38,11 @@ fn units_match_units_md() {
     let listed = |name: &str| -> Vec<String> {
         let start = generated.find(&format!("const {name}: &[&str] = &[")).unwrap();
         let end = start + generated[start..].find("];").unwrap();
-        generated[start..end].lines().skip(1).map(|l| l.trim().trim_end_matches(',').trim_matches('"').to_string()).collect()
+        generated[start..end]
+            .lines()
+            .skip(1)
+            .map(|l| l.trim().trim_end_matches(',').trim_matches('"').to_string())
+            .collect()
     };
     assert_eq!(listed("CURRENCIES"), currencies);
     assert_eq!(listed("PHYSICAL"), physical);

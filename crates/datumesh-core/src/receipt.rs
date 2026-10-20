@@ -7,8 +7,20 @@ use crate::model::{self, Arg, Args, Cell, Scalar, Type};
 use crate::schema;
 
 const MEMBERS: [&str; 14] = [
-    "asof", "cell", "computed_by", "inputs", "issued", "licence", "proto", "publisher", "sig", "summary", "tx", "type",
-    "valid", "value",
+    "asof",
+    "cell",
+    "computed_by",
+    "inputs",
+    "issued",
+    "licence",
+    "proto",
+    "publisher",
+    "sig",
+    "summary",
+    "tx",
+    "type",
+    "valid",
+    "value",
 ];
 
 /// A receipt (8.1) that has passed verification steps 1-4: strict JSON, structure, canonical

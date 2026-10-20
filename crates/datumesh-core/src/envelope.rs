@@ -196,7 +196,8 @@ fn integer_member(v: &Value, path: &str) -> Result<u64> {
         return env_err(path, "must be a non-negative integer");
     };
     let t = n.text();
-    let ok = !t.is_empty() && t.bytes().all(|c| c.is_ascii_digit()) && (t == "0" || !t.starts_with('0')) && t.len() <= 16;
+    let ok =
+        !t.is_empty() && t.bytes().all(|c| c.is_ascii_digit()) && (t == "0" || !t.starts_with('0')) && t.len() <= 16;
     match (ok, t.parse::<u64>()) {
         (true, Ok(x)) if x <= limits::BLOB_LENGTH => Ok(x),
         _ => env_err(path, format!("must be written 0|[1-9][0-9]* and at most 2^53 - 1, not {t}")),
@@ -310,7 +311,10 @@ pub fn check_envelope(status: u16, body: &[u8], keys: &Keys, request: &Request) 
     // 6.
     let primary = r.signer_host() == lexical::host_of(&r.cell.ns) && r.inputs.is_empty();
     if (env.trust == Some(Trust::Primary)) != primary {
-        return env_err("$.trust", if primary { "a primary receipt is labelled primary" } else { "the receipt is not primary" });
+        return env_err(
+            "$.trust",
+            if primary { "a primary receipt is labelled primary" } else { "the receipt is not primary" },
+        );
     }
     if env.superseded_by.as_deref() == Some(r.hash().as_str()) {
         return env_err("$.superseded_by", "a receipt cannot supersede itself");
