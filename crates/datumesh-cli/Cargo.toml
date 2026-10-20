@@ -1,0 +1,16 @@
+[package]
+name = "datumesh-cli"
+version = "0.2.1"
+description = "Vector runner for datumesh-core (not published)."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[[bin]]
+name = "datumesh-cli"
+path = "src/main.rs"
+
+[dependencies]
+datumesh-core = { path = "../datumesh-core" }
