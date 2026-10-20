@@ -144,6 +144,7 @@ lines are identical except for one case, RS-27.
   value as an input: evaluation is not part of verification."
 
 - **Status.** **Resolved** by `58eb0d9` 11 (the `recompute` object is defined).
+
 ### RS-19. 10.1 step 6: an implementer trap with mixed-order keys
 - **Section.** 10.1 step 6.
 - **Problem.** Not a gap in the rule but a trap the text could warn about. The natural way to
@@ -155,6 +156,7 @@ lines are identical except for one case, RS-27.
   A, not the scalar k: for a mixed-order A, [L − k]A ≠ −[k]A."
 
 - **Status.** **Resolved** by `58eb0d9` 10.1 step 6 ("Do not compute it as [L − k]A").
+
 ### RS-20. 4.5 vs 9.2: the `keys` limit's code
 - **Section.** 4.5, 9.2.
 - **Problem.** 4.5 lists `keys` = 64 and says "Exceeding a limit fails with `E_CANON_LIMIT`"; 9.2
@@ -164,6 +166,7 @@ lines are identical except for one case, RS-27.
   except `keys`: a key document with more than 64 keys is `E_KEY_DOC` (9.2)."
 
 - **Status.** **Resolved** by `58eb0d9` 4.5 (`keys` is the `E_KEY_DOC` exception).
+
 ### RS-21. 5.5 step 5: the code for a malformed request
 - **Section.** 5.5.
 - **Problem.** "A malformed request description is the caller's error, not `E_ENVELOPE`" names
@@ -173,6 +176,7 @@ lines are identical except for one case, RS-27.
   and one whose `asof` is not an instant `E_CANON_INSTANT`; neither is `E_ENVELOPE`."
 
 - **Status.** **Resolved** by `58eb0d9` 5.5: not an `E_*` code, reported as the language reports a misused function. This crate changed accordingly: `Request::new` now returns `Result<Request, InvalidRequest>` instead of an `E_CANON_HEX` / `E_CANON_INSTANT` error.
+
 ### RS-22. 5.3: what a mesh host is
 - **Section.** 5.3.
 - **Problem.** `https://<mesh>/cell/<rest>` does not say whether `<mesh>` is a DNS name (2.1),
@@ -182,6 +186,7 @@ lines are identical except for one case, RS-27.
   (or "is a DNS name (2.1)", if ports are not meant to be allowed).
 
 - **Status.** **Resolved** by `58eb0d9` 5.3 (a DNS name, default port). `https_url` already required that.
+
 ### RS-23. 9.3 / 12: retrieval limits
 - **Section.** 9.3, 12.
 - **Problem.** No timeout and no maximum document size are given, so a slow or huge response is
@@ -192,6 +197,7 @@ lines are identical except for one case, RS-27.
   than 256 KiB of a key document; either is `E_KEY_UNAVAILABLE`."
 
 - **Status.** **Resolved** by `58eb0d9` 9.3 (SHOULD bound retrieval, e.g. 10 s and 256 KiB), the bounds `fetch_keys` uses.
+
 ### RS-24. 11: the vectors' `env` format for malformed statuses
 - **Section.** 11.
 - **Problem.** `status` is "200", another status or `"error"`; a status given as the string
@@ -202,6 +208,7 @@ lines are identical except for one case, RS-27.
   behaves as `"error"`."
 
 - **Status.** **Resolved** by `58eb0d9` 11 (`status` is an integer or `"error"`).
+
 ### RS-25. Vector descriptions out of date
 - **Section.** `vectors/invalid/envelope-unknown-outcome.json`,
   `vectors/invalid/scalar-type-unknown.json`.
@@ -211,6 +218,7 @@ lines are identical except for one case, RS-27.
 - **Proposed wording.** "outcome is one of eight values"; "There are exactly six types."
 
 - **Status.** **Resolved** by `58eb0d9` (both descriptions corrected).
+
 ### RS-26. 10.1: what the result reports for a failure after step 4
 - **Section.** 10.1, 9.4.
 - **Problem.** Nothing says what a verifier exposes beyond the code. The contract for this crate
@@ -223,6 +231,7 @@ lines are identical except for one case, RS-27.
   receipt it concerns."
 
 - **Status.** **Resolved** by `58eb0d9` 11 (the library's choice; vectors do not record it).
+
 ### RS-27. 9.3: the code when the host asked for is not a DNS name
 - **Section.** 9.3 ("Keys are resolved only for hosts that are DNS names"), 11 (`keys` vectors).
 - **Problem.** The sentence says such hosts are not resolved but not what a resolver reports when
