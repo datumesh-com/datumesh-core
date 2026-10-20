@@ -17,7 +17,9 @@ below were re-checked against the committed reference tool of the submodule (`5f
 
 How the oracle was used: about 180 hand-written probes and 19,400 generated mutations of the
 spec's vectors (all kinds) were run through both the reference tool and `datumesh-cli`; at
-`bfe5a38` the error codes agree on every case.
+`bfe5a38` the error codes agree on every case. The 338 spec vectors and 6,139 generated ones
+were also run through the Python and JavaScript libraries' runners (black boxes): the output
+lines are identical except for one case, RS-27.
 
 ## Resolved by the spec-0.2.1 draft (bfe5a38)
 
@@ -209,3 +211,18 @@ spec's vectors (all kinds) were run through both the reference tool and `datumes
 - **Proposed wording (10.1, after the procedure).** "A verifier SHOULD report the receipt hash
   whenever steps 1-4 passed, also when a later step fails, so that a failure can be tied to the
   receipt it concerns."
+
+### RS-27. 9.3: the code when the host asked for is not a DNS name
+- **Section.** 9.3 ("Keys are resolved only for hosts that are DNS names"), 11 (`keys` vectors).
+- **Problem.** The sentence says such hosts are not resolved but not what a resolver reports when
+  given one together with a document, e.g. a `keys` vector with `host` `Rates.example.org` and a
+  200 response naming `rates.example.org`. The reference tool and this crate report `E_KEY_DOC`
+  (the document's `host` does not equal the host asked for); the Python library, run as a black
+  box on the same vector, reports `E_KEY_UNAVAILABLE` (no retrieval is attempted). Found by a
+  three-way run of 6,139 generated vectors through the Rust, Python and JavaScript runners: this
+  was the only disagreement.
+- **Resolution.** `E_KEY_DOC`, as the reference tool.
+- **Proposed wording (9.3).** "A host that is not a DNS name (2.1) has no keys: resolving it is
+  `E_KEY_UNAVAILABLE`, whatever response is at hand." (or, to keep the reference tool's
+  behaviour: "…a document fetched for it never satisfies 9.2: `E_KEY_DOC`."). Either way, one
+  sentence and one vector.
