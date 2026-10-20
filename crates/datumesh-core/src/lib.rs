@@ -49,7 +49,7 @@ pub use crypto::{key_id, sha256, sha256_hex, verify_ed25519};
 pub use descriptor::{
     resolve_with, resolved_unit, resolved_unit_value, ArgDecl, Descriptor, RateSide, Returns, Signature, Unit,
 };
-pub use envelope::{check_envelope, Envelope, Outcome, Quote, Request, Trust};
+pub use envelope::{check_envelope, Envelope, InvalidRequest, Outcome, Quote, Request, Trust};
 pub use error::{Error, ErrorCode, Result};
 #[cfg(feature = "fetch")]
 pub use fetch::fetch_keys;

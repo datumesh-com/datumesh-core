@@ -62,6 +62,7 @@ impl Receipt {
 
     /// Runs verification steps 2-4 on a parsed JSON value.
     pub fn from_value(v: &Value) -> Result<Receipt> {
+        json::check_value_depth(v)?;
         structure(v)?;
         let r = canonical(v)?;
         r.consistency()?;

@@ -15,7 +15,7 @@ fn vectors() -> Vec<PathBuf> {
 #[test]
 fn every_vector_passes() {
     let files = vectors();
-    assert!(files.len() >= 338, "expected at least 338 vectors, found {}", files.len());
+    assert!(files.len() >= 339, "expected at least 339 vectors, found {}", files.len());
     let mut failures = Vec::new();
     for f in &files {
         let v = json::parse(&std::fs::read(f).unwrap()).unwrap_or_else(|e| panic!("{}: {e}", f.display()));

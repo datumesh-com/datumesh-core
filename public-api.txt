@@ -34,6 +34,7 @@ pub fn datumesh_core::json::Number::fmt(&self, &mut core::fmt::Formatter<'_>) ->
 impl core::marker::StructuralPartialEq for datumesh_core::json::Number
 pub const datumesh_core::json::MAX_DEPTH: usize
 pub fn datumesh_core::json::canonicalize_json(&[u8]) -> datumesh_core::Result<alloc::vec::Vec<u8>>
+pub fn datumesh_core::json::check_value_depth(&datumesh_core::json::Value) -> datumesh_core::Result<()>
 pub fn datumesh_core::json::format_number(f64) -> alloc::string::String
 pub fn datumesh_core::json::parse(&[u8]) -> datumesh_core::Result<datumesh_core::json::Value>
 pub mod datumesh_core::lexical
@@ -411,6 +412,20 @@ pub fn datumesh_core::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::
 impl core::fmt::Display for datumesh_core::Error
 pub fn datumesh_core::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::marker::StructuralPartialEq for datumesh_core::Error
+pub struct datumesh_core::InvalidRequest(_)
+impl core::clone::Clone for datumesh_core::InvalidRequest
+pub fn datumesh_core::InvalidRequest::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_core::InvalidRequest
+impl core::cmp::PartialEq for datumesh_core::InvalidRequest
+pub fn datumesh_core::InvalidRequest::eq(&self, &Self) -> bool
+impl core::error::Error for datumesh_core::InvalidRequest
+impl core::fmt::Debug for datumesh_core::InvalidRequest
+pub fn datumesh_core::InvalidRequest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for datumesh_core::InvalidRequest
+pub fn datumesh_core::InvalidRequest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for datumesh_core::InvalidRequest
+pub fn datumesh_core::InvalidRequest::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for datumesh_core::InvalidRequest
 pub struct datumesh_core::Key
 pub datumesh_core::Key::id: alloc::string::String
 pub datumesh_core::Key::public: [u8; 32]
@@ -516,7 +531,7 @@ pub struct datumesh_core::Request
 impl datumesh_core::Request
 pub fn datumesh_core::Request::asof(&self) -> core::option::Option<&str>
 pub fn datumesh_core::Request::cell_id(&self) -> &str
-pub fn datumesh_core::Request::new(&str, core::option::Option<&str>) -> datumesh_core::Result<datumesh_core::Request>
+pub fn datumesh_core::Request::new(&str, core::option::Option<&str>) -> core::result::Result<datumesh_core::Request, datumesh_core::InvalidRequest>
 impl core::clone::Clone for datumesh_core::Request
 pub fn datumesh_core::Request::clone(&self) -> Self
 impl core::cmp::Eq for datumesh_core::Request

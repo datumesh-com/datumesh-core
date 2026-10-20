@@ -144,6 +144,8 @@ pub fn parse_uri(uri: &str, signature: &Value) -> Result<CellRef> {
     }
 
     // 5. The signature, then the arguments against it.
+    crate::json::check_value_depth(signature)
+        .map_err(|e| crate::error::Error::new(e.code(), "signature", e.detail()))?;
     let sig = schema::object(signature, "signature")?;
     let decls = match schema::opt(sig, "args") {
         Some(Value::Object(m)) => m,

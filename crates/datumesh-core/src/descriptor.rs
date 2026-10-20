@@ -129,6 +129,7 @@ impl Descriptor {
 
     /// Checks a parsed JSON value as a descriptor.
     pub fn from_value(v: &Value) -> Result<Descriptor> {
+        json::check_value_depth(v)?;
         descriptor_structure(v)?;
         descriptor_canonical(v)
     }
@@ -371,6 +372,8 @@ pub fn resolved_unit(descriptor: &[u8], cell: &[u8]) -> Result<Option<String>> {
 
 /// [`resolved_unit`] over parsed JSON values.
 pub fn resolved_unit_value(descriptor: &Value, cell: &Value) -> Result<Option<String>> {
+    json::check_value_depth(descriptor)?;
+    json::check_value_depth(cell)?;
     let cell = Cell::from_value(cell)?;
     let hash = crate::crypto::sha256_hex(&descriptor.to_jcs());
     if hash != cell.fn_hash {

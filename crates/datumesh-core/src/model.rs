@@ -281,6 +281,7 @@ impl Cell {
 
     /// Checks a parsed JSON value as a cell.
     pub fn from_value(v: &Value) -> Result<Cell> {
+        json::check_value_depth(v)?;
         cell_structure(v, "$")?;
         cell_canonical(v, "$")
     }

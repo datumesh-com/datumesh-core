@@ -31,6 +31,6 @@ fn bad_certificate_is_unavailable() {
 }
 
 #[test]
-fn host_must_be_a_dns_name() {
-    assert_eq!(fetch_keys("localhost").unwrap_err().code(), ErrorCode::CanonName);
+fn non_dns_host_has_no_keys() {
+    assert_eq!(fetch_keys("localhost").unwrap_err().code(), ErrorCode::KeyUnavailable);
 }

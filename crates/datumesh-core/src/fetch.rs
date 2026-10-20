@@ -15,10 +15,12 @@ const MAX_BODY: u64 = 256 * 1024;
 /// Certificates are validated (Web PKI roots), no redirect is followed, and the request
 /// times out after 10 seconds. A 200 with a valid document gives the keys; a 200 with an
 /// invalid document is `E_KEY_DOC`; every other status (redirects included) and every
-/// network, DNS, TLS or timeout failure is `E_KEY_UNAVAILABLE`. `host` must be a DNS name
-/// (`E_CANON_NAME`).
+/// network, DNS, TLS or timeout failure is `E_KEY_UNAVAILABLE`. A host that is not a DNS
+/// name is never fetched: it has no keys (`E_KEY_UNAVAILABLE`, 9.3).
 pub fn fetch_keys(host: &str) -> Result<KeyDoc> {
-    lexical::check_dns_name(host, "host")?;
+    if lexical::check_dns_name(host, "host").is_err() {
+        return err(ErrorCode::KeyUnavailable, "$", format!("{host:?} is not a DNS name: no keys are resolved for it"));
+    }
     let agent: ureq::Agent = ureq::Agent::config_builder()
         .max_redirects(0)
         .http_status_as_error(false)

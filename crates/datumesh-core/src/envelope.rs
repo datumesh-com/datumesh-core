@@ -122,14 +122,30 @@ pub struct Request {
     asof: Option<String>,
 }
 
+/// A malformed request description (5.5 step 5): the caller's mistake, not an `E_*` code.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct InvalidRequest(String);
+
+impl core::fmt::Display for InvalidRequest {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "invalid request: {}", self.0)
+    }
+}
+
+impl std::error::Error for InvalidRequest {}
+
 impl Request {
-    /// A request for the cell with id `cell_id` (64 lowercase hex digits, `E_CANON_HEX`),
-    /// as of `asof` (an instant, `E_CANON_INSTANT`) or now. A malformed request is the
-    /// caller's error, never `E_ENVELOPE`.
-    pub fn new(cell_id: &str, asof: Option<&str>) -> Result<Request> {
-        lexical::check_hex(cell_id, 64, "request.cell_id")?;
+    /// A request for the cell with id `cell_id` (64 lowercase hex digits) as of `asof` (an
+    /// instant) or now. Anything else is [`InvalidRequest`]: SPEC 5.5 makes a malformed
+    /// request the caller's error, reported outside the `E_*` codes.
+    pub fn new(cell_id: &str, asof: Option<&str>) -> core::result::Result<Request, InvalidRequest> {
+        if lexical::check_hex(cell_id, 64, "").is_err() {
+            return Err(InvalidRequest(format!("cell_id must be 64 lowercase hex digits: {cell_id:?}")));
+        }
         if let Some(a) = asof {
-            lexical::check_instant(a, "request.asof")?;
+            if !lexical::is_instant(a) {
+                return Err(InvalidRequest(format!("asof must be an instant: {a:?}")));
+            }
         }
         Ok(Request { cell_id: cell_id.into(), asof: asof.map(String::from) })
     }

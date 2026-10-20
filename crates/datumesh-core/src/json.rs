@@ -436,36 +436,68 @@ impl Parser<'_> {
     }
 }
 
+enum Piece<'a> {
+    Value(&'a Value),
+    Text(&'static str),
+    Key(&'a str),
+}
+
+// Iterative, so that a deeply nested value built in memory cannot exhaust the stack.
 fn write_jcs(v: &Value, out: &mut String) {
-    match v {
-        Value::Null => out.push_str("null"),
-        Value::Bool(true) => out.push_str("true"),
-        Value::Bool(false) => out.push_str("false"),
-        Value::Number(n) => out.push_str(&format_number(n.value)),
-        Value::String(s) => write_string(s, out),
-        Value::Array(items) => {
-            out.push('[');
-            for (i, item) in items.iter().enumerate() {
-                if i > 0 {
-                    out.push(',');
-                }
-                write_jcs(item, out);
-            }
-            out.push(']');
-        }
-        Value::Object(members) => {
-            out.push('{');
-            for (i, (k, val)) in jcs_sorted(members).into_iter().enumerate() {
-                if i > 0 {
-                    out.push(',');
-                }
+    let mut stack = vec![Piece::Value(v)];
+    while let Some(p) = stack.pop() {
+        match p {
+            Piece::Text(t) => out.push_str(t),
+            Piece::Key(k) => {
                 write_string(k, out);
                 out.push(':');
-                write_jcs(val, out);
             }
-            out.push('}');
+            Piece::Value(Value::Null) => out.push_str("null"),
+            Piece::Value(Value::Bool(true)) => out.push_str("true"),
+            Piece::Value(Value::Bool(false)) => out.push_str("false"),
+            Piece::Value(Value::Number(n)) => out.push_str(&format_number(n.value)),
+            Piece::Value(Value::String(s)) => write_string(s, out),
+            Piece::Value(Value::Array(items)) => {
+                out.push('[');
+                stack.push(Piece::Text("]"));
+                for (i, item) in items.iter().enumerate().rev() {
+                    stack.push(Piece::Value(item));
+                    if i > 0 {
+                        stack.push(Piece::Text(","));
+                    }
+                }
+            }
+            Piece::Value(Value::Object(members)) => {
+                out.push('{');
+                stack.push(Piece::Text("}"));
+                for (i, (k, val)) in jcs_sorted(members).into_iter().enumerate().rev() {
+                    stack.push(Piece::Value(val));
+                    stack.push(Piece::Key(k));
+                    if i > 0 {
+                        stack.push(Piece::Text(","));
+                    }
+                }
+            }
         }
     }
+}
+
+/// Checks that an already-parsed value nests at most [`MAX_DEPTH`] arrays and objects
+/// (SPEC 6.1 applies the parser's limit to values accepted in parsed form). `E_PARSE_JSON`.
+pub fn check_value_depth(v: &Value) -> Result<()> {
+    let mut stack: Vec<(&Value, usize)> = vec![(v, 0)];
+    while let Some((v, d)) = stack.pop() {
+        let children: Box<dyn Iterator<Item = &Value>> = match v {
+            Value::Array(items) => Box::new(items.iter()),
+            Value::Object(members) => Box::new(members.iter().map(|(_, x)| x)),
+            _ => continue,
+        };
+        if d + 1 > MAX_DEPTH {
+            return err(ErrorCode::ParseJson, "$", format!("nested deeper than {MAX_DEPTH} levels"));
+        }
+        stack.extend(children.map(|c| (c, d + 1)));
+    }
+    Ok(())
 }
 
 /// Writes a JSON string as RFC 8785 does: only `"`, `\` and C0 controls are escaped.

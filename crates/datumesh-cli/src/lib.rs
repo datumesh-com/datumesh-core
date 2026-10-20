@@ -172,7 +172,8 @@ pub fn run(v: &Value) -> Result<Outputs, Error> {
             let request = Request::new(
                 req.get("cell_id").and_then(Value::as_str).unwrap_or(""),
                 req.get("asof").and_then(Value::as_str),
-            )?;
+            )
+            .map_err(|e| vector_error(&e.to_string()))?;
             let env = check_envelope(status, &body, &keys, &request)?;
             let mut out = vec![("outcome".to_string(), s(env.outcome.as_str()))];
             if let Some(r) = &env.receipt {
