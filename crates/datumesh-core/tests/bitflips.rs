@@ -6,24 +6,24 @@ mod common;
 
 use common::*;
 use datumesh_core::json::{self, Value};
-use datumesh_core::{verify, ErrorCode};
+use datumesh_core::{verify, ErrorCode, Resolver};
 
 #[test]
 fn receipt_byte_flips_fail() {
     let mut checked = 0;
     for v in vectors("receipt") {
         let keys = keys(&v);
-        let rc = recompute(&v);
+        let rc = resolver(&v);
         let blob = v.get("blob_hex").and_then(Value::as_str).map(hex);
         // The canonical receipt bytes, signature included.
         let canonical = json::parse(str_of(&v, "input").as_bytes()).unwrap().to_jcs();
-        let base = verify(&canonical, &keys, rc.as_ref(), blob.as_deref());
+        let base = verify(&canonical, &keys, rc.as_ref().map(|r| r as &dyn Resolver), blob.as_deref());
         assert!(base.ok, "{}: {:?}", str_of(&v, "id"), base);
         for byte in 0..canonical.len() {
             for bit in 0..8 {
                 let mut m = canonical.clone();
                 m[byte] ^= 1 << bit;
-                let r = verify(&m, &keys, rc.as_ref(), blob.as_deref());
+                let r = verify(&m, &keys, rc.as_ref().map(|r| r as &dyn Resolver), blob.as_deref());
                 assert!(!r.ok, "{}: flip of byte {byte} bit {bit} verified", str_of(&v, "id"));
                 checked += 1;
             }

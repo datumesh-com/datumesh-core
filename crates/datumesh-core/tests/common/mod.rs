@@ -4,7 +4,7 @@
 use std::path::{Path, PathBuf};
 
 use datumesh_core::json::{self, Value};
-use datumesh_core::{Keys, Recompute, Scalar};
+use datumesh_core::{Cell, Keys, MapResolver, Scalar};
 
 pub fn spec(rel: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec").join(rel)
@@ -43,15 +43,23 @@ pub fn keys(v: &Value) -> Keys {
     out
 }
 
-pub fn recompute(v: &Value) -> Option<Recompute> {
+/// The vector's `recompute` object (SPEC 11) as a resolver: the descriptor under the
+/// receipt's `cell.fn_hash`, the input receipts under their hashes, and `value` as the
+/// evaluation of the receipt's own cell.
+pub fn resolver(v: &Value) -> Option<MapResolver> {
     let rc = v.get("recompute")?;
+    let receipt = json::parse(str_of(v, "input").as_bytes()).ok();
+    let cell = receipt.as_ref().and_then(|r| r.get("cell"));
+    let mut out = MapResolver::new();
+    if let (Some(d), Some(h)) = (rc.get("descriptor"), cell.and_then(|c| c.get("fn_hash")).and_then(Value::as_str)) {
+        out.insert_descriptor(h, d.to_jcs());
+    }
+    for (h, r) in rc.get("inputs").and_then(Value::as_object).unwrap_or(&[]) {
+        out.insert_receipt(h.as_str(), r.as_str().unwrap().as_bytes());
+    }
     let value = Scalar::from_json(&rc.get("value").unwrap().to_jcs()).unwrap();
-    let inputs = rc
-        .get("inputs")
-        .and_then(Value::as_object)
-        .unwrap_or(&[])
-        .iter()
-        .map(|(h, r)| (h.clone(), r.as_str().unwrap().as_bytes().to_vec()))
-        .collect();
-    Some(Recompute { descriptor: rc.get("descriptor").map(Value::to_jcs), inputs, value })
+    if let Some(c) = cell.and_then(|c| Cell::from_value(c).ok()) {
+        out.insert_value(c.id(), value);
+    }
+    Some(out)
 }
