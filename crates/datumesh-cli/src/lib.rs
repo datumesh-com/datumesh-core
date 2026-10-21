@@ -11,7 +11,7 @@ use std::process::ExitCode;
 use datumesh_core::json::{self, Value};
 use datumesh_core::{
     check_envelope, format_uri, https_url, key_id, parse_uri, resolved_unit_value, sha256_hex, verify, Cell, CellRef,
-    Descriptor, Error, ErrorCode, Keys, Receipt, Recompute, Request, Scalar,
+    Descriptor, Error, ErrorCode, Keys, MapResolver, Receipt, Request, Scalar,
 };
 
 /// The mesh host URI vectors map to (SPEC 11).
@@ -191,25 +191,37 @@ pub fn run(v: &Value) -> Result<Outputs, Error> {
 fn run_receipt(v: &Value) -> Result<Outputs, Error> {
     let input = input_bytes(v)?;
     let keys = keys_from_env(v.get("keys"));
-    let recompute = match v.get("recompute") {
+    let resolver = match v.get("recompute") {
         None => None,
         Some(rc) => {
             let value = rc.get("value").ok_or_else(|| vector_error("recompute without value"))?;
             let value = Scalar::from_json(&value.to_jcs())?;
-            let mut inputs = BTreeMap::new();
-            for (h, r) in rc.get("inputs").and_then(Value::as_object).unwrap_or(&[]) {
-                inputs.insert(h.clone(), r.as_str().unwrap_or("").as_bytes().to_vec());
+            // SPEC 11: the descriptor is offered for the receipt's cell.fn_hash, and value is
+            // what evaluating the receipt's own cell gives. A receipt too broken to name its
+            // cell fails before step 7 and never asks.
+            let cell = json::parse(&input).ok().and_then(|r| r.get("cell").cloned());
+            let mut m = MapResolver::new();
+            if let (Some(d), Some(h)) = (rc.get("descriptor"), cell.as_ref().and_then(|c| c.get("fn_hash"))) {
+                m.insert_descriptor(h.as_str().unwrap_or(""), d.to_jcs());
             }
-            Some(Recompute { descriptor: rc.get("descriptor").map(Value::to_jcs), inputs, value })
+            for (h, r) in rc.get("inputs").and_then(Value::as_object).unwrap_or(&[]) {
+                m.insert_receipt(h.as_str(), r.as_str().unwrap_or("").as_bytes());
+            }
+            if let Some(c) = cell.as_ref().and_then(|c| Cell::from_value(c).ok()) {
+                m.insert_value(c.id(), value);
+            }
+            Some(m)
         }
     };
     let blob = match v.get("blob_hex").and_then(Value::as_str) {
         Some(h) => Some(decode_hex(h).ok_or_else(|| vector_error("bad blob_hex"))?),
         None => None,
     };
-    let result = verify(&input, &keys, recompute.as_ref(), blob.as_deref());
-    if let Some(e) = result.error() {
-        return Err(e);
+    let result = verify(&input, &keys, resolver.as_ref().map(|r| r as &dyn datumesh_core::Resolver), blob.as_deref());
+    if !result.ok {
+        if let Some(e) = result.error() {
+            return Err(e);
+        }
     }
     let r = Receipt::from_json(&input)?;
     let mut out = canon_outputs(r.payload().to_vec());

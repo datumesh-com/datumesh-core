@@ -1,5 +1,6 @@
 //! The verification procedure (10.1).
 
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 
 use crate::crypto;
@@ -8,7 +9,7 @@ use crate::error::{err, member, Error, ErrorCode, Result};
 use crate::json::{self, Value};
 use crate::keys::Keys;
 use crate::lexical;
-use crate::model::Scalar;
+use crate::model::{Cell, Scalar};
 use crate::receipt::Receipt;
 
 /// How far a receipt verified.
@@ -30,24 +31,96 @@ impl Level {
     }
 }
 
-/// What step 7 needs, supplied by the caller (this crate does not evaluate functions or
-/// fetch anything).
-#[derive(Clone, Debug)]
-pub struct Recompute {
-    /// The descriptor JSON text for `cell.fn_hash`; `None` is `E_FN_UNAVAILABLE`.
-    pub descriptor: Option<Vec<u8>>,
-    /// Input receipts as JSON text, keyed by the receipt hash they were offered for.
-    pub inputs: BTreeMap<String, Vec<u8>>,
-    /// The result of evaluating the function (for `stored`: the value looked up as of `asof`).
-    pub value: Scalar,
+/// What step 7 of SPEC 10.1 obtains: the descriptor, the input receipts and the evaluated
+/// value. This crate evaluates no functions and fetches nothing; the caller supplies a
+/// resolver, and [`verify`] asks it only for what step 7 reaches for the receipt at hand:
+///
+/// * [`descriptor`](Resolver::descriptor) once, for `cell.fn_hash` (7.1);
+/// * [`receipt`](Resolver::receipt) once per hash in `inputs`, in order, stopping at the first
+///   input that fails (7.5);
+/// * [`evaluate`](Resolver::evaluate) once, only after 7.1-7.5 pass (7.6).
+///
+/// Nothing is asked when steps 1-6 fail, and nothing about receipts below the inputs. The
+/// descriptor and receipts are JSON text, so that 7.1 hashes the descriptor before checking
+/// it and 7.5 reports an unparseable input as `E_INPUT_INVALID`, as the specification orders.
+pub trait Resolver {
+    /// The descriptor JSON text offered for `fn_hash`, or `None` if unavailable
+    /// (`E_FN_UNAVAILABLE`).
+    fn descriptor(&self, fn_hash: &str) -> Option<Cow<'_, [u8]>>;
+
+    /// The receipt JSON text offered for receipt hash `hash`, or `None` if unavailable
+    /// (`E_INPUT_UNAVAILABLE`).
+    fn receipt(&self, hash: &str) -> Option<Cow<'_, [u8]>>;
+
+    /// The value of evaluating `cell` as of `asof` (for `stored`: the value looked up as of it,
+    /// SPEC 10.1 step 7.6), or `None` if this resolver cannot evaluate it: no runtime for the
+    /// language, a budget exceeded, inputs the evaluator cannot obtain
+    /// (`E_EVAL_UNAVAILABLE`, see [`VerifyResult`]). `asof` is the receipt's `asof`.
+    fn evaluate(&self, cell: &Cell, asof: &str) -> Option<Scalar>;
+}
+
+/// A [`Resolver`] backed by maps: descriptors by function hash, receipts by receipt hash, and
+/// evaluated values by cell id. It is what the vectors' `recompute` object describes
+/// (SPEC 11): the descriptor goes under the receipt's `cell.fn_hash`, the inputs under their
+/// hashes, and `value` under the receipt's own [`Cell::id`].
+///
+/// A map holds one value per cell: [`evaluate`](Resolver::evaluate) ignores `asof`.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct MapResolver {
+    descriptors: BTreeMap<String, Vec<u8>>,
+    receipts: BTreeMap<String, Vec<u8>>,
+    values: BTreeMap<String, Scalar>,
+}
+
+impl MapResolver {
+    /// An empty resolver: every descriptor and receipt unavailable, nothing evaluable.
+    pub fn new() -> MapResolver {
+        MapResolver::default()
+    }
+
+    /// Offers descriptor JSON text for `fn_hash`.
+    pub fn insert_descriptor(&mut self, fn_hash: impl Into<String>, json: impl Into<Vec<u8>>) {
+        self.descriptors.insert(fn_hash.into(), json.into());
+    }
+
+    /// Offers receipt JSON text for receipt hash `hash`.
+    pub fn insert_receipt(&mut self, hash: impl Into<String>, json: impl Into<Vec<u8>>) {
+        self.receipts.insert(hash.into(), json.into());
+    }
+
+    /// Sets the value evaluating the cell with id `cell_id` gives.
+    pub fn insert_value(&mut self, cell_id: impl Into<String>, value: Scalar) {
+        self.values.insert(cell_id.into(), value);
+    }
+}
+
+impl Resolver for MapResolver {
+    fn descriptor(&self, fn_hash: &str) -> Option<Cow<'_, [u8]>> {
+        self.descriptors.get(fn_hash).map(|b| Cow::Borrowed(b.as_slice()))
+    }
+
+    fn receipt(&self, hash: &str) -> Option<Cow<'_, [u8]>> {
+        self.receipts.get(hash).map(|b| Cow::Borrowed(b.as_slice()))
+    }
+
+    fn evaluate(&self, cell: &Cell, _asof: &str) -> Option<Scalar> {
+        self.values.get(&cell.id()).cloned()
+    }
 }
 
 /// The outcome of [`verify`].
+///
+/// `code` is `None` when `ok`, with one exception: [`ErrorCode::EvalUnavailable`]. When a
+/// resolver is given and 7.1-7.5 pass but [`Resolver::evaluate`] returns `None`, the receipt
+/// is still signature-valid, so the result is `ok`, level [`Level::Signed`], with
+/// `code: Some(EvalUnavailable)`, `path` `$.value` and a `detail`: recomputation did not
+/// happen, and the code says why. Step 7.7 still runs afterwards; a failure there replaces it
+/// as a normal failure (`ok` false, its own code).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VerifyResult {
     /// Whether the receipt verified.
     pub ok: bool,
-    /// The failure's code; `None` when `ok`.
+    /// The failure's code; `None` when `ok`, except [`ErrorCode::EvalUnavailable`].
     pub code: Option<ErrorCode>,
     /// The level reached; `None` unless `ok`.
     pub level: Option<Level>,
@@ -57,14 +130,14 @@ pub struct VerifyResult {
     pub key: Option<String>,
     /// Whether step 7.7 ran and passed.
     pub blob_checked: bool,
-    /// A human explanation of the failure; empty when `ok`.
+    /// A human explanation of the failure (or of `EvalUnavailable`); empty otherwise.
     pub detail: String,
-    /// Where the failure was found; empty when `ok`.
+    /// Where the failure (or `EvalUnavailable`) was found; empty otherwise.
     pub path: String,
 }
 
 impl VerifyResult {
-    /// The failure as an [`Error`], if there is one.
+    /// `code` as an [`Error`], with `path` and `detail`: the failure, or `EvalUnavailable`.
     pub fn error(&self) -> Option<Error> {
         self.code.map(|c| Error::new(c, self.path.clone(), self.detail.clone()))
     }
@@ -74,9 +147,11 @@ impl VerifyResult {
 ///
 /// * `receipt`: the receipt's JSON text.
 /// * `keys`: the keys resolved for signer hosts (absent hosts are `E_KEY_UNAVAILABLE`).
-/// * `recompute`: when given, step 7.1-7.6 run, and success is level `recomputed`.
+/// * `resolver`: when given, steps 7.1-7.6 run, asking it only for what they reach (see
+///   [`Resolver`]); success is level `recomputed`, and an evaluation the resolver cannot do
+///   is `E_EVAL_UNAVAILABLE` at level `signed` (see [`VerifyResult`]).
 /// * `blob`: content for step 7.7 (the value must be a blob); success sets `blob_checked`.
-pub fn verify(receipt: &[u8], keys: &Keys, recompute: Option<&Recompute>, blob: Option<&[u8]>) -> VerifyResult {
+pub fn verify(receipt: &[u8], keys: &Keys, resolver: Option<&dyn Resolver>, blob: Option<&[u8]>) -> VerifyResult {
     let mut out = VerifyResult {
         ok: false,
         code: None,
@@ -100,11 +175,12 @@ pub fn verify(receipt: &[u8], keys: &Keys, recompute: Option<&Recompute>, blob: 
     out.hash = Some(r.hash());
     out.key = Some(r.computed_by.clone());
     let mut level = Level::Signed;
-    if let Some(rc) = recompute {
-        if let Err(e) = recompute_steps(&r, keys, rc) {
-            return fail(out, e);
+    if let Some(res) = resolver {
+        match recompute_steps(&r, keys, res) {
+            Ok(Recomputed::Yes) => level = Level::Recomputed,
+            Ok(Recomputed::EvalUnavailable(e)) => out = fail(out, e),
+            Err(e) => return fail(out, e),
         }
-        level = Level::Recomputed;
     }
     if let Some(content) = blob {
         if let Err(e) = check_blob(&r, content) {
@@ -163,12 +239,20 @@ fn key_and_signature(r: &Receipt, keys: &Keys) -> Result<()> {
     Ok(())
 }
 
-fn recompute_steps(r: &Receipt, keys: &Keys, rc: &Recompute) -> Result<()> {
+/// How steps 7.1-7.6 ended when none failed.
+enum Recomputed {
+    /// The evaluated value equals the receipt's.
+    Yes,
+    /// The resolver could not evaluate the function (`E_EVAL_UNAVAILABLE`).
+    EvalUnavailable(Error),
+}
+
+fn recompute_steps(r: &Receipt, keys: &Keys, res: &dyn Resolver) -> Result<Recomputed> {
     // 7.1
-    let Some(desc_bytes) = &rc.descriptor else {
+    let Some(desc_bytes) = res.descriptor(&r.cell.fn_hash) else {
         return err(ErrorCode::FnUnavailable, "$.cell.fn_hash", "no descriptor for fn_hash");
     };
-    let desc_v = json::parse(desc_bytes)?;
+    let desc_v = json::parse(&desc_bytes)?;
     if crypto::sha256_hex(&desc_v.to_jcs()) != r.cell.fn_hash {
         return err(ErrorCode::FnHashMismatch, "$.cell.fn_hash", "the descriptor does not hash to fn_hash");
     }
@@ -209,10 +293,10 @@ fn recompute_steps(r: &Receipt, keys: &Keys, rc: &Recompute) -> Result<()> {
     let mut latest_tx: Option<String> = None;
     for h in &r.inputs {
         let p = member("$.inputs", h);
-        let Some(bytes) = rc.inputs.get(h) else {
+        let Some(bytes) = res.receipt(h) else {
             return err(ErrorCode::InputUnavailable, &p, "no receipt offered for this input");
         };
-        let input = match signature_valid(bytes, keys) {
+        let input = match signature_valid(&bytes, keys) {
             Ok(i) => i,
             Err((e, _)) => return err(ErrorCode::InputInvalid, &p, format!("{}: {}", e.code(), e.detail())),
         };
@@ -239,10 +323,17 @@ fn recompute_steps(r: &Receipt, keys: &Keys, rc: &Recompute) -> Result<()> {
         }
     }
     // 7.6
-    if rc.value != r.value {
+    let Some(value) = res.evaluate(&r.cell, &r.asof) else {
+        return Ok(Recomputed::EvalUnavailable(Error::new(
+            ErrorCode::EvalUnavailable,
+            "$.value",
+            "the resolver could not evaluate this function",
+        )));
+    };
+    if value != r.value {
         return err(ErrorCode::ValueMismatch, "$.value", "recomputation gives a different type or value");
     }
-    Ok(())
+    Ok(Recomputed::Yes)
 }
 
 fn check_blob(r: &Receipt, content: &[u8]) -> Result<()> {

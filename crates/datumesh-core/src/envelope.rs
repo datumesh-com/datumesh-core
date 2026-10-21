@@ -293,7 +293,8 @@ pub fn check_envelope(status: u16, body: &[u8], keys: &Keys, request: &Request) 
         let code = e.as_str().and_then(ErrorCode::from_code);
         let ok = match (outcome, code) {
             (Outcome::BadRequest, Some(c)) => BAD_REQUEST_CODES.contains(&c),
-            (_, Some(c)) => c != ErrorCode::Envelope,
+            // E_EVAL_UNAVAILABLE is not a code of spec-0.2.1's 10.2 (RS-28).
+            (_, Some(c)) => c != ErrorCode::Envelope && c != ErrorCode::EvalUnavailable,
             (_, None) => false,
         };
         if !ok {

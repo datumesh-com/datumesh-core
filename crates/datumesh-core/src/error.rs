@@ -4,7 +4,8 @@ use core::fmt;
 
 macro_rules! codes {
     ($( $(#[$doc:meta])* $variant:ident = $text:literal, )*) => {
-        /// One variant per `E_*` code of SPEC 10.2.
+        /// One variant per `E_*` code of SPEC 10.2, and `E_EVAL_UNAVAILABLE` (RS-28).
+        /// Non-exhaustive: codes added by later revisions of the specification are additions.
         #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
         #[non_exhaustive]
         pub enum ErrorCode {
@@ -12,7 +13,7 @@ macro_rules! codes {
         }
 
         impl ErrorCode {
-            /// Every code, in the order of SPEC 10.2.
+            /// Every code, in the order of SPEC 10.2, then `E_EVAL_UNAVAILABLE`.
             pub const ALL: &'static [ErrorCode] = &[$(ErrorCode::$variant,)*];
 
             /// The code as written in the specification, e.g. `"E_SIGNATURE"`.
@@ -20,7 +21,7 @@ macro_rules! codes {
                 match self { $(ErrorCode::$variant => $text,)* }
             }
 
-            /// Looks a code up by its text; `None` for anything not in SPEC 10.2.
+            /// Looks a code up by its text; `None` for anything not in [`ErrorCode::ALL`].
             pub fn from_code(text: &str) -> Option<ErrorCode> {
                 match text { $($text => Some(ErrorCode::$variant),)* _ => None }
             }
@@ -111,6 +112,11 @@ codes! {
     BlobMismatch = "E_BLOB_MISMATCH",
     /// A response envelope breaks a rule of 5.5.
     Envelope = "E_ENVELOPE",
+    /// The resolver could not evaluate the function (step 7.6): no runtime for its language,
+    /// a budget exceeded, or inputs the evaluator cannot obtain. Not a failure: the receipt
+    /// stays signature-valid (see [`crate::VerifyResult`]). This crate's code, proposed for
+    /// spec-0.2.2 (DEFECTS.md RS-28); not in spec-0.2.1's 10.2, so envelopes cannot carry it.
+    EvalUnavailable = "E_EVAL_UNAVAILABLE",
 }
 
 impl fmt::Display for ErrorCode {

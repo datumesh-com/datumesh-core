@@ -57,7 +57,7 @@ pub use keys::{keys_from_response, Key, KeyDoc, Keys};
 pub use model::{Arg, Args, Cell, CellRef, Scalar, Type};
 pub use receipt::{receipt_hash, receipt_payload, Receipt};
 pub use uri::{cell_uri_from_https, format_uri, https_url, parse_uri};
-pub use verify::{verify, Level, Recompute, VerifyResult};
+pub use verify::{verify, Level, MapResolver, Resolver, VerifyResult};
 
 /// Canonical bytes of a typed scalar given as JSON text (4.1, 6.2).
 pub fn canonicalize_scalar(json: &[u8]) -> Result<Vec<u8>> {

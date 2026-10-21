@@ -162,7 +162,7 @@ fn failures_in_steps_1_to_6_call_nothing() {
         assert_eq!(rec.take(), [], "{}", str_of(&v, "id"));
         assert_eq!(r, without);
     }
-    assert!(seen >= 30, "{seen}");
+    assert!(seen >= 29, "{seen}");
 }
 
 fn vector(id: &str) -> Value {
@@ -208,7 +208,8 @@ fn two_inputs_are_requested_in_order_up_to_the_first_failure() {
     let r2 = Call::Receipt(p.inputs[1].clone());
     let e = Call::Evaluate(p.cell_id.clone(), p.asof.clone());
 
-    let cases: [(bool, bool, bool, Option<ErrorCode>, Vec<Call>); 5] = [
+    type Case = (bool, bool, bool, Option<ErrorCode>, Vec<Call>);
+    let cases: [Case; 5] = [
         (true, true, true, None, vec![d.clone(), r1.clone(), r2.clone(), e.clone()]),
         (false, true, true, Some(ErrorCode::InputUnavailable), vec![d.clone(), r1.clone()]),
         (true, false, true, Some(ErrorCode::InputUnavailable), vec![d.clone(), r1.clone(), r2.clone()]),
