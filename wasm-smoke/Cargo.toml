@@ -9,6 +9,9 @@ description = "Smoke test: datumesh-core verifies spec/vectors/receipt/stored-nu
 crate-type = ["cdylib"]
 path = "src/lib.rs"
 
+[features]
+sign = ["datumesh-core/sign"]
+
 [dependencies]
 datumesh-core = { path = "../crates/datumesh-core" }
 

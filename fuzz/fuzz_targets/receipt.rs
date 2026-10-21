@@ -45,7 +45,8 @@ fuzz_target!(|data: &[u8]| {
         assert!(resolver.is_some());
     }
     if let Ok(parsed) = Receipt::from_json(receipt) {
-        // A receipt that passes steps 1-4 has a canonical payload that parses back to it.
-        let _ = parsed.hash();
+        // The cached hash is the hash of the cached payload, and verify reports it.
+        assert_eq!(parsed.hash(), datumesh_core::sha256_hex(parsed.payload()));
+        assert_eq!(r.hash.as_deref(), Some(parsed.hash()));
     }
 });

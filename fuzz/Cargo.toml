@@ -9,7 +9,7 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
-datumesh-core = { path = "../crates/datumesh-core" }
+datumesh-core = { path = "../crates/datumesh-core", features = ["sign"] }
 
 [[bin]]
 name = "receipt"
@@ -35,6 +35,13 @@ bench = false
 [[bin]]
 name = "envelope"
 path = "fuzz_targets/envelope.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "sign"
+path = "fuzz_targets/sign.rs"
 test = false
 doc = false
 bench = false
