@@ -51,6 +51,8 @@ mod schema;
 mod sign;
 #[rustfmt::skip]
 mod tables;
+#[cfg(feature = "testkit")]
+pub mod testkit;
 mod uri;
 mod verify;
 

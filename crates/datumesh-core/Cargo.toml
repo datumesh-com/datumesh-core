@@ -18,6 +18,8 @@ default = []
 fetch = ["dep:ureq"]
 # ReceiptBuilder and SigningKey: deterministic Ed25519 signing with the existing dependencies.
 sign = []
+# testkit: a conformance kit for Resolver implementations, with embedded fixtures.
+testkit = []
 
 [dependencies]
 curve25519-dalek = { version = "5", default-features = false }

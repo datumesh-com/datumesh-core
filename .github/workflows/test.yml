@@ -22,8 +22,13 @@ jobs:
           submodules: true
       - run: rustup toolchain install ${{ matrix.toolchain }} --profile minimal && rustup default ${{ matrix.toolchain }}
       - run: cargo test --workspace --locked
+      # fetch is deprecated (0.3.1, removed at 1.0) but still built and tested; only
+      # tests/fetch.rs allows the deprecation warning.
       - run: cargo test -p datumesh-core --features fetch --locked
       - run: cargo test -p datumesh-core --features sign --locked
+      - run: cargo test -p datumesh-core --features testkit --locked
+      # With sign: src/testkit/data.rs is regenerated from spec/ and compared.
+      - run: cargo test -p datumesh-core --features testkit,sign --locked
       - run: cargo run -q -p datumesh-cli -- check spec/vectors
 
   lint:
@@ -37,6 +42,7 @@ jobs:
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: cargo clippy -p datumesh-core --features fetch --all-targets --locked -- -D warnings
       - run: cargo clippy -p datumesh-core --features sign --all-targets --locked -- -D warnings
+      - run: cargo clippy -p datumesh-core --features testkit,sign --all-targets --locked -- -D warnings
       - name: tables are generated from spec/
         run: python3 tools/gen_tables.py && git diff --exit-code crates/datumesh-core/src/tables.rs
 
@@ -63,6 +69,7 @@ jobs:
       - run: rustup toolchain install 1.99 --profile minimal --target wasm32-unknown-unknown && rustup default 1.99
       - run: cargo build -p datumesh-core --target wasm32-unknown-unknown --locked
       - run: cargo build -p datumesh-core --features sign --target wasm32-unknown-unknown --locked
+      - run: cargo build -p datumesh-core --features testkit --target wasm32-unknown-unknown --locked
       - run: cargo build --release --manifest-path wasm-smoke/Cargo.toml --target wasm32-unknown-unknown --locked
       - uses: actions/setup-node@v7
         with:
