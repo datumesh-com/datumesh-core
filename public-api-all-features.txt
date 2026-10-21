@@ -55,6 +55,91 @@ pub fn datumesh_core::lexical::is_currency(&str) -> bool
 pub fn datumesh_core::lexical::is_index_unit(&str) -> bool
 pub fn datumesh_core::lexical::is_literal_unit(&str) -> bool
 pub fn datumesh_core::lexical::to_hex(&[u8]) -> alloc::string::String
+pub mod datumesh_core::testkit
+#[non_exhaustive] pub enum datumesh_core::testkit::Call
+pub datumesh_core::testkit::Call::Evaluate
+pub datumesh_core::testkit::Call::Evaluate::asof: alloc::string::String
+pub datumesh_core::testkit::Call::Evaluate::cell_id: alloc::string::String
+pub datumesh_core::testkit::Call::LookupDescriptor(alloc::string::String)
+pub datumesh_core::testkit::Call::LookupReceipt(alloc::string::String)
+impl core::clone::Clone for datumesh_core::testkit::Call
+pub fn datumesh_core::testkit::Call::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_core::testkit::Call
+impl core::cmp::PartialEq for datumesh_core::testkit::Call
+pub fn datumesh_core::testkit::Call::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_core::testkit::Call
+pub fn datumesh_core::testkit::Call::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for datumesh_core::testkit::Call
+#[non_exhaustive] pub struct datumesh_core::testkit::Fixtures
+pub datumesh_core::testkit::Fixtures::descriptors: alloc::vec::Vec<(alloc::string::String, alloc::vec::Vec<u8>)>
+pub datumesh_core::testkit::Fixtures::key_documents: alloc::vec::Vec<(alloc::string::String, alloc::vec::Vec<u8>)>
+pub datumesh_core::testkit::Fixtures::receipts: alloc::vec::Vec<(alloc::string::String, alloc::vec::Vec<u8>)>
+pub datumesh_core::testkit::Fixtures::versions: alloc::vec::Vec<datumesh_core::testkit::Version>
+impl datumesh_core::testkit::Fixtures
+pub fn datumesh_core::testkit::Fixtures::keys(&self) -> datumesh_core::Keys
+impl core::clone::Clone for datumesh_core::testkit::Fixtures
+pub fn datumesh_core::testkit::Fixtures::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_core::testkit::Fixtures
+impl core::cmp::PartialEq for datumesh_core::testkit::Fixtures
+pub fn datumesh_core::testkit::Fixtures::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_core::testkit::Fixtures
+pub fn datumesh_core::testkit::Fixtures::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for datumesh_core::testkit::Fixtures
+pub struct datumesh_core::testkit::Kit
+impl datumesh_core::testkit::Kit
+pub fn datumesh_core::testkit::Kit::check(&self, &dyn datumesh_core::Resolver) -> core::result::Result<(), datumesh_core::testkit::Report>
+pub fn datumesh_core::testkit::Kit::check_asof(&self, &dyn datumesh_core::Resolver) -> core::result::Result<(), datumesh_core::testkit::Report>
+pub fn datumesh_core::testkit::Kit::check_bytes(&self, &dyn datumesh_core::Resolver) -> core::result::Result<(), datumesh_core::testkit::Report>
+pub fn datumesh_core::testkit::Kit::check_lazy_calls(&self, &dyn datumesh_core::Resolver) -> core::result::Result<(), datumesh_core::testkit::Report>
+pub fn datumesh_core::testkit::Kit::check_unavailable(&self, &dyn datumesh_core::Resolver) -> core::result::Result<(), datumesh_core::testkit::Report>
+pub fn datumesh_core::testkit::Kit::fixtures(&self) -> &datumesh_core::testkit::Fixtures
+pub fn datumesh_core::testkit::Kit::new() -> datumesh_core::testkit::Kit
+pub fn datumesh_core::testkit::Kit::run<R: datumesh_core::Resolver, F: core::ops::function::FnOnce(&datumesh_core::testkit::Fixtures) -> R>(&self, F) -> core::result::Result<(), datumesh_core::testkit::Report>
+pub fn datumesh_core::testkit::Kit::time_aware(self, bool) -> datumesh_core::testkit::Kit
+impl core::clone::Clone for datumesh_core::testkit::Kit
+pub fn datumesh_core::testkit::Kit::clone(&self) -> Self
+impl core::default::Default for datumesh_core::testkit::Kit
+pub fn datumesh_core::testkit::Kit::default() -> datumesh_core::testkit::Kit
+impl core::fmt::Debug for datumesh_core::testkit::Kit
+pub fn datumesh_core::testkit::Kit::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct datumesh_core::testkit::Recording<'a>
+impl<'a> datumesh_core::testkit::Recording<'a>
+pub fn datumesh_core::testkit::Recording<'a>::calls(&self) -> alloc::vec::Vec<datumesh_core::testkit::Call>
+pub fn datumesh_core::testkit::Recording<'a>::new(&'a dyn datumesh_core::Resolver) -> datumesh_core::testkit::Recording<'a>
+pub fn datumesh_core::testkit::Recording<'a>::take(&self) -> alloc::vec::Vec<datumesh_core::testkit::Call>
+impl core::fmt::Debug for datumesh_core::testkit::Recording<'_>
+pub fn datumesh_core::testkit::Recording<'_>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl datumesh_core::Resolver for datumesh_core::testkit::Recording<'_>
+pub fn datumesh_core::testkit::Recording<'_>::descriptor(&self, &str) -> core::option::Option<alloc::borrow::Cow<'_, [u8]>>
+pub fn datumesh_core::testkit::Recording<'_>::evaluate(&self, &datumesh_core::Cell, &str) -> core::option::Option<datumesh_core::Scalar>
+pub fn datumesh_core::testkit::Recording<'_>::receipt(&self, &str) -> core::option::Option<alloc::borrow::Cow<'_, [u8]>>
+pub struct datumesh_core::testkit::Report
+impl datumesh_core::testkit::Report
+pub fn datumesh_core::testkit::Report::failures(&self) -> &[alloc::string::String]
+impl core::clone::Clone for datumesh_core::testkit::Report
+pub fn datumesh_core::testkit::Report::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_core::testkit::Report
+impl core::cmp::PartialEq for datumesh_core::testkit::Report
+pub fn datumesh_core::testkit::Report::eq(&self, &Self) -> bool
+impl core::error::Error for datumesh_core::testkit::Report
+impl core::fmt::Debug for datumesh_core::testkit::Report
+pub fn datumesh_core::testkit::Report::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for datumesh_core::testkit::Report
+pub fn datumesh_core::testkit::Report::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for datumesh_core::testkit::Report
+#[non_exhaustive] pub struct datumesh_core::testkit::Version
+pub datumesh_core::testkit::Version::cell_id: alloc::string::String
+pub datumesh_core::testkit::Version::receipt_hash: alloc::string::String
+pub datumesh_core::testkit::Version::tx: alloc::string::String
+pub datumesh_core::testkit::Version::value: datumesh_core::Scalar
+impl core::clone::Clone for datumesh_core::testkit::Version
+pub fn datumesh_core::testkit::Version::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_core::testkit::Version
+impl core::cmp::PartialEq for datumesh_core::testkit::Version
+pub fn datumesh_core::testkit::Version::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_core::testkit::Version
+pub fn datumesh_core::testkit::Version::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for datumesh_core::testkit::Version
 pub enum datumesh_core::Arg
 pub datumesh_core::Arg::Slice
 pub datumesh_core::Arg::Value(datumesh_core::Scalar)
@@ -624,6 +709,10 @@ impl datumesh_core::Resolver for datumesh_core::MapResolver
 pub fn datumesh_core::MapResolver::descriptor(&self, &str) -> core::option::Option<alloc::borrow::Cow<'_, [u8]>>
 pub fn datumesh_core::MapResolver::evaluate(&self, &datumesh_core::Cell, &str) -> core::option::Option<datumesh_core::Scalar>
 pub fn datumesh_core::MapResolver::receipt(&self, &str) -> core::option::Option<alloc::borrow::Cow<'_, [u8]>>
+impl datumesh_core::Resolver for datumesh_core::testkit::Recording<'_>
+pub fn datumesh_core::testkit::Recording<'_>::descriptor(&self, &str) -> core::option::Option<alloc::borrow::Cow<'_, [u8]>>
+pub fn datumesh_core::testkit::Recording<'_>::evaluate(&self, &datumesh_core::Cell, &str) -> core::option::Option<datumesh_core::Scalar>
+pub fn datumesh_core::testkit::Recording<'_>::receipt(&self, &str) -> core::option::Option<alloc::borrow::Cow<'_, [u8]>>
 pub fn datumesh_core::canonicalize_cell(&[u8]) -> datumesh_core::Result<alloc::vec::Vec<u8>>
 pub fn datumesh_core::canonicalize_descriptor(&[u8]) -> datumesh_core::Result<alloc::vec::Vec<u8>>
 pub fn datumesh_core::canonicalize_receipt(&[u8]) -> datumesh_core::Result<alloc::vec::Vec<u8>>

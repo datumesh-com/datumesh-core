@@ -6,7 +6,7 @@ The Rust core of the [Datumesh](https://datumesh.com) protocol: strict JSON and 
 
 ```toml
 [dependencies]
-datumesh-core = "0.3.0"
+datumesh-core = "0.3.1"
 ```
 
 Verify the receipt of `spec/vectors/receipt/stored-number.json` against the key documents the vector carries, then recompute it with the descriptor and value the vector's `recompute` object supplies:
@@ -20,7 +20,8 @@ fn main() {
     let receipt = vector.get("input").and_then(Value::as_str).unwrap();
 
     // Keys are an input to verification, never fetched by it (SPEC 9.4). Here they come
-    // from the vector; in an application, from `fetch_keys` (feature `fetch`) or a cache.
+    // from the vector; in an application, from your HTTP client's response passed to
+    // `keys_from_response`, or from a cache.
     let mut keys = Keys::new();
     for (host, env) in vector.get("keys").and_then(Value::as_object).unwrap() {
         let body = env.get("https").and_then(|h| h.get("body")).and_then(Value::as_str);
@@ -56,12 +57,38 @@ With feature `sign`, an engine makes receipts: `SigningKey::from_seed` (determin
 - `parse_uri`, `format_uri`, `https_url`: cell URIs and their HTTPS mapping.
 - `verify`: SPEC 10.1 steps 1-7, with Ed25519 strictness as step 6 defines it; step 7 through a `Resolver` (`MapResolver` included).
 - `SigningKey` and `ReceiptBuilder` behind the non-default `sign` feature.
-- `keys_from_response`, `Keys`, and `fetch_keys` behind the non-default `fetch` feature.
+- `keys_from_response` and `Keys`. `fetch_keys` (feature `fetch`) is deprecated since 0.3.1 and removed at 1.0: fetch `https://<host>/.well-known/datumesh.json` with your own HTTP client and pass the status and body to `keys_from_response`.
+- `testkit` (non-default feature `testkit`): a conformance kit for `Resolver` implementations (see below).
 - `check_envelope`: response envelopes, bound to the request.
 - `resolved_unit`: the unit of a cell's value.
 - `Error` with an `ErrorCode` for every code of SPEC 10.2 (plus `E_EVAL_UNAVAILABLE`, DEFECTS.md RS-28), and a JSON path.
 
-No `unsafe`, no panics on any input, no global state, no logging, no network outside `fetch_keys`. Builds for `wasm32-unknown-unknown`, with or without `sign`. Minimum Rust version 1.97. The public API is frozen until 1.0 except for additions; `API-CHANGES-0.3.0.md` lists what changed from 0.2.1 and `CHANGELOG.md` the history.
+No `unsafe`, no panics on any input, no global state, no logging, no network outside the deprecated `fetch_keys`. Builds for `wasm32-unknown-unknown`, with or without `sign` and `testkit`. Minimum Rust version 1.97. The public API is frozen until 1.0 except for additions; `API-CHANGES-0.3.0.md` lists what changed from 0.2.1, `API-CHANGES-0.3.1.md` what was added in 0.3.1, and `CHANGELOG.md` the history.
+
+## Testing a resolver
+
+A `Resolver` (a store, a cache, an engine's lookup) can check itself against the protocol with feature `testkit`, as a dev-dependency:
+
+```toml
+[dev-dependencies]
+datumesh-core = { version = "0.3.1", features = ["testkit"] }
+```
+
+The kit never writes through the resolver. It gives you `Fixtures` (descriptors, receipts and the versions of stored cells, all canonical JSON, from the specification's vectors plus a few receipts signed for the kit), you load them, and it verifies receipts through your resolver and looks things up in it:
+
+```rust,ignore
+use datumesh_core::testkit::Kit;
+
+#[test]
+fn my_resolver_conforms() {
+    let kit = Kit::new().time_aware(true); // false (the default) for one value per cell
+    if let Err(report) = kit.run(|fixtures| load_into_a_fresh_store(fixtures)) {
+        panic!("{report}");
+    }
+}
+```
+
+It checks that `verify` asks the resolver only for what step 7 reaches (through the `Recording` wrapper), that what the resolver lacks is `E_FN_UNAVAILABLE`, `E_INPUT_UNAVAILABLE` or `E_EVAL_UNAVAILABLE` and that unknown or malformed hashes give `None`, that `descriptor` and `receipt` return exactly the bytes loaded, and that `evaluate` gets the receipt's `asof`; for a time-aware resolver, that a cell with versions at several times gives the latest version with `tx <= asof`. Each check (`check_lazy_calls`, `check_unavailable`, `check_bytes`, `check_asof`) can also run on its own. `MapResolver` passes it (not time-aware).
 
 ## Repository
 
@@ -69,7 +96,8 @@ No `unsafe`, no panics on any input, no global state, no logging, no network out
 - `crates/datumesh-cli`: `datumesh-cli run-vectors` (JSON lines in, one result per line out) and `datumesh-cli check [DIR]`, for the cross-language harness. Not published.
 - `spec/`: the specification, a git submodule.
 - `DEFECTS.md`: every place the specification text was not enough to decide something.
-- `public-api.txt`, `public-api-all-features.txt`: the public API (`cargo public-api -ss`) with default features and with `--all-features`; `API-CHANGES-0.3.0.md`: the diff against 0.2.1, justified.
+- `public-api.txt`, `public-api-all-features.txt`: the public API (`cargo public-api -ss`) with default features and with `--all-features`; `API-CHANGES-0.3.0.md`: the diff against 0.2.1, justified; `API-CHANGES-0.3.1.md`: the additions in 0.3.1.
+- `crates/datumesh-core/src/testkit/data.rs`: the kit's fixtures, generated from `spec/` (and signed with feature `sign`) by `tests/testkit_data.rs`, which fails if they drift.
 - `fuzz/`: cargo-fuzz targets. `wasm-smoke/`: the WebAssembly smoke test.
 - `tools/gen_tables.py`: regenerates the embedded unit list and Unicode 15.1 table from `spec/`.
 

@@ -3,7 +3,30 @@
 All notable changes to `datumesh-core`. The crate follows the specification revision named in
 each entry; the public API is frozen from 0.3.0 until 1.0 except for additions.
 
-## 0.3.0 (unreleased)
+## 0.3.1 (unreleased)
+
+Specification: `spec-0.2.1` (`710dabb`), unchanged. Additions only: the 0.3.0 API is unchanged
+apart from one deprecation (`API-CHANGES-0.3.1.md` has the `cargo public-api diff`).
+
+### Deprecated
+- Feature `fetch` and `fetch_keys`, removed at 1.0. Fetch
+  `https://<host>/.well-known/datumesh.json` with your own HTTP client and pass the response to
+  `keys_from_response` (a network failure: `Keys::insert_unavailable`). The feature still builds
+  and is still tested.
+
+### Added
+- Feature `testkit` (no new dependencies; builds for `wasm32-unknown-unknown`): module
+  `testkit`, a conformance kit for `Resolver` implementations. `Kit` hands out `Fixtures`
+  (key documents, descriptors, receipts and stored-cell `Version`s, all canonical JSON) for the
+  caller to load, then checks the resolver: lazy calls through the `Recording` wrapper
+  (`Call`), `None` behaviour (`E_FN_UNAVAILABLE`, `E_INPUT_UNAVAILABLE`, `E_EVAL_UNAVAILABLE`,
+  unknown and malformed hashes), bytes fidelity, and `asof` pass-through, with versions over
+  time for a resolver declared time-aware. Failures come back as a `Report`. The fixtures are
+  the spec-0.2.1 vectors plus five receipts signed with the vectors' seeds, embedded in
+  `src/testkit/data.rs` and checked against `spec/` by `tests/testkit_data.rs`. `MapResolver`
+  passes the kit.
+
+## 0.3.0
 
 Specification: `spec-0.2.1` (`710dabb`), unchanged; all 339 vectors pass and `datumesh-cli
 run-vectors` output is byte for byte that of 0.2.1. This release makes the breaking API changes
