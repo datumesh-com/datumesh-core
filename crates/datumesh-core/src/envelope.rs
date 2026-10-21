@@ -208,10 +208,9 @@ fn env_err<T>(path: &str, detail: impl Into<String>) -> Result<T> {
 
 /// `0` or `[1-9][0-9]*`, at most 2^53 - 1, judged on the number's text.
 fn integer_member(v: &Value, path: &str) -> Result<u64> {
-    let Value::Number(n) = v else {
+    let Some(t) = v.as_number_text() else {
         return env_err(path, "must be a non-negative integer");
     };
-    let t = n.text();
     let ok =
         !t.is_empty() && t.bytes().all(|c| c.is_ascii_digit()) && (t == "0" || !t.starts_with('0')) && t.len() <= 16;
     match (ok, t.parse::<u64>()) {

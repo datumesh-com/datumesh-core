@@ -24,7 +24,12 @@ fn s(v: &str) -> Value {
 /// Serialises a value as one JSON line. U+2028 and U+2029 are escaped so that line-oriented
 /// tools do not split the line; the JSON value is unchanged.
 pub fn line(v: &Value) -> String {
-    v.to_jcs_string().replace('\u{2028}', "\\u2028").replace('\u{2029}', "\\u2029")
+    jcs_text(v).replace('\u{2028}', "\\u2028").replace('\u{2029}', "\\u2029")
+}
+
+/// The JCS serialisation as text (always UTF-8).
+fn jcs_text(v: &Value) -> String {
+    String::from_utf8_lossy(&v.to_jcs()).into_owned()
 }
 
 /// Reads vector lines from stdin and writes one result line per vector to stdout.
@@ -95,9 +100,9 @@ fn keys_from_env(keys: Option<&Value>) -> Keys {
     for (host, env) in keys.and_then(Value::as_object).unwrap_or(&[]) {
         let https = env.get("https");
         let status = https.and_then(|h| h.get("status"));
-        match status {
-            Some(Value::Number(n)) => {
-                let code = n.text().parse::<u16>().unwrap_or(0);
+        match status.and_then(Value::as_number_text) {
+            Some(n) => {
+                let code = n.parse::<u16>().unwrap_or(0);
                 let body = https.and_then(|h| h.get("body")).and_then(Value::as_str).map(str::as_bytes);
                 out.insert_response(host, code, body);
             }
@@ -163,10 +168,7 @@ pub fn run(v: &Value) -> Result<Outputs, Error> {
         }
         "envelope" => {
             let body = input_bytes(v)?;
-            let status = match v.get("status") {
-                Some(Value::Number(n)) => n.text().parse::<u16>().unwrap_or(0),
-                _ => 0,
-            };
+            let status = v.get("status").and_then(Value::as_number_text).map_or(0, |n| n.parse::<u16>().unwrap_or(0));
             let keys = keys_from_env(v.get("keys"));
             let req = v.get("request").ok_or_else(|| vector_error("no request"))?;
             let request = Request::new(
@@ -264,7 +266,7 @@ pub fn check_vector(v: &Value) -> Vec<String> {
                     _ => false,
                 };
                 if !same {
-                    let show = |x: Option<&Value>| x.map_or("(absent)".to_string(), Value::to_jcs_string);
+                    let show = |x: Option<&Value>| x.map_or("(absent)".to_string(), jcs_text);
                     problems.push(format!("{f}: expected {}, got {}", show(want), show(have)));
                 }
             }

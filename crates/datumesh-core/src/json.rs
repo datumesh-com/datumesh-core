@@ -8,35 +8,21 @@ use crate::error::{err, ErrorCode, Result};
 use core::cmp::Ordering;
 
 /// The deepest nesting of arrays and objects accepted (SPEC 6.1).
-pub const MAX_DEPTH: usize = 64;
+pub(crate) const MAX_DEPTH: usize = 64;
 
-/// A JSON number: the text it was written as, and its IEEE 754 double value.
-#[derive(Clone, Debug, PartialEq)]
-pub struct Number {
-    text: String,
-    value: f64,
-}
-
-impl Number {
-    /// The number exactly as written in the parsed text.
-    pub fn text(&self) -> &str {
-        &self.text
-    }
-
-    /// The nearest double. Always finite.
-    pub fn value(&self) -> f64 {
-        self.value
-    }
-
-    /// A number from a finite double; `None` for NaN and infinities.
-    pub fn from_f64(value: f64) -> Option<Number> {
-        if value.is_finite() {
-            Some(Number { text: format_number(value), value })
-        } else {
-            None
-        }
+mod number {
+    /// A JSON number: the text it was written as, and its IEEE 754 double value. Only
+    /// [`parse`](super::parse) makes one, so the text is always JSON number syntax and the
+    /// value finite. The type cannot be named outside the crate; read a number with
+    /// [`Value::as_number_text`](super::Value::as_number_text).
+    #[derive(Clone, Debug, PartialEq)]
+    pub struct Number {
+        pub(super) text: String,
+        pub(super) value: f64,
     }
 }
+
+use number::Number;
 
 /// A parsed JSON value. Object members keep their text order; names are unique.
 #[derive(Clone, Debug, PartialEq)]
@@ -45,7 +31,8 @@ pub enum Value {
     Null,
     /// `true` or `false`
     Bool(bool),
-    /// A number.
+    /// A number, as parsed. Read it with [`Value::as_number_text`]; a number can only come
+    /// from [`parse`].
     Number(Number),
     /// A string.
     String(String),
@@ -80,6 +67,15 @@ impl Value {
         }
     }
 
+    /// The number exactly as written in the parsed text (e.g. `1.50`, `1E3`), if this is a
+    /// number. [`Value::to_jcs`] writes its double value in ECMAScript form instead.
+    pub fn as_number_text(&self) -> Option<&str> {
+        match self {
+            Value::Number(n) => Some(&n.text),
+            _ => None,
+        }
+    }
+
     /// The JSON type name, for messages.
     pub(crate) fn kind(&self) -> &'static str {
         match self {
@@ -97,13 +93,6 @@ impl Value {
         let mut out = String::new();
         write_jcs(self, &mut out);
         out.into_bytes()
-    }
-
-    /// The RFC 8785 canonical serialisation as a string.
-    pub fn to_jcs_string(&self) -> String {
-        let mut out = String::new();
-        write_jcs(self, &mut out);
-        out
     }
 }
 
@@ -145,11 +134,6 @@ pub fn parse(bytes: &[u8]) -> Result<Value> {
         return err(ErrorCode::ParseJson, "$", "lone surrogate");
     }
     Ok(v)
-}
-
-/// Parses `bytes` and returns their JCS serialisation.
-pub fn canonicalize_json(bytes: &[u8]) -> Result<Vec<u8>> {
-    Ok(parse(bytes)?.to_jcs())
 }
 
 fn check_depth(b: &[u8]) -> Result<()> {
@@ -484,7 +468,7 @@ fn write_jcs(v: &Value, out: &mut String) {
 
 /// Checks that an already-parsed value nests at most [`MAX_DEPTH`] arrays and objects
 /// (SPEC 6.1 applies the parser's limit to values accepted in parsed form). `E_PARSE_JSON`.
-pub fn check_value_depth(v: &Value) -> Result<()> {
+pub(crate) fn check_value_depth(v: &Value) -> Result<()> {
     let mut stack: Vec<(&Value, usize)> = vec![(v, 0)];
     while let Some((v, d)) = stack.pop() {
         let children: Box<dyn Iterator<Item = &Value>> = match v {
@@ -552,7 +536,7 @@ fn shortest_digits(v: f64) -> (String, i64) {
 ///
 /// Rust's `{:e}` formatting yields the shortest digit string that round-trips; this lays
 /// those digits out by the ECMAScript rules.
-pub fn format_number(v: f64) -> String {
+pub(crate) fn format_number(v: f64) -> String {
     if v == 0.0 || !v.is_finite() {
         // -0 serialises as 0; non-finite values never reach here from `parse`.
         return "0".to_string();
@@ -593,4 +577,55 @@ pub fn format_number(v: f64) -> String {
         out.push_str(&e.abs().to_string());
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// RFC 8785 Appendix B, directly on the formatter (tests/rfc8785.rs covers it through
+    /// `parse` and `to_jcs`).
+    #[test]
+    fn format_number_appendix_b() {
+        let cases: [(u64, &str); 24] = [
+            (0x0000000000000000, "0"),
+            (0x8000000000000000, "0"),
+            (0x0000000000000001, "5e-324"),
+            (0x8000000000000001, "-5e-324"),
+            (0x7fefffffffffffff, "1.7976931348623157e+308"),
+            (0xffefffffffffffff, "-1.7976931348623157e+308"),
+            (0x4340000000000000, "9007199254740992"),
+            (0xc340000000000000, "-9007199254740992"),
+            (0x4430000000000000, "295147905179352830000"),
+            (0x44b52d02c7e14af5, "9.999999999999997e+22"),
+            (0x44b52d02c7e14af6, "1e+23"),
+            (0x44b52d02c7e14af7, "1.0000000000000001e+23"),
+            (0x444b1ae4d6e2ef4e, "999999999999999700000"),
+            (0x444b1ae4d6e2ef4f, "999999999999999900000"),
+            (0x444b1ae4d6e2ef50, "1e+21"),
+            (0x3eb0c6f7a0b5ed8c, "9.999999999999997e-7"),
+            (0x3eb0c6f7a0b5ed8d, "0.000001"),
+            (0x41b3de4355555553, "333333333.3333332"),
+            (0x41b3de4355555554, "333333333.33333325"),
+            (0x41b3de4355555555, "333333333.3333333"),
+            (0x41b3de4355555556, "333333333.3333334"),
+            (0x41b3de4355555557, "333333333.33333343"),
+            (0xbecbf647612f3696, "-0.0000033333333333333333"),
+            (0x43143ff3c1cb0959, "1424953923781206.2"),
+        ];
+        for (bits, want) in cases {
+            assert_eq!(format_number(f64::from_bits(bits)), want, "{bits:016x}");
+        }
+    }
+
+    #[test]
+    fn value_depth_limit() {
+        let mut v = Value::Null;
+        for _ in 0..MAX_DEPTH {
+            v = Value::Array(vec![v]);
+        }
+        assert!(check_value_depth(&v).is_ok());
+        let v = Value::Array(vec![v]);
+        assert_eq!(check_value_depth(&v).unwrap_err().code(), ErrorCode::ParseJson);
+    }
 }
