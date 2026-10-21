@@ -29,7 +29,7 @@ fuzz_target!(|data: &[u8]| {
         }
         if mode & 16 == 0 {
             if let Ok(r) = Receipt::from_json(receipt) {
-                m.insert_value(r.cell.id(), Scalar::Number("1.0892".into()));
+                m.insert_value(r.cell().id(), Scalar::Number("1.0892".into()));
             }
         }
         m

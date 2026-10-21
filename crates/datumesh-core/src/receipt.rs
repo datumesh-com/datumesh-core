@@ -25,33 +25,27 @@ const MEMBERS: [&str; 14] = [
 
 /// A receipt (8.1) that has passed verification steps 1-4: strict JSON, structure, canonical
 /// form and consistency. Its signature has not been checked; use [`crate::verify`].
+///
+/// The members are private and read through getters, so the cached [`payload`](Self::payload)
+/// and [`hash`](Self::hash) always describe them. A `Receipt` comes only from
+/// [`from_json`](Self::from_json) (or [`from_value`](Self::from_value) for JSON already
+/// parsed) and, with feature `sign`, from `ReceiptBuilder::sign`.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Receipt {
-    /// The transaction time answered as of.
-    pub asof: String,
-    /// The cell answered (no slices).
-    pub cell: Cell,
-    /// `<host>#<key id>` of the signing key.
-    pub computed_by: String,
-    /// Receipt hashes of the inputs, ascending.
-    pub inputs: Vec<String>,
-    /// When the receipt was signed.
-    pub issued: String,
-    /// An SPDX identifier or an https URL.
-    pub licence: String,
-    /// The namespace that owns the function; equals `cell.ns`.
-    pub publisher: String,
-    /// The Ed25519 signature, 128 lowercase hex digits.
-    pub sig: String,
-    /// One human sentence.
-    pub summary: String,
-    /// When the value was recorded.
-    pub tx: String,
-    /// The value, typed.
-    pub value: Scalar,
-    /// The valid-time arguments, echoed from `cell.args`.
-    pub valid: Args,
+    asof: String,
+    cell: Cell,
+    computed_by: String,
+    inputs: Vec<String>,
+    issued: String,
+    licence: String,
+    publisher: String,
+    sig: String,
+    summary: String,
+    tx: String,
+    value: Scalar,
+    valid: Args,
     payload: Vec<u8>,
+    hash: String,
 }
 
 impl Receipt {
@@ -75,11 +69,71 @@ impl Receipt {
     }
 
     /// The receipt hash: SHA-256 of the payload, lowercase hex (8.3).
-    pub fn hash(&self) -> String {
-        crate::crypto::sha256_hex(&self.payload)
+    pub fn hash(&self) -> &str {
+        &self.hash
     }
 
-    /// The value's type.
+    /// The transaction time answered as of.
+    pub fn asof(&self) -> &str {
+        &self.asof
+    }
+
+    /// The cell answered (no slices).
+    pub fn cell(&self) -> &Cell {
+        &self.cell
+    }
+
+    /// `<host>#<key id>` of the signing key.
+    pub fn computed_by(&self) -> &str {
+        &self.computed_by
+    }
+
+    /// Receipt hashes of the inputs, ascending.
+    pub fn inputs(&self) -> &[String] {
+        &self.inputs
+    }
+
+    /// When the receipt was signed.
+    pub fn issued(&self) -> &str {
+        &self.issued
+    }
+
+    /// An SPDX identifier or an https URL.
+    pub fn licence(&self) -> &str {
+        &self.licence
+    }
+
+    /// The namespace that owns the function; equals `cell.ns`.
+    pub fn publisher(&self) -> &str {
+        &self.publisher
+    }
+
+    /// The Ed25519 signature, 128 lowercase hex digits.
+    pub fn sig(&self) -> &str {
+        &self.sig
+    }
+
+    /// One human sentence.
+    pub fn summary(&self) -> &str {
+        &self.summary
+    }
+
+    /// When the value was recorded.
+    pub fn tx(&self) -> &str {
+        &self.tx
+    }
+
+    /// The value, typed.
+    pub fn value(&self) -> &Scalar {
+        &self.value
+    }
+
+    /// The valid-time arguments, echoed from `cell.args`.
+    pub fn valid(&self) -> &Args {
+        &self.valid
+    }
+
+    /// The value's type (the `type` member).
     pub fn ty(&self) -> Type {
         self.value.ty()
     }
@@ -203,6 +257,7 @@ fn canonical(v: &Value) -> Result<Receipt> {
     };
     let without_sig: Vec<(String, Value)> = m.iter().filter(|(k, _)| k != "sig").cloned().collect();
     let payload = Value::Object(without_sig).to_jcs();
+    let hash = crate::crypto::sha256_hex(&payload);
     Ok(Receipt {
         asof: asof.into(),
         cell,
@@ -217,6 +272,7 @@ fn canonical(v: &Value) -> Result<Receipt> {
         value,
         valid,
         payload,
+        hash,
     })
 }
 
@@ -227,5 +283,5 @@ pub fn receipt_payload(bytes: &[u8]) -> Result<Vec<u8>> {
 
 /// The receipt hash (8.3), after steps 1-4.
 pub fn receipt_hash(bytes: &[u8]) -> Result<String> {
-    Ok(Receipt::from_json(bytes)?.hash())
+    Ok(Receipt::from_json(bytes)?.hash)
 }

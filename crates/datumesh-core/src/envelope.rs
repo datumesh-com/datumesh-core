@@ -313,27 +313,27 @@ pub fn check_envelope(status: u16, body: &[u8], keys: &Keys, request: &Request) 
         Error::new(e.code(), format!("$.receipt{inner}"), e.detail())
     })?;
     // 5.
-    if r.cell.id() != request.cell_id {
+    if r.cell().id() != request.cell_id {
         return env_err("$.receipt.cell", "the receipt is for another cell than the one requested");
     }
     if let Some(asked) = &request.asof {
         let bound = match outcome {
-            Outcome::Stale => r.asof <= *asked,
-            _ => r.asof == *asked,
+            Outcome::Stale => r.asof() <= asked.as_str(),
+            _ => r.asof() == asked.as_str(),
         };
         if !bound {
             return env_err("$.receipt.asof", "the receipt does not answer the requested asof");
         }
     }
     // 6.
-    let primary = r.signer_host() == lexical::host_of(&r.cell.ns) && r.inputs.is_empty();
+    let primary = r.signer_host() == lexical::host_of(&r.cell().ns) && r.inputs().is_empty();
     if (env.trust == Some(Trust::Primary)) != primary {
         return env_err(
             "$.trust",
             if primary { "a primary receipt is labelled primary" } else { "the receipt is not primary" },
         );
     }
-    if env.superseded_by.as_deref() == Some(r.hash().as_str()) {
+    if env.superseded_by.as_deref() == Some(r.hash()) {
         return env_err("$.superseded_by", "a receipt cannot supersede itself");
     }
     env.receipt = Some(r);

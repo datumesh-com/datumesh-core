@@ -177,7 +177,7 @@ pub fn run(v: &Value) -> Result<Outputs, Error> {
             let env = check_envelope(status, &body, &keys, &request)?;
             let mut out = vec![("outcome".to_string(), s(env.outcome.as_str()))];
             if let Some(r) = &env.receipt {
-                out.push(("receipt_hash".into(), s(&r.hash())));
+                out.push(("receipt_hash".into(), s(r.hash())));
                 if let Some(t) = env.trust {
                     out.push(("trust".into(), s(t.as_str())));
                 }
@@ -225,7 +225,7 @@ fn run_receipt(v: &Value) -> Result<Outputs, Error> {
     }
     let r = Receipt::from_json(&input)?;
     let mut out = canon_outputs(r.payload().to_vec());
-    out.push(("sig".into(), s(&r.sig)));
+    out.push(("sig".into(), s(r.sig())));
     out.push(("level".into(), s(result.level.map_or("", |l| l.as_str()))));
     if blob.is_some() {
         out.push(("blob_checked".into(), Value::Bool(result.blob_checked)));
