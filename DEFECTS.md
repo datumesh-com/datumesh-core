@@ -9,7 +9,8 @@ draft) when that commit was announced, then to `58eb0d9`, which folds in RS-18 t
 Entries RS-1 to RS-17 were found against `5f93b36` and are resolved by `bfe5a38`; RS-18 to
 RS-27 were found against `bfe5a38` and are resolved by `58eb0d9`. No entry is open at
 `58eb0d9`. Each entry gives the section, the problem, what this crate does, and proposed
-wording.
+wording. The submodule is now pinned at the tag `spec-0.2.1` (`710dabb`, text and vectors
+identical to `58eb0d9`); RS-28, from the 0.3.0 API work, is open for `spec-0.2.2`.
 
 Disclosure: before the submodule existed I ran oracle probes against a copy of
 `/root/datumesh-spec`, a working tree that turned out to contain uncommitted `spec-0.2.1` edits to
@@ -224,8 +225,8 @@ lines are identical except for one case, RS-27.
 - **Problem.** Nothing says what a verifier exposes beyond the code. The contract for this crate
   asks for hash and key on every result; whether a receipt hash should be reported for a receipt
   that fails at step 5 or 6 (it is computable: steps 1-4 passed) is a choice.
-- **Resolution.** `VerifyResult.hash` and `.key` are set whenever steps 1-4 passed, even if a
-  later step failed.
+- **Resolution.** `VerifyResult.hash` and `.key` (renamed `.computed_by` in 0.3.0) are set
+  whenever steps 1-4 passed, even if a later step failed.
 - **Proposed wording (10.1, after the procedure).** "A verifier SHOULD report the receipt hash
   whenever steps 1-4 passed, also when a later step fails, so that a failure can be tied to the
   receipt it concerns."
@@ -255,3 +256,31 @@ lines are identical except for one case, RS-27.
 `resolved_unit_value` and `parse_uri` (for the signature, at step 5) now check it
 (`json::check_value_depth`, `E_PARSE_JSON`), and JCS serialisation no longer recurses, so a
 deep value built in memory cannot exhaust the stack.
+
+## Found for datumesh-core 0.3.0 (against `spec-0.2.1`, `710dabb`), for spec-0.2.2
+
+### RS-28. 10.1 step 7.6: a verifier that cannot evaluate the function
+- **Section.** 10.1 step 7.6 ("Evaluate the function"), 10.2, 11 (`recompute.value`).
+- **Problem.** Step 7.6 assumes the verifier can evaluate every function. A real one may not:
+  no runtime for the descriptor's `lang`, an evaluation budget exceeded, or inputs its evaluator
+  cannot obtain. 10.2 has no code for this. `E_FN_UNAVAILABLE` means no descriptor was found
+  (7.1), and `E_VALUE_MISMATCH` means the function was evaluated and gave something else (7.6);
+  reporting either would misstate what happened, and failing the receipt would turn a
+  signature-valid receipt into an invalid one for a reason that is the verifier's, not the
+  receipt's. The vectors cannot show it: SPEC 11 says vectors always give `value`.
+- **Resolution.** New code `E_EVAL_UNAVAILABLE`, "the resolver could not evaluate this
+  function", raised at step 7.6 when the caller's resolver returns no value after 7.1-7.5 have
+  passed. It is not a failure: the result is `ok: true`, level `signed`, `code:
+  E_EVAL_UNAVAILABLE`, path `$.value`, so the caller sees that recomputation did not happen and
+  why. Step 7.7 still runs afterwards, and a 7.7 failure replaces it as a normal failure. This
+  crate does not accept the code in a response envelope's `error` member, since `spec-0.2.1`
+  does not define it. Not added to the vectors.
+- **Proposed wording (10.1 step 7.6, appended).** "If the verifier cannot evaluate the function
+  (no runtime for its language, a resource limit, or inputs it cannot obtain), recomputation
+  stops with `E_EVAL_UNAVAILABLE`. This is not a verification failure: the receipt remains
+  signature-valid at level `signed`, and the verifier reports the code alongside that result.
+  Step 7.7 still runs." **(10.2, new row)** "`E_EVAL_UNAVAILABLE` | 7 | The verifier could not
+  evaluate the function; the receipt stays at level `signed`." **(11)** A `recompute` object
+  without `value` would then mean "cannot evaluate": expected result success at level `signed`
+  with `E_EVAL_UNAVAILABLE` reported, which the vector format would need a field for.
+- **Status.** **Open**, for spec-0.2.2.

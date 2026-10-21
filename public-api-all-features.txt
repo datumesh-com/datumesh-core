@@ -1,0 +1,652 @@
+pub mod datumesh_core
+pub mod datumesh_core::json
+pub enum datumesh_core::json::Value
+pub datumesh_core::json::Value::Array(alloc::vec::Vec<datumesh_core::json::Value>)
+pub datumesh_core::json::Value::Bool(bool)
+pub datumesh_core::json::Value::Null
+pub datumesh_core::json::Value::Number(datumesh_core::json::number::Number)
+pub datumesh_core::json::Value::Object(alloc::vec::Vec<(alloc::string::String, datumesh_core::json::Value)>)
+pub datumesh_core::json::Value::String(alloc::string::String)
+impl datumesh_core::json::Value
+pub fn datumesh_core::json::Value::as_number_text(&self) -> core::option::Option<&str>
+pub fn datumesh_core::json::Value::as_object(&self) -> core::option::Option<&[(alloc::string::String, datumesh_core::json::Value)]>
+pub fn datumesh_core::json::Value::as_str(&self) -> core::option::Option<&str>
+pub fn datumesh_core::json::Value::get(&self, &str) -> core::option::Option<&datumesh_core::json::Value>
+pub fn datumesh_core::json::Value::to_jcs(&self) -> alloc::vec::Vec<u8>
+impl core::clone::Clone for datumesh_core::json::Value
+pub fn datumesh_core::json::Value::clone(&self) -> Self
+impl core::cmp::PartialEq for datumesh_core::json::Value
+pub fn datumesh_core::json::Value::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_core::json::Value
+pub fn datumesh_core::json::Value::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for datumesh_core::json::Value
+pub fn datumesh_core::json::parse(&[u8]) -> datumesh_core::Result<datumesh_core::json::Value>
+pub mod datumesh_core::lexical
+pub mod datumesh_core::lexical::limits
+pub const datumesh_core::lexical::limits::ARGS: usize
+pub const datumesh_core::lexical::limits::BLOB_LENGTH: u64
+pub const datumesh_core::lexical::limits::BODY: usize
+pub const datumesh_core::lexical::limits::FUNCTION_NAME: usize
+pub const datumesh_core::lexical::limits::INDEX_UNIT: usize
+pub const datumesh_core::lexical::limits::INPUTS: usize
+pub const datumesh_core::lexical::limits::KEYS: usize
+pub const datumesh_core::lexical::limits::LICENCE_SPDX: usize
+pub const datumesh_core::lexical::limits::LICENCE_URL: usize
+pub const datumesh_core::lexical::limits::MEDIA_TYPE: usize
+pub const datumesh_core::lexical::limits::NAME: usize
+pub const datumesh_core::lexical::limits::NUMBER: usize
+pub const datumesh_core::lexical::limits::STRING: usize
+pub const datumesh_core::lexical::limits::SUMMARY: usize
+pub fn datumesh_core::lexical::check_arg_name(&str, &str) -> datumesh_core::Result<()>
+pub fn datumesh_core::lexical::check_blob(&str, &str) -> datumesh_core::Result<()>
+pub fn datumesh_core::lexical::check_date(&str, &str) -> datumesh_core::Result<()>
+pub fn datumesh_core::lexical::check_dns_name(&str, &str) -> datumesh_core::Result<()>
+pub fn datumesh_core::lexical::check_function_name(&str, &str) -> datumesh_core::Result<()>
+pub fn datumesh_core::lexical::check_hex(&str, usize, &str) -> datumesh_core::Result<()>
+pub fn datumesh_core::lexical::check_instant(&str, &str) -> datumesh_core::Result<()>
+pub fn datumesh_core::lexical::check_key_ref(&str, &str) -> datumesh_core::Result<()>
+pub fn datumesh_core::lexical::check_licence(&str, &str) -> datumesh_core::Result<()>
+pub fn datumesh_core::lexical::check_name(&str, &str) -> datumesh_core::Result<()>
+pub fn datumesh_core::lexical::check_namespace(&str, &str) -> datumesh_core::Result<()>
+pub fn datumesh_core::lexical::check_number(&str, &str) -> datumesh_core::Result<()>
+pub fn datumesh_core::lexical::check_string(&str, &str) -> datumesh_core::Result<()>
+pub fn datumesh_core::lexical::is_assigned_15_1(char) -> bool
+pub fn datumesh_core::lexical::is_currency(&str) -> bool
+pub fn datumesh_core::lexical::is_index_unit(&str) -> bool
+pub fn datumesh_core::lexical::is_literal_unit(&str) -> bool
+pub fn datumesh_core::lexical::to_hex(&[u8]) -> alloc::string::String
+pub enum datumesh_core::Arg
+pub datumesh_core::Arg::Slice
+pub datumesh_core::Arg::Value(datumesh_core::Scalar)
+impl datumesh_core::Arg
+pub fn datumesh_core::Arg::scalar(&self) -> core::option::Option<&datumesh_core::Scalar>
+pub fn datumesh_core::Arg::to_value(&self) -> datumesh_core::json::Value
+impl core::clone::Clone for datumesh_core::Arg
+pub fn datumesh_core::Arg::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_core::Arg
+impl core::cmp::Ord for datumesh_core::Arg
+pub fn datumesh_core::Arg::cmp(&self, &Self) -> core::cmp::Ordering
+impl core::cmp::PartialEq for datumesh_core::Arg
+pub fn datumesh_core::Arg::eq(&self, &Self) -> bool
+impl core::cmp::PartialOrd for datumesh_core::Arg
+pub fn datumesh_core::Arg::partial_cmp(&self, &Self) -> core::option::Option<core::cmp::Ordering>
+impl core::fmt::Debug for datumesh_core::Arg
+pub fn datumesh_core::Arg::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for datumesh_core::Arg
+pub fn datumesh_core::Arg::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for datumesh_core::Arg
+#[non_exhaustive] pub enum datumesh_core::ErrorCode
+pub datumesh_core::ErrorCode::ArgMissing
+pub datumesh_core::ErrorCode::ArgType
+pub datumesh_core::ErrorCode::ArgUnknown
+pub datumesh_core::ErrorCode::BlobMismatch
+pub datumesh_core::ErrorCode::CanonArgDuplicate
+pub datumesh_core::ErrorCode::CanonArgName
+pub datumesh_core::ErrorCode::CanonArgOrder
+pub datumesh_core::ErrorCode::CanonBlob
+pub datumesh_core::ErrorCode::CanonDate
+pub datumesh_core::ErrorCode::CanonHex
+pub datumesh_core::ErrorCode::CanonInstant
+pub datumesh_core::ErrorCode::CanonLicence
+pub datumesh_core::ErrorCode::CanonLimit
+pub datumesh_core::ErrorCode::CanonName
+pub datumesh_core::ErrorCode::CanonNumber
+pub datumesh_core::ErrorCode::CanonPercent
+pub datumesh_core::ErrorCode::CanonSet
+pub datumesh_core::ErrorCode::CanonString
+pub datumesh_core::ErrorCode::CanonType
+pub datumesh_core::ErrorCode::CanonUnit
+pub datumesh_core::ErrorCode::Envelope
+pub datumesh_core::ErrorCode::EvalUnavailable
+pub datumesh_core::ErrorCode::FnHashMismatch
+pub datumesh_core::ErrorCode::FnUnavailable
+pub datumesh_core::ErrorCode::InputInvalid
+pub datumesh_core::ErrorCode::InputUnavailable
+pub datumesh_core::ErrorCode::InputUndeclared
+pub datumesh_core::ErrorCode::KeyDoc
+pub datumesh_core::ErrorCode::KeyNotValid
+pub datumesh_core::ErrorCode::KeyUnavailable
+pub datumesh_core::ErrorCode::KeyUnknown
+pub datumesh_core::ErrorCode::ParseDuplicateKey
+pub datumesh_core::ErrorCode::ParseJson
+pub datumesh_core::ErrorCode::ParseUri
+pub datumesh_core::ErrorCode::PublisherMismatch
+pub datumesh_core::ErrorCode::ReturnType
+pub datumesh_core::ErrorCode::Schema
+pub datumesh_core::ErrorCode::Signature
+pub datumesh_core::ErrorCode::Slice
+pub datumesh_core::ErrorCode::TimeOrder
+pub datumesh_core::ErrorCode::ValidMismatch
+pub datumesh_core::ErrorCode::ValueMismatch
+impl datumesh_core::ErrorCode
+pub const datumesh_core::ErrorCode::ALL: &'static [datumesh_core::ErrorCode]
+pub const fn datumesh_core::ErrorCode::as_str(self) -> &'static str
+pub fn datumesh_core::ErrorCode::from_code(&str) -> core::option::Option<datumesh_core::ErrorCode>
+impl core::clone::Clone for datumesh_core::ErrorCode
+pub fn datumesh_core::ErrorCode::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_core::ErrorCode
+impl core::cmp::Ord for datumesh_core::ErrorCode
+pub fn datumesh_core::ErrorCode::cmp(&self, &Self) -> core::cmp::Ordering
+impl core::cmp::PartialEq for datumesh_core::ErrorCode
+pub fn datumesh_core::ErrorCode::eq(&self, &Self) -> bool
+impl core::cmp::PartialOrd for datumesh_core::ErrorCode
+pub fn datumesh_core::ErrorCode::partial_cmp(&self, &Self) -> core::option::Option<core::cmp::Ordering>
+impl core::fmt::Debug for datumesh_core::ErrorCode
+pub fn datumesh_core::ErrorCode::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for datumesh_core::ErrorCode
+pub fn datumesh_core::ErrorCode::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for datumesh_core::ErrorCode
+pub fn datumesh_core::ErrorCode::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for datumesh_core::ErrorCode
+impl core::marker::StructuralPartialEq for datumesh_core::ErrorCode
+pub enum datumesh_core::Level
+pub datumesh_core::Level::Recomputed
+pub datumesh_core::Level::Signed
+impl datumesh_core::Level
+pub const fn datumesh_core::Level::as_str(self) -> &'static str
+impl core::clone::Clone for datumesh_core::Level
+pub fn datumesh_core::Level::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_core::Level
+impl core::cmp::Ord for datumesh_core::Level
+pub fn datumesh_core::Level::cmp(&self, &Self) -> core::cmp::Ordering
+impl core::cmp::PartialEq for datumesh_core::Level
+pub fn datumesh_core::Level::eq(&self, &Self) -> bool
+impl core::cmp::PartialOrd for datumesh_core::Level
+pub fn datumesh_core::Level::partial_cmp(&self, &Self) -> core::option::Option<core::cmp::Ordering>
+impl core::fmt::Debug for datumesh_core::Level
+pub fn datumesh_core::Level::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for datumesh_core::Level
+pub fn datumesh_core::Level::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for datumesh_core::Level
+impl core::marker::StructuralPartialEq for datumesh_core::Level
+pub enum datumesh_core::Outcome
+pub datumesh_core::Outcome::BadRequest
+pub datumesh_core::Outcome::Error
+pub datumesh_core::Outcome::NotCovered
+pub datumesh_core::Outcome::Ok
+pub datumesh_core::Outcome::PaymentRequired
+pub datumesh_core::Outcome::RateLimited
+pub datumesh_core::Outcome::Stale
+pub datumesh_core::Outcome::Unlicensed
+impl datumesh_core::Outcome
+pub const fn datumesh_core::Outcome::as_str(self) -> &'static str
+impl core::clone::Clone for datumesh_core::Outcome
+pub fn datumesh_core::Outcome::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_core::Outcome
+impl core::cmp::PartialEq for datumesh_core::Outcome
+pub fn datumesh_core::Outcome::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_core::Outcome
+pub fn datumesh_core::Outcome::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for datumesh_core::Outcome
+pub fn datumesh_core::Outcome::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for datumesh_core::Outcome
+impl core::marker::StructuralPartialEq for datumesh_core::Outcome
+pub enum datumesh_core::RateSide
+pub datumesh_core::RateSide::Arg(alloc::string::String)
+pub datumesh_core::RateSide::Currency(alloc::string::String)
+impl core::clone::Clone for datumesh_core::RateSide
+pub fn datumesh_core::RateSide::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_core::RateSide
+impl core::cmp::PartialEq for datumesh_core::RateSide
+pub fn datumesh_core::RateSide::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_core::RateSide
+pub fn datumesh_core::RateSide::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for datumesh_core::RateSide
+pub fn datumesh_core::RateSide::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for datumesh_core::RateSide
+pub enum datumesh_core::Scalar
+pub datumesh_core::Scalar::Blob(alloc::string::String)
+pub datumesh_core::Scalar::Boolean(bool)
+pub datumesh_core::Scalar::Date(alloc::string::String)
+pub datumesh_core::Scalar::Instant(alloc::string::String)
+pub datumesh_core::Scalar::Number(alloc::string::String)
+pub datumesh_core::Scalar::String(alloc::string::String)
+impl datumesh_core::Scalar
+pub fn datumesh_core::Scalar::canonical(&self) -> alloc::vec::Vec<u8>
+pub fn datumesh_core::Scalar::from_json(&[u8]) -> datumesh_core::Result<datumesh_core::Scalar>
+pub fn datumesh_core::Scalar::from_lexical(datumesh_core::Type, &str) -> datumesh_core::Result<datumesh_core::Scalar>
+pub fn datumesh_core::Scalar::lexical(&self) -> &str
+pub fn datumesh_core::Scalar::to_value(&self) -> datumesh_core::json::Value
+pub fn datumesh_core::Scalar::ty(&self) -> datumesh_core::Type
+impl core::clone::Clone for datumesh_core::Scalar
+pub fn datumesh_core::Scalar::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_core::Scalar
+impl core::cmp::Ord for datumesh_core::Scalar
+pub fn datumesh_core::Scalar::cmp(&self, &Self) -> core::cmp::Ordering
+impl core::cmp::PartialEq for datumesh_core::Scalar
+pub fn datumesh_core::Scalar::eq(&self, &Self) -> bool
+impl core::cmp::PartialOrd for datumesh_core::Scalar
+pub fn datumesh_core::Scalar::partial_cmp(&self, &Self) -> core::option::Option<core::cmp::Ordering>
+impl core::fmt::Debug for datumesh_core::Scalar
+pub fn datumesh_core::Scalar::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for datumesh_core::Scalar
+pub fn datumesh_core::Scalar::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for datumesh_core::Scalar
+pub enum datumesh_core::Trust
+pub datumesh_core::Trust::Primary
+pub datumesh_core::Trust::Unverified
+pub datumesh_core::Trust::Verified
+impl datumesh_core::Trust
+pub const fn datumesh_core::Trust::as_str(self) -> &'static str
+impl core::clone::Clone for datumesh_core::Trust
+pub fn datumesh_core::Trust::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_core::Trust
+impl core::cmp::PartialEq for datumesh_core::Trust
+pub fn datumesh_core::Trust::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_core::Trust
+pub fn datumesh_core::Trust::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for datumesh_core::Trust
+pub fn datumesh_core::Trust::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for datumesh_core::Trust
+impl core::marker::StructuralPartialEq for datumesh_core::Trust
+pub enum datumesh_core::Type
+pub datumesh_core::Type::Blob
+pub datumesh_core::Type::Boolean
+pub datumesh_core::Type::Date
+pub datumesh_core::Type::Instant
+pub datumesh_core::Type::Number
+pub datumesh_core::Type::String
+impl datumesh_core::Type
+pub const fn datumesh_core::Type::as_str(self) -> &'static str
+pub fn datumesh_core::Type::from_name(&str) -> core::option::Option<datumesh_core::Type>
+pub fn datumesh_core::Type::may_be_valid_time(self) -> bool
+impl core::clone::Clone for datumesh_core::Type
+pub fn datumesh_core::Type::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_core::Type
+impl core::cmp::Ord for datumesh_core::Type
+pub fn datumesh_core::Type::cmp(&self, &Self) -> core::cmp::Ordering
+impl core::cmp::PartialEq for datumesh_core::Type
+pub fn datumesh_core::Type::eq(&self, &Self) -> bool
+impl core::cmp::PartialOrd for datumesh_core::Type
+pub fn datumesh_core::Type::partial_cmp(&self, &Self) -> core::option::Option<core::cmp::Ordering>
+impl core::fmt::Debug for datumesh_core::Type
+pub fn datumesh_core::Type::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for datumesh_core::Type
+pub fn datumesh_core::Type::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for datumesh_core::Type
+impl core::marker::StructuralPartialEq for datumesh_core::Type
+pub enum datumesh_core::Unit
+pub datumesh_core::Unit::Arg(alloc::string::String)
+pub datumesh_core::Unit::Literal(alloc::string::String)
+pub datumesh_core::Unit::Rate
+pub datumesh_core::Unit::Rate::of: datumesh_core::RateSide
+pub datumesh_core::Unit::Rate::per: datumesh_core::RateSide
+impl datumesh_core::Unit
+pub fn datumesh_core::Unit::to_value(&self) -> datumesh_core::json::Value
+impl core::clone::Clone for datumesh_core::Unit
+pub fn datumesh_core::Unit::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_core::Unit
+impl core::cmp::PartialEq for datumesh_core::Unit
+pub fn datumesh_core::Unit::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_core::Unit
+pub fn datumesh_core::Unit::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for datumesh_core::Unit
+pub fn datumesh_core::Unit::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for datumesh_core::Unit
+pub struct datumesh_core::ArgDecl
+pub datumesh_core::ArgDecl::ty: datumesh_core::Type
+pub datumesh_core::ArgDecl::unit: core::option::Option<datumesh_core::Unit>
+pub datumesh_core::ArgDecl::valid: bool
+impl core::clone::Clone for datumesh_core::ArgDecl
+pub fn datumesh_core::ArgDecl::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_core::ArgDecl
+impl core::cmp::PartialEq for datumesh_core::ArgDecl
+pub fn datumesh_core::ArgDecl::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_core::ArgDecl
+pub fn datumesh_core::ArgDecl::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for datumesh_core::ArgDecl
+pub fn datumesh_core::ArgDecl::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for datumesh_core::ArgDecl
+pub struct datumesh_core::Cell
+pub datumesh_core::Cell::args: datumesh_core::Args
+pub datumesh_core::Cell::fn_hash: alloc::string::String
+pub datumesh_core::Cell::fn_name: alloc::string::String
+pub datumesh_core::Cell::ns: alloc::string::String
+impl datumesh_core::Cell
+pub fn datumesh_core::Cell::canonical(&self) -> alloc::vec::Vec<u8>
+pub fn datumesh_core::Cell::from_json(&[u8]) -> datumesh_core::Result<datumesh_core::Cell>
+pub fn datumesh_core::Cell::from_value(&datumesh_core::json::Value) -> datumesh_core::Result<datumesh_core::Cell>
+pub fn datumesh_core::Cell::function_name(&self) -> alloc::string::String
+pub fn datumesh_core::Cell::id(&self) -> alloc::string::String
+pub fn datumesh_core::Cell::is_slice(&self) -> bool
+pub fn datumesh_core::Cell::to_value(&self) -> datumesh_core::json::Value
+impl core::clone::Clone for datumesh_core::Cell
+pub fn datumesh_core::Cell::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_core::Cell
+impl core::cmp::PartialEq for datumesh_core::Cell
+pub fn datumesh_core::Cell::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_core::Cell
+pub fn datumesh_core::Cell::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for datumesh_core::Cell
+pub fn datumesh_core::Cell::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for datumesh_core::Cell
+pub struct datumesh_core::CellRef
+pub datumesh_core::CellRef::args: datumesh_core::Args
+pub datumesh_core::CellRef::asof: core::option::Option<alloc::string::String>
+pub datumesh_core::CellRef::fn_name: alloc::string::String
+pub datumesh_core::CellRef::ns: alloc::string::String
+impl datumesh_core::CellRef
+pub fn datumesh_core::CellRef::canonical(&self) -> alloc::vec::Vec<u8>
+pub fn datumesh_core::CellRef::from_json(&[u8]) -> datumesh_core::Result<datumesh_core::CellRef>
+pub fn datumesh_core::CellRef::resolve(&self, &str) -> datumesh_core::Result<datumesh_core::Cell>
+pub fn datumesh_core::CellRef::to_value(&self) -> datumesh_core::json::Value
+impl core::clone::Clone for datumesh_core::CellRef
+pub fn datumesh_core::CellRef::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_core::CellRef
+impl core::cmp::PartialEq for datumesh_core::CellRef
+pub fn datumesh_core::CellRef::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_core::CellRef
+pub fn datumesh_core::CellRef::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for datumesh_core::CellRef
+pub fn datumesh_core::CellRef::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for datumesh_core::CellRef
+pub struct datumesh_core::Descriptor
+pub datumesh_core::Descriptor::body: alloc::string::String
+pub datumesh_core::Descriptor::inputs: alloc::vec::Vec<alloc::string::String>
+pub datumesh_core::Descriptor::lang: alloc::string::String
+pub datumesh_core::Descriptor::signature: datumesh_core::Signature
+impl datumesh_core::Descriptor
+pub fn datumesh_core::Descriptor::canonical(&self) -> alloc::vec::Vec<u8>
+pub fn datumesh_core::Descriptor::from_json(&[u8]) -> datumesh_core::Result<datumesh_core::Descriptor>
+pub fn datumesh_core::Descriptor::from_value(&datumesh_core::json::Value) -> datumesh_core::Result<datumesh_core::Descriptor>
+pub fn datumesh_core::Descriptor::hash(&self) -> alloc::string::String
+pub fn datumesh_core::Descriptor::to_value(&self) -> datumesh_core::json::Value
+impl core::clone::Clone for datumesh_core::Descriptor
+pub fn datumesh_core::Descriptor::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_core::Descriptor
+impl core::cmp::PartialEq for datumesh_core::Descriptor
+pub fn datumesh_core::Descriptor::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_core::Descriptor
+pub fn datumesh_core::Descriptor::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for datumesh_core::Descriptor
+pub fn datumesh_core::Descriptor::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for datumesh_core::Descriptor
+pub struct datumesh_core::Envelope
+pub datumesh_core::Envelope::age_seconds: core::option::Option<u64>
+pub datumesh_core::Envelope::error: core::option::Option<datumesh_core::ErrorCode>
+pub datumesh_core::Envelope::outcome: datumesh_core::Outcome
+pub datumesh_core::Envelope::quote: core::option::Option<datumesh_core::Quote>
+pub datumesh_core::Envelope::reason: core::option::Option<alloc::string::String>
+pub datumesh_core::Envelope::receipt: core::option::Option<datumesh_core::Receipt>
+pub datumesh_core::Envelope::retry_after_seconds: core::option::Option<u64>
+pub datumesh_core::Envelope::superseded_by: core::option::Option<alloc::string::String>
+pub datumesh_core::Envelope::trust: core::option::Option<datumesh_core::Trust>
+impl core::clone::Clone for datumesh_core::Envelope
+pub fn datumesh_core::Envelope::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_core::Envelope
+impl core::cmp::PartialEq for datumesh_core::Envelope
+pub fn datumesh_core::Envelope::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_core::Envelope
+pub fn datumesh_core::Envelope::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for datumesh_core::Envelope
+pub struct datumesh_core::Error
+impl datumesh_core::Error
+pub fn datumesh_core::Error::code(&self) -> datumesh_core::ErrorCode
+pub fn datumesh_core::Error::code_str(&self) -> &'static str
+pub fn datumesh_core::Error::detail(&self) -> &str
+pub fn datumesh_core::Error::new(datumesh_core::ErrorCode, impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>) -> datumesh_core::Error
+pub fn datumesh_core::Error::path(&self) -> &str
+impl core::clone::Clone for datumesh_core::Error
+pub fn datumesh_core::Error::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_core::Error
+impl core::cmp::PartialEq for datumesh_core::Error
+pub fn datumesh_core::Error::eq(&self, &Self) -> bool
+impl core::error::Error for datumesh_core::Error
+impl core::fmt::Debug for datumesh_core::Error
+pub fn datumesh_core::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for datumesh_core::Error
+pub fn datumesh_core::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for datumesh_core::Error
+pub struct datumesh_core::InvalidRequest(_)
+impl core::clone::Clone for datumesh_core::InvalidRequest
+pub fn datumesh_core::InvalidRequest::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_core::InvalidRequest
+impl core::cmp::PartialEq for datumesh_core::InvalidRequest
+pub fn datumesh_core::InvalidRequest::eq(&self, &Self) -> bool
+impl core::error::Error for datumesh_core::InvalidRequest
+impl core::fmt::Debug for datumesh_core::InvalidRequest
+pub fn datumesh_core::InvalidRequest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for datumesh_core::InvalidRequest
+pub fn datumesh_core::InvalidRequest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for datumesh_core::InvalidRequest
+pub fn datumesh_core::InvalidRequest::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for datumesh_core::InvalidRequest
+pub struct datumesh_core::Key
+pub datumesh_core::Key::id: alloc::string::String
+pub datumesh_core::Key::public: [u8; 32]
+pub datumesh_core::Key::valid_from: alloc::string::String
+pub datumesh_core::Key::valid_to: core::option::Option<alloc::string::String>
+impl datumesh_core::Key
+pub fn datumesh_core::Key::usable_at(&self, &str) -> bool
+impl core::clone::Clone for datumesh_core::Key
+pub fn datumesh_core::Key::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_core::Key
+impl core::cmp::PartialEq for datumesh_core::Key
+pub fn datumesh_core::Key::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_core::Key
+pub fn datumesh_core::Key::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for datumesh_core::Key
+pub fn datumesh_core::Key::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for datumesh_core::Key
+pub struct datumesh_core::KeyDoc
+pub datumesh_core::KeyDoc::host: alloc::string::String
+pub datumesh_core::KeyDoc::keys: alloc::vec::Vec<datumesh_core::Key>
+impl datumesh_core::KeyDoc
+pub fn datumesh_core::KeyDoc::from_json(&str, &[u8]) -> datumesh_core::Result<datumesh_core::KeyDoc>
+pub fn datumesh_core::KeyDoc::key(&self, &str) -> core::option::Option<&datumesh_core::Key>
+pub fn datumesh_core::KeyDoc::key_ids(&self) -> alloc::vec::Vec<&str>
+impl core::clone::Clone for datumesh_core::KeyDoc
+pub fn datumesh_core::KeyDoc::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_core::KeyDoc
+impl core::cmp::PartialEq for datumesh_core::KeyDoc
+pub fn datumesh_core::KeyDoc::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_core::KeyDoc
+pub fn datumesh_core::KeyDoc::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for datumesh_core::KeyDoc
+pub fn datumesh_core::KeyDoc::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for datumesh_core::KeyDoc
+pub struct datumesh_core::Keys
+impl datumesh_core::Keys
+pub fn datumesh_core::Keys::get(&self, &str) -> datumesh_core::Result<&datumesh_core::KeyDoc>
+pub fn datumesh_core::Keys::insert(&mut self, datumesh_core::KeyDoc)
+pub fn datumesh_core::Keys::insert_response(&mut self, &str, u16, core::option::Option<&[u8]>)
+pub fn datumesh_core::Keys::insert_result(&mut self, &str, datumesh_core::Result<datumesh_core::KeyDoc>)
+pub fn datumesh_core::Keys::insert_unavailable(&mut self, &str)
+pub fn datumesh_core::Keys::new() -> datumesh_core::Keys
+impl core::clone::Clone for datumesh_core::Keys
+pub fn datumesh_core::Keys::clone(&self) -> Self
+impl core::default::Default for datumesh_core::Keys
+pub fn datumesh_core::Keys::default() -> Self
+impl core::fmt::Debug for datumesh_core::Keys
+pub fn datumesh_core::Keys::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct datumesh_core::MapResolver
+impl datumesh_core::MapResolver
+pub fn datumesh_core::MapResolver::insert_descriptor(&mut self, impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::vec::Vec<u8>>)
+pub fn datumesh_core::MapResolver::insert_receipt(&mut self, impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::vec::Vec<u8>>)
+pub fn datumesh_core::MapResolver::insert_value(&mut self, impl core::convert::Into<alloc::string::String>, datumesh_core::Scalar)
+pub fn datumesh_core::MapResolver::new() -> datumesh_core::MapResolver
+impl core::clone::Clone for datumesh_core::MapResolver
+pub fn datumesh_core::MapResolver::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_core::MapResolver
+impl core::cmp::PartialEq for datumesh_core::MapResolver
+pub fn datumesh_core::MapResolver::eq(&self, &Self) -> bool
+impl core::default::Default for datumesh_core::MapResolver
+pub fn datumesh_core::MapResolver::default() -> Self
+impl core::fmt::Debug for datumesh_core::MapResolver
+pub fn datumesh_core::MapResolver::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for datumesh_core::MapResolver
+impl datumesh_core::Resolver for datumesh_core::MapResolver
+pub fn datumesh_core::MapResolver::descriptor(&self, &str) -> core::option::Option<alloc::borrow::Cow<'_, [u8]>>
+pub fn datumesh_core::MapResolver::evaluate(&self, &datumesh_core::Cell, &str) -> core::option::Option<datumesh_core::Scalar>
+pub fn datumesh_core::MapResolver::receipt(&self, &str) -> core::option::Option<alloc::borrow::Cow<'_, [u8]>>
+pub struct datumesh_core::Quote
+pub datumesh_core::Quote::amount: alloc::string::String
+pub datumesh_core::Quote::authorise: alloc::string::String
+pub datumesh_core::Quote::currency: alloc::string::String
+impl core::clone::Clone for datumesh_core::Quote
+pub fn datumesh_core::Quote::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_core::Quote
+impl core::cmp::PartialEq for datumesh_core::Quote
+pub fn datumesh_core::Quote::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_core::Quote
+pub fn datumesh_core::Quote::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for datumesh_core::Quote
+pub fn datumesh_core::Quote::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for datumesh_core::Quote
+pub struct datumesh_core::Receipt
+impl datumesh_core::Receipt
+pub fn datumesh_core::Receipt::asof(&self) -> &str
+pub fn datumesh_core::Receipt::cell(&self) -> &datumesh_core::Cell
+pub fn datumesh_core::Receipt::computed_by(&self) -> &str
+pub fn datumesh_core::Receipt::from_json(&[u8]) -> datumesh_core::Result<datumesh_core::Receipt>
+pub fn datumesh_core::Receipt::from_value(&datumesh_core::json::Value) -> datumesh_core::Result<datumesh_core::Receipt>
+pub fn datumesh_core::Receipt::hash(&self) -> &str
+pub fn datumesh_core::Receipt::inputs(&self) -> &[alloc::string::String]
+pub fn datumesh_core::Receipt::issued(&self) -> &str
+pub fn datumesh_core::Receipt::key_id(&self) -> &str
+pub fn datumesh_core::Receipt::licence(&self) -> &str
+pub fn datumesh_core::Receipt::payload(&self) -> &[u8]
+pub fn datumesh_core::Receipt::publisher(&self) -> &str
+pub fn datumesh_core::Receipt::sig(&self) -> &str
+pub fn datumesh_core::Receipt::signer_host(&self) -> &str
+pub fn datumesh_core::Receipt::summary(&self) -> &str
+pub fn datumesh_core::Receipt::tx(&self) -> &str
+pub fn datumesh_core::Receipt::ty(&self) -> datumesh_core::Type
+pub fn datumesh_core::Receipt::valid(&self) -> &datumesh_core::Args
+pub fn datumesh_core::Receipt::value(&self) -> &datumesh_core::Scalar
+impl core::clone::Clone for datumesh_core::Receipt
+pub fn datumesh_core::Receipt::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_core::Receipt
+impl core::cmp::PartialEq for datumesh_core::Receipt
+pub fn datumesh_core::Receipt::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_core::Receipt
+pub fn datumesh_core::Receipt::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for datumesh_core::Receipt
+pub fn datumesh_core::Receipt::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for datumesh_core::Receipt
+pub struct datumesh_core::ReceiptBuilder
+impl datumesh_core::ReceiptBuilder
+pub fn datumesh_core::ReceiptBuilder::asof(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn datumesh_core::ReceiptBuilder::cell(self, datumesh_core::Cell) -> Self
+pub fn datumesh_core::ReceiptBuilder::inputs<I, S>(self, I) -> Self where I: core::iter::traits::collect::IntoIterator<Item = S>, S: core::convert::Into<alloc::string::String>
+pub fn datumesh_core::ReceiptBuilder::issued(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn datumesh_core::ReceiptBuilder::licence(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn datumesh_core::ReceiptBuilder::new() -> datumesh_core::ReceiptBuilder
+pub fn datumesh_core::ReceiptBuilder::publisher(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn datumesh_core::ReceiptBuilder::sign(&self, &datumesh_core::SigningKey) -> datumesh_core::Result<datumesh_core::Receipt>
+pub fn datumesh_core::ReceiptBuilder::signer_host(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn datumesh_core::ReceiptBuilder::summary(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn datumesh_core::ReceiptBuilder::tx(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn datumesh_core::ReceiptBuilder::valid(self, datumesh_core::Args) -> Self
+pub fn datumesh_core::ReceiptBuilder::value(self, datumesh_core::Scalar) -> Self
+impl core::clone::Clone for datumesh_core::ReceiptBuilder
+pub fn datumesh_core::ReceiptBuilder::clone(&self) -> Self
+impl core::default::Default for datumesh_core::ReceiptBuilder
+pub fn datumesh_core::ReceiptBuilder::default() -> Self
+impl core::fmt::Debug for datumesh_core::ReceiptBuilder
+pub fn datumesh_core::ReceiptBuilder::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct datumesh_core::Request
+impl datumesh_core::Request
+pub fn datumesh_core::Request::asof(&self) -> core::option::Option<&str>
+pub fn datumesh_core::Request::cell_id(&self) -> &str
+pub fn datumesh_core::Request::new(&str, core::option::Option<&str>) -> core::result::Result<datumesh_core::Request, datumesh_core::InvalidRequest>
+impl core::clone::Clone for datumesh_core::Request
+pub fn datumesh_core::Request::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_core::Request
+impl core::cmp::PartialEq for datumesh_core::Request
+pub fn datumesh_core::Request::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_core::Request
+pub fn datumesh_core::Request::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for datumesh_core::Request
+pub fn datumesh_core::Request::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for datumesh_core::Request
+pub struct datumesh_core::Returns
+pub datumesh_core::Returns::ty: datumesh_core::Type
+pub datumesh_core::Returns::unit: core::option::Option<datumesh_core::Unit>
+impl core::clone::Clone for datumesh_core::Returns
+pub fn datumesh_core::Returns::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_core::Returns
+impl core::cmp::PartialEq for datumesh_core::Returns
+pub fn datumesh_core::Returns::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_core::Returns
+pub fn datumesh_core::Returns::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for datumesh_core::Returns
+pub fn datumesh_core::Returns::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for datumesh_core::Returns
+pub struct datumesh_core::Signature
+pub datumesh_core::Signature::args: alloc::collections::btree::map::BTreeMap<alloc::string::String, datumesh_core::ArgDecl>
+pub datumesh_core::Signature::returns: datumesh_core::Returns
+impl datumesh_core::Signature
+pub fn datumesh_core::Signature::to_value(&self) -> datumesh_core::json::Value
+impl core::clone::Clone for datumesh_core::Signature
+pub fn datumesh_core::Signature::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_core::Signature
+impl core::cmp::PartialEq for datumesh_core::Signature
+pub fn datumesh_core::Signature::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_core::Signature
+pub fn datumesh_core::Signature::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for datumesh_core::Signature
+pub fn datumesh_core::Signature::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for datumesh_core::Signature
+pub struct datumesh_core::SigningKey
+impl datumesh_core::SigningKey
+pub fn datumesh_core::SigningKey::from_seed(&[u8; 32]) -> datumesh_core::SigningKey
+pub fn datumesh_core::SigningKey::key_id(&self) -> &str
+pub fn datumesh_core::SigningKey::public_key(&self) -> [u8; 32]
+impl core::clone::Clone for datumesh_core::SigningKey
+pub fn datumesh_core::SigningKey::clone(&self) -> Self
+impl core::fmt::Debug for datumesh_core::SigningKey
+pub fn datumesh_core::SigningKey::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct datumesh_core::VerifyResult
+pub datumesh_core::VerifyResult::blob_checked: bool
+pub datumesh_core::VerifyResult::code: core::option::Option<datumesh_core::ErrorCode>
+pub datumesh_core::VerifyResult::computed_by: core::option::Option<alloc::string::String>
+pub datumesh_core::VerifyResult::detail: alloc::string::String
+pub datumesh_core::VerifyResult::hash: core::option::Option<alloc::string::String>
+pub datumesh_core::VerifyResult::level: core::option::Option<datumesh_core::Level>
+pub datumesh_core::VerifyResult::ok: bool
+pub datumesh_core::VerifyResult::path: alloc::string::String
+impl datumesh_core::VerifyResult
+pub fn datumesh_core::VerifyResult::error(&self) -> core::option::Option<datumesh_core::Error>
+impl core::clone::Clone for datumesh_core::VerifyResult
+pub fn datumesh_core::VerifyResult::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_core::VerifyResult
+impl core::cmp::PartialEq for datumesh_core::VerifyResult
+pub fn datumesh_core::VerifyResult::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_core::VerifyResult
+pub fn datumesh_core::VerifyResult::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for datumesh_core::VerifyResult
+pub trait datumesh_core::Resolver
+pub fn datumesh_core::Resolver::descriptor(&self, &str) -> core::option::Option<alloc::borrow::Cow<'_, [u8]>>
+pub fn datumesh_core::Resolver::evaluate(&self, &datumesh_core::Cell, &str) -> core::option::Option<datumesh_core::Scalar>
+pub fn datumesh_core::Resolver::receipt(&self, &str) -> core::option::Option<alloc::borrow::Cow<'_, [u8]>>
+impl datumesh_core::Resolver for datumesh_core::MapResolver
+pub fn datumesh_core::MapResolver::descriptor(&self, &str) -> core::option::Option<alloc::borrow::Cow<'_, [u8]>>
+pub fn datumesh_core::MapResolver::evaluate(&self, &datumesh_core::Cell, &str) -> core::option::Option<datumesh_core::Scalar>
+pub fn datumesh_core::MapResolver::receipt(&self, &str) -> core::option::Option<alloc::borrow::Cow<'_, [u8]>>
+pub fn datumesh_core::canonicalize_cell(&[u8]) -> datumesh_core::Result<alloc::vec::Vec<u8>>
+pub fn datumesh_core::canonicalize_descriptor(&[u8]) -> datumesh_core::Result<alloc::vec::Vec<u8>>
+pub fn datumesh_core::canonicalize_receipt(&[u8]) -> datumesh_core::Result<alloc::vec::Vec<u8>>
+pub fn datumesh_core::canonicalize_ref(&[u8]) -> datumesh_core::Result<alloc::vec::Vec<u8>>
+pub fn datumesh_core::canonicalize_scalar(&[u8]) -> datumesh_core::Result<alloc::vec::Vec<u8>>
+pub fn datumesh_core::cell_hash(&[u8]) -> datumesh_core::Result<alloc::string::String>
+pub fn datumesh_core::cell_uri_from_https(&str, &str) -> core::option::Option<alloc::string::String>
+pub fn datumesh_core::check_envelope(u16, &[u8], &datumesh_core::Keys, &datumesh_core::Request) -> datumesh_core::Result<datumesh_core::Envelope>
+pub fn datumesh_core::fetch_keys(&str) -> datumesh_core::Result<datumesh_core::KeyDoc>
+pub fn datumesh_core::format_uri(&datumesh_core::CellRef) -> alloc::string::String
+pub fn datumesh_core::function_hash(&[u8]) -> datumesh_core::Result<alloc::string::String>
+pub fn datumesh_core::https_url(&str, &str) -> datumesh_core::Result<alloc::string::String>
+pub fn datumesh_core::key_id(&[u8; 32]) -> alloc::string::String
+pub fn datumesh_core::keys_from_response(&str, u16, core::option::Option<&[u8]>) -> datumesh_core::Result<datumesh_core::KeyDoc>
+pub fn datumesh_core::parse_uri(&str, &datumesh_core::json::Value) -> datumesh_core::Result<datumesh_core::CellRef>
+pub fn datumesh_core::receipt_hash(&[u8]) -> datumesh_core::Result<alloc::string::String>
+pub fn datumesh_core::receipt_payload(&[u8]) -> datumesh_core::Result<alloc::vec::Vec<u8>>
+pub fn datumesh_core::resolve_with(&datumesh_core::Descriptor, &datumesh_core::Cell) -> datumesh_core::Result<core::option::Option<alloc::string::String>>
+pub fn datumesh_core::resolved_unit(&[u8], &[u8]) -> datumesh_core::Result<core::option::Option<alloc::string::String>>
+pub fn datumesh_core::resolved_unit_value(&datumesh_core::json::Value, &datumesh_core::json::Value) -> datumesh_core::Result<core::option::Option<alloc::string::String>>
+pub fn datumesh_core::sha256(&[u8]) -> [u8; 32]
+pub fn datumesh_core::sha256_hex(&[u8]) -> alloc::string::String
+pub fn datumesh_core::verify(&[u8], &datumesh_core::Keys, core::option::Option<&dyn datumesh_core::Resolver>, core::option::Option<&[u8]>) -> datumesh_core::VerifyResult
+pub fn datumesh_core::verify_ed25519(&[u8; 32], &[u8], &[u8; 64]) -> bool
+pub type datumesh_core::Args = alloc::collections::btree::map::BTreeMap<alloc::string::String, datumesh_core::Arg>
+pub type datumesh_core::Result<T> = core::result::Result<T, datumesh_core::Error>

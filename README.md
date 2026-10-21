@@ -6,14 +6,14 @@ The Rust core of the [Datumesh](https://datumesh.com) protocol: strict JSON and 
 
 ```toml
 [dependencies]
-datumesh-core = "0.2.1"
+datumesh-core = "0.3.0"
 ```
 
-Verify the receipt of `spec/vectors/receipt/stored-number.json` against the key documents the vector carries:
+Verify the receipt of `spec/vectors/receipt/stored-number.json` against the key documents the vector carries, then recompute it with the descriptor and value the vector's `recompute` object supplies:
 
 ```rust
 use datumesh_core::json::{self, Value};
-use datumesh_core::{verify, Keys, Level};
+use datumesh_core::{verify, Cell, Keys, Level, MapResolver, Scalar};
 
 fn main() {
     let vector = json::parse(&std::fs::read("stored-number.json").unwrap()).unwrap();
@@ -31,23 +31,37 @@ fn main() {
     assert!(result.ok, "{:?}", result.error());
     assert_eq!(result.level, Some(Level::Signed));
     println!("verified {} receipt {}", result.level.unwrap().as_str(), result.hash.unwrap());
+
+    // Step 7 asks a Resolver for the descriptor of cell.fn_hash, the input receipts and the
+    // evaluated value, only as far as it gets. MapResolver serves them from maps.
+    let rc = vector.get("recompute").unwrap();
+    let cell = Cell::from_value(json::parse(receipt.as_bytes()).unwrap().get("cell").unwrap()).unwrap();
+    let mut resolver = MapResolver::new();
+    resolver.insert_descriptor(cell.fn_hash.as_str(), rc.get("descriptor").unwrap().to_jcs());
+    resolver.insert_value(cell.id(), Scalar::from_json(&rc.get("value").unwrap().to_jcs()).unwrap());
+    let result = verify(receipt.as_bytes(), &keys, Some(&resolver), None);
+    assert_eq!(result.level, Some(Level::Recomputed));
+    println!("verified {} receipt {}", result.level.unwrap().as_str(), result.hash.unwrap());
 }
 ```
 
-It prints `verified signed receipt 19a5fe3a744c5792f747fb4c286ce396ab44b95922de4f07937502fe595b6f81`. Passing a `Recompute` (descriptor, input receipts, and the evaluated value) raises the level to `recomputed`; passing blob content runs step 7.7.
+It prints `verified signed receipt 19a5fe3a744c5792f747fb4c286ce396ab44b95922de4f07937502fe595b6f81`, then the same line with `recomputed`. A resolver that has the descriptor and inputs but cannot evaluate the function (`evaluate` returns `None`) leaves the receipt `ok` at level `signed` with code `E_EVAL_UNAVAILABLE`. Passing blob content runs step 7.7.
+
+With feature `sign`, an engine makes receipts: `SigningKey::from_seed` (deterministic Ed25519, RFC 8032) and `ReceiptBuilder`, whose `sign` checks the members as `Receipt::from_json` would and derives `computed_by` from the signer host and the key. Signing the members of every vector receipt with the vector's seed reproduces its payload, signature and hash byte for byte.
 
 ## What is in the crate
 
-- `json`: strict parsing (SPEC 6.1) and RFC 8785 JCS, including ECMAScript number formatting.
+- `json`: strict parsing (SPEC 6.1) and RFC 8785 JCS, including ECMAScript number formatting: `parse`, `Value`, `Value::to_jcs`.
 - `Scalar`, `Cell`, `CellRef`, `Descriptor`, `Receipt`, `KeyDoc`, `Envelope`, and `canonicalize_*`, `cell_hash`, `function_hash`, `receipt_hash`.
 - `parse_uri`, `format_uri`, `https_url`: cell URIs and their HTTPS mapping.
-- `verify`: SPEC 10.1 steps 1-7, with Ed25519 strictness as step 6 defines it.
+- `verify`: SPEC 10.1 steps 1-7, with Ed25519 strictness as step 6 defines it; step 7 through a `Resolver` (`MapResolver` included).
+- `SigningKey` and `ReceiptBuilder` behind the non-default `sign` feature.
 - `keys_from_response`, `Keys`, and `fetch_keys` behind the non-default `fetch` feature.
 - `check_envelope`: response envelopes, bound to the request.
 - `resolved_unit`: the unit of a cell's value.
-- `Error` with an `ErrorCode` for every code of SPEC 10.2, and a JSON path.
+- `Error` with an `ErrorCode` for every code of SPEC 10.2 (plus `E_EVAL_UNAVAILABLE`, DEFECTS.md RS-28), and a JSON path.
 
-No `unsafe`, no panics on any input, no global state, no logging, no network outside `fetch_keys`. Builds for `wasm32-unknown-unknown`. Minimum Rust version 1.97.
+No `unsafe`, no panics on any input, no global state, no logging, no network outside `fetch_keys`. Builds for `wasm32-unknown-unknown`, with or without `sign`. Minimum Rust version 1.97. The public API is frozen until 1.0 except for additions; `API-CHANGES-0.3.0.md` lists what changed from 0.2.1 and `CHANGELOG.md` the history.
 
 ## Repository
 
@@ -55,6 +69,7 @@ No `unsafe`, no panics on any input, no global state, no logging, no network out
 - `crates/datumesh-cli`: `datumesh-cli run-vectors` (JSON lines in, one result per line out) and `datumesh-cli check [DIR]`, for the cross-language harness. Not published.
 - `spec/`: the specification, a git submodule.
 - `DEFECTS.md`: every place the specification text was not enough to decide something.
+- `public-api.txt`, `public-api-all-features.txt`: the public API (`cargo public-api -ss`) with default features and with `--all-features`; `API-CHANGES-0.3.0.md`: the diff against 0.2.1, justified.
 - `fuzz/`: cargo-fuzz targets. `wasm-smoke/`: the WebAssembly smoke test.
 - `tools/gen_tables.py`: regenerates the embedded unit list and Unicode 15.1 table from `spec/`.
 
