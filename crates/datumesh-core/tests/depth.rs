@@ -1,6 +1,6 @@
 //! SPEC 6.1: the 64-level nesting limit, for texts and for values accepted already parsed.
 
-use datumesh_core::json::{self, check_value_depth, Value};
+use datumesh_core::json::{self, Value};
 use datumesh_core::{parse_uri, resolved_unit_value, Cell, Descriptor, ErrorCode, Receipt, Request};
 
 fn nested(depth: usize) -> Value {
@@ -17,8 +17,11 @@ fn texts_and_values_share_the_limit() {
         let text = format!("{}{}", "[".repeat(d), "]".repeat(d));
         assert_eq!(json::parse(text.as_bytes()).is_ok(), d <= 64);
     }
-    assert!(check_value_depth(&nested(64)).is_ok());
-    assert_eq!(check_value_depth(&nested(65)).unwrap_err().code(), ErrorCode::ParseJson);
+    // A value accepted in parsed form: 64 levels in all pass the depth check (and fail as
+    // a receipt for other reasons), 65 do not.
+    let wrapped = |d: usize| Value::Object(vec![("x".into(), nested(d))]);
+    assert_eq!(Receipt::from_value(&wrapped(63)).unwrap_err().code(), ErrorCode::Schema);
+    assert_eq!(Receipt::from_value(&wrapped(64)).unwrap_err().code(), ErrorCode::ParseJson);
 }
 
 #[test]

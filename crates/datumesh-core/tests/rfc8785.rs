@@ -1,7 +1,12 @@
 //! Test 3: RFC 8785 Appendix B (all 24 number samples) and the two main examples
 //! (3.2.2 and 3.2.3).
 
-use datumesh_core::json::{self, format_number, Number};
+use datumesh_core::json;
+
+/// Parse then JCS, the public route to canonical JSON.
+fn jcs(text: &[u8]) -> Vec<u8> {
+    json::parse(text).unwrap().to_jcs()
+}
 
 const APPENDIX_B: [(u64, &str); 24] = [
     (0x0000000000000000, "0"),
@@ -34,17 +39,16 @@ const APPENDIX_B: [(u64, &str); 24] = [
 fn appendix_b_numbers() {
     for (bits, want) in APPENDIX_B {
         let v = f64::from_bits(bits);
-        assert_eq!(format_number(v), want, "{bits:016x}");
-        // And through the parser: the shortest text read back serialises the same.
+        // Through the parser: the shortest text read back serialises as ECMAScript does.
         let text = format!("[{v:e}]");
-        assert_eq!(json::canonicalize_json(text.as_bytes()).unwrap(), format!("[{want}]").into_bytes(), "{bits:016x}");
+        assert_eq!(jcs(text.as_bytes()), format!("[{want}]").into_bytes(), "{bits:016x}");
+        // And the expected form is a fixed point.
+        assert_eq!(jcs(format!("[{want}]").as_bytes()), format!("[{want}]").into_bytes(), "{bits:016x}");
     }
 }
 
 #[test]
 fn appendix_b_nan_and_infinity_have_no_form() {
-    assert!(Number::from_f64(f64::from_bits(0x7fffffffffffffff)).is_none());
-    assert!(Number::from_f64(f64::from_bits(0x7ff0000000000000)).is_none());
     assert!(json::parse(b"[NaN]").is_err());
     assert!(json::parse(b"[Infinity]").is_err());
     assert!(json::parse(b"[1e400]").is_err());
@@ -59,7 +63,7 @@ fn main_example_3_2_2() {
   "literals": [null, true, false]
 }"#;
     let want = "{\"literals\":[null,true,false],\"numbers\":[333333333.3333333,1e+30,4.5,0.002,1e-27],\"string\":\"\u{20ac}$\\u000f\\nA'B\\\"\\\\\\\\\\\"/\"}";
-    assert_eq!(String::from_utf8(json::canonicalize_json(input).unwrap()).unwrap(), want);
+    assert_eq!(String::from_utf8(jcs(input)).unwrap(), want);
 }
 
 #[test]
@@ -74,5 +78,5 @@ fn sorting_example_3_2_3() {
   "\u00f6": "Latin Small Letter O With Diaeresis"
 }"#;
     let want = "{\"\\r\":\"Carriage Return\",\"1\":\"One\",\"\u{80}\":\"Control\",\"\u{f6}\":\"Latin Small Letter O With Diaeresis\",\"\u{20ac}\":\"Euro Sign\",\"\u{1f600}\":\"Emoji: Grinning Face\",\"\u{fb33}\":\"Hebrew Letter Dalet With Dagesh\"}";
-    assert_eq!(String::from_utf8(json::canonicalize_json(input.as_bytes()).unwrap()).unwrap(), want);
+    assert_eq!(String::from_utf8(jcs(input.as_bytes())).unwrap(), want);
 }

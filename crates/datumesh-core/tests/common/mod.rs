@@ -32,10 +32,10 @@ pub fn keys(v: &Value) -> Keys {
     let mut out = Keys::new();
     for (host, env) in v.get("keys").and_then(Value::as_object).unwrap_or(&[]) {
         let https = env.get("https").unwrap();
-        match https.get("status") {
-            Some(Value::Number(n)) => {
+        match https.get("status").and_then(Value::as_number_text) {
+            Some(n) => {
                 let body = https.get("body").and_then(Value::as_str).map(str::as_bytes);
-                out.insert_response(host, n.text().parse().unwrap(), body);
+                out.insert_response(host, n.parse().unwrap(), body);
             }
             _ => out.insert_unavailable(host),
         }

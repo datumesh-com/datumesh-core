@@ -1,0 +1,11 @@
+error[E0603]: struct `Number` is private
+ --> tests/ui/json_number_type.rs:1:27
+  |
+1 | use datumesh_core::json::{Number, Value};
+  |                           ^^^^^^ private struct
+  |
+note: the struct `Number` is defined here
+ --> src/json.rs
+  |
+  | use number::Number;
+  |     ^^^^^^^^^^^^^^

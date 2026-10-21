@@ -1,0 +1,47 @@
+error[E0425]: cannot find function `canonicalize_json` in module `json`
+ --> tests/ui/json_internals.rs:6:19
+  |
+6 |     let _ = json::canonicalize_json(b"[]");
+  |                   ^^^^^^^^^^^^^^^^^ not found in `json`
+
+error[E0603]: constant `MAX_DEPTH` is private
+ --> tests/ui/json_internals.rs:4:19
+  |
+4 |     let _ = json::MAX_DEPTH;
+  |                   ^^^^^^^^^ private constant
+  |
+note: the constant `MAX_DEPTH` is defined here
+ --> src/json.rs
+  |
+  | pub(crate) const MAX_DEPTH: usize = 64;
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0603]: function `format_number` is private
+ --> tests/ui/json_internals.rs:5:19
+  |
+5 |     let _ = json::format_number(1.5);
+  |                   ^^^^^^^^^^^^^ private function
+  |
+note: the function `format_number` is defined here
+ --> src/json.rs
+  |
+  | pub(crate) fn format_number(v: f64) -> String {
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0603]: function `check_value_depth` is private
+ --> tests/ui/json_internals.rs:8:19
+  |
+8 |     let _ = json::check_value_depth(&v);
+  |                   ^^^^^^^^^^^^^^^^^ private function
+  |
+note: the function `check_value_depth` is defined here
+ --> src/json.rs
+  |
+  | pub(crate) fn check_value_depth(v: &Value) -> Result<()> {
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0599]: no method named `to_jcs_string` found for enum `datumesh_core::json::Value` in the current scope
+ --> tests/ui/json_internals.rs:9:15
+  |
+9 |     let _ = v.to_jcs_string();
+  |               ^^^^^^^^^^^^^ method not found in `datumesh_core::json::Value`
