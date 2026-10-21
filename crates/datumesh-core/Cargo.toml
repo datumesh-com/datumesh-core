@@ -16,6 +16,8 @@ include = ["src/**/*.rs", "Cargo.toml", "LICENSE"]
 [features]
 default = []
 fetch = ["dep:ureq"]
+# ReceiptBuilder and SigningKey: deterministic Ed25519 signing with the existing dependencies.
+sign = []
 
 [dependencies]
 curve25519-dalek = { version = "5", default-features = false }

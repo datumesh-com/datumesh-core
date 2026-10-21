@@ -148,6 +148,13 @@ impl Receipt {
         self.computed_by.split_once('#').map_or("", |(_, k)| k)
     }
 
+    /// The same receipt with `sig` replaced; payload and hash do not cover `sig`.
+    #[cfg(feature = "sign")]
+    pub(crate) fn with_sig(mut self, sig: String) -> Receipt {
+        self.sig = sig;
+        self
+    }
+
     fn consistency(&self) -> Result<()> {
         for (k, a) in &self.cell.args {
             if *a == Arg::Slice {

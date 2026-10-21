@@ -40,6 +40,8 @@ pub mod lexical;
 mod model;
 mod receipt;
 mod schema;
+#[cfg(feature = "sign")]
+mod sign;
 #[rustfmt::skip]
 mod tables;
 mod uri;
@@ -56,6 +58,8 @@ pub use fetch::fetch_keys;
 pub use keys::{keys_from_response, Key, KeyDoc, Keys};
 pub use model::{Arg, Args, Cell, CellRef, Scalar, Type};
 pub use receipt::{receipt_hash, receipt_payload, Receipt};
+#[cfg(feature = "sign")]
+pub use sign::{ReceiptBuilder, SigningKey};
 pub use uri::{cell_uri_from_https, format_uri, https_url, parse_uri};
 pub use verify::{verify, Level, MapResolver, Resolver, VerifyResult};
 

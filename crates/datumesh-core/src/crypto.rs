@@ -63,6 +63,54 @@ pub fn verify_ed25519(public: &[u8; 32], message: &[u8], signature: &[u8; 64]) -
     r_check.compress().to_bytes() == r_bytes
 }
 
+/// An Ed25519 secret key expanded from its 32-byte seed (RFC 8032 5.1.5).
+#[cfg(feature = "sign")]
+#[derive(Clone)]
+pub(crate) struct SecretKey {
+    /// The clamped secret scalar `s`, reduced mod L.
+    scalar: Scalar,
+    /// The second half of SHA-512(seed), hashed with each message for the nonce.
+    prefix: [u8; 32],
+    /// The encoding of `[s]B`.
+    pub(crate) public: [u8; 32],
+}
+
+#[cfg(feature = "sign")]
+impl SecretKey {
+    pub(crate) fn from_seed(seed: &[u8; 32]) -> SecretKey {
+        let h = Sha512::digest(seed);
+        let mut lower = [0u8; 32];
+        let mut prefix = [0u8; 32];
+        lower.copy_from_slice(&h[..32]);
+        prefix.copy_from_slice(&h[32..]);
+        // [s]B for the clamped s equals [s mod L]B, since B has order L.
+        let scalar = Scalar::from_bytes_mod_order(curve25519_dalek::scalar::clamp_integer(lower));
+        let public = EdwardsPoint::mul_base(&scalar).compress().to_bytes();
+        SecretKey { scalar, prefix, public }
+    }
+
+    /// Pure Ed25519 (RFC 8032 5.1.6): deterministic, no context, no prehash.
+    pub(crate) fn sign(&self, message: &[u8]) -> [u8; 64] {
+        let wide = |parts: &[&[u8]]| {
+            let mut h = Sha512::new();
+            for p in parts {
+                h.update(p);
+            }
+            let mut out = [0u8; 64];
+            out.copy_from_slice(&h.finalize());
+            Scalar::from_bytes_mod_order_wide(&out)
+        };
+        let r = wide(&[&self.prefix, message]);
+        let r_bytes = EdwardsPoint::mul_base(&r).compress().to_bytes();
+        let k = wide(&[&r_bytes, &self.public, message]);
+        let s = r + k * self.scalar;
+        let mut sig = [0u8; 64];
+        sig[..32].copy_from_slice(&r_bytes);
+        sig[32..].copy_from_slice(s.as_bytes());
+        sig
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

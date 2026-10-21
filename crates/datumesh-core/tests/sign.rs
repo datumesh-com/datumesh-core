@@ -49,7 +49,7 @@ fn signing_key_debug_does_not_show_the_seed() {
     let shown = format!("{key:?}");
     assert!(!shown.contains("0707"), "{shown}");
     assert!(!shown.contains("7, 7"), "{shown}");
-    assert!(shown.contains(&key.key_id()), "{shown}");
+    assert!(shown.contains(key.key_id()), "{shown}");
 }
 
 #[test]
@@ -101,8 +101,8 @@ fn every_valid_receipt_vector_with_a_keypair_round_trips_and_verifies() {
         assert_eq!(r.level.map(Level::as_str), Some(str_of(&v, "level")), "{id}");
         count += 1;
     }
-    // Every valid receipt vector but receipt/ed25519-mixed-order-key (built by hand, no seed).
-    assert_eq!(count, 11);
+    // Every valid receipt vector (13) but receipt/ed25519-mixed-order-key (built by hand, no seed).
+    assert_eq!(count, 12);
 }
 
 #[test]
@@ -130,7 +130,7 @@ fn invalid_vectors_that_pass_steps_1_to_4_sign_identically() {
             count += 1;
         }
     }
-    assert!(count >= 15, "{count}");
+    assert_eq!(count, 18);
 }
 
 fn stored_number() -> (Receipt, SigningKey) {
