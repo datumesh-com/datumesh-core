@@ -111,7 +111,7 @@ pub(crate) fn utf16_cmp(a: &str, b: &str) -> Ordering {
 /// Parses `bytes` as strict JSON (SPEC 6.1).
 ///
 /// Failures, in the order SPEC 6.1 reports them: a byte order mark, invalid UTF-8, nesting
-/// deeper than [`MAX_DEPTH`], then the first in text order of a syntax error, a number that
+/// deeper than 64 levels, then the first in text order of a syntax error, a number that
 /// overflows a double, or a duplicate member (detected when its object closes), and last a
 /// lone surrogate. All are `E_PARSE_JSON` except duplicates (`E_PARSE_DUPLICATE_KEY`).
 pub fn parse(bytes: &[u8]) -> Result<Value> {

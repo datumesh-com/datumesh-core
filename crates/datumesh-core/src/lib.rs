@@ -8,8 +8,13 @@
 //!
 //! Every function that can fail returns an [`Error`] carrying one of the codes of SPEC 10.2
 //! ([`ErrorCode`]), the JSON path where the failure was found, and a human detail. Nothing in
-//! this crate panics on any input, touches the network (except [`fetch_keys`] behind the
+//! this crate panics on any input, touches the network (except `fetch_keys` behind the
 //! `fetch` feature), keeps global state or logs.
+//!
+//! [`verify`] runs SPEC 10.1. Keys are an input ([`Keys`]); recomputation (step 7) asks a
+//! [`Resolver`] for the descriptor, the input receipts and the evaluated value, lazily
+//! ([`MapResolver`] holds them in maps). Feature `sign` adds `SigningKey` and
+//! `ReceiptBuilder`, which make receipts that verify byte for byte like the specification's.
 //!
 //! ```
 //! use datumesh_core::{verify, Keys, Level};
