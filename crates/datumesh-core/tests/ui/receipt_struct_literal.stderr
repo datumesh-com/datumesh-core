@@ -1,0 +1,31 @@
+error: cannot construct `Receipt` with struct literal syntax due to private fields
+  --> tests/ui/receipt_struct_literal.rs:5:13
+   |
+ 5 |     let _ = Receipt {
+   |             ^^^^^^^
+ 6 |         asof: String::new(),
+   |         ------------------- private field
+ 7 |         cell,
+   |         ---- private field
+ 8 |         computed_by: String::new(),
+   |         -------------------------- private field
+ 9 |         inputs: Vec::new(),
+   |         ------------------ private field
+10 |         issued: String::new(),
+   |         --------------------- private field
+11 |         licence: String::new(),
+   |         ---------------------- private field
+12 |         publisher: String::new(),
+   |         ------------------------ private field
+13 |         sig: String::new(),
+   |         ------------------ private field
+14 |         summary: String::new(),
+   |         ---------------------- private field
+15 |         tx: String::new(),
+   |         ----------------- private field
+16 |         value: Scalar::Boolean(true),
+   |         ---------------------------- private field
+17 |         valid: Default::default(),
+   |         ------------------------- private field
+   |
+   = note: ...and other private fields `payload` and `hash` that were not provided

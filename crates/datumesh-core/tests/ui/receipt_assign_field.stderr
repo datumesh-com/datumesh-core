@@ -1,0 +1,5 @@
+error[E0616]: field `sig` of struct `Receipt` is private
+ --> tests/ui/receipt_assign_field.rs:5:7
+  |
+5 |     r.sig = String::new();
+  |       ^^^ private field

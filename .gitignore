@@ -6,3 +6,4 @@
 /wasm-smoke/target
 /fuzz/logs
 /fuzz/Cargo.lock
+/crates/datumesh-core/wip
