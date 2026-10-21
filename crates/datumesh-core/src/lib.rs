@@ -15,6 +15,8 @@
 //! [`Resolver`] for the descriptor, the input receipts and the evaluated value, lazily
 //! ([`MapResolver`] holds them in maps). Feature `sign` adds `SigningKey` and
 //! `ReceiptBuilder`, which make receipts that verify byte for byte like the specification's.
+//! Feature `fetch` (`fetch_keys`) is deprecated since 0.3.1 and removed at 1.0: fetch key
+//! documents with your own HTTP client and pass the response to [`keys_from_response`].
 //!
 //! ```
 //! use datumesh_core::{verify, Keys, Level};
@@ -58,7 +60,9 @@ pub use descriptor::{
 };
 pub use envelope::{check_envelope, Envelope, InvalidRequest, Outcome, Quote, Request, Trust};
 pub use error::{Error, ErrorCode, Result};
+// The re-export is not a use: only callers see the deprecation (Rust 1.97 warns here otherwise).
 #[cfg(feature = "fetch")]
+#[allow(deprecated)]
 pub use fetch::fetch_keys;
 pub use keys::{keys_from_response, Key, KeyDoc, Keys};
 pub use model::{Arg, Args, Cell, CellRef, Scalar, Type};
