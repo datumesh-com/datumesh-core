@@ -59,3 +59,15 @@ fn clones_keep_payload_and_hash() {
     assert_eq!(c.hash(), r.hash());
     assert_eq!(c.payload(), r.payload());
 }
+
+#[test]
+fn verify_result_names_computed_by_as_the_receipt_does() {
+    // VerifyResult::computed_by (0.2.1: `key`) carries the receipt's computed_by once steps
+    // 1-4 pass, whether or not the key and signature then check out.
+    for v in vectors("receipt").into_iter().chain(vectors("invalid")).filter(|v| str_of(v, "kind") == "receipt") {
+        let input = str_of(&v, "input").as_bytes();
+        let r = datumesh_core::verify(input, &keys(&v), None, None);
+        let want = Receipt::from_json(input).ok().map(|p| p.computed_by().to_string());
+        assert_eq!(r.computed_by, want, "{}", str_of(&v, "id"));
+    }
+}
