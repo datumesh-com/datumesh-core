@@ -15,7 +15,7 @@ jobs:
   version:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: tag equals the crate version
         run: |
           crate="$(sed -n 's/^version = "\(.*\)"$/\1/p' crates/datumesh-core/Cargo.toml | head -n 1)"
@@ -31,7 +31,7 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: true
       - run: rustup toolchain install 1.99 --profile minimal && rustup default 1.99
