@@ -1,6 +1,10 @@
 //! Network tests for the `fetch` feature. Ignored by default: run with
 //! `cargo test -p datumesh-core --features fetch -- --ignored`.
+//!
+//! The feature is deprecated from 0.3.1 (removed at 1.0); these tests keep it working until
+//! then, so they alone allow the deprecation warning.
 #![cfg(feature = "fetch")]
+#![allow(deprecated)]
 
 use datumesh_core::{fetch_keys, ErrorCode};
 
@@ -33,4 +37,12 @@ fn bad_certificate_is_unavailable() {
 #[test]
 fn non_dns_host_has_no_keys() {
     assert_eq!(fetch_keys("localhost").unwrap_err().code(), ErrorCode::KeyUnavailable);
+}
+
+#[test]
+fn fetch_keys_is_deprecated() {
+    // Using it under `#![deny(deprecated)]` fails to compile, with a note naming
+    // `keys_from_response` and 1.0.
+    let t = trybuild::TestCases::new();
+    t.compile_fail("tests/ui-fetch/*.rs");
 }

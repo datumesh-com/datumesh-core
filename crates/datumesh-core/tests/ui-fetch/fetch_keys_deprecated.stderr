@@ -1,0 +1,11 @@
+error: use of deprecated function `datumesh_core::fetch_keys`: removed at 1.0: fetch the key document with your own HTTP client and pass the response to `keys_from_response`
+ --> tests/ui-fetch/fetch_keys_deprecated.rs:4:28
+  |
+4 |     let _ = datumesh_core::fetch_keys("rates.example.org");
+  |                            ^^^^^^^^^^
+  |
+note: the lint level is defined here
+ --> tests/ui-fetch/fetch_keys_deprecated.rs:1:9
+  |
+1 | #![deny(deprecated)]
+  |         ^^^^^^^^^^
