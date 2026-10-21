@@ -126,8 +126,8 @@ pub struct VerifyResult {
     pub level: Option<Level>,
     /// The receipt hash, once the receipt was canonical enough to compute it.
     pub hash: Option<String>,
-    /// `computed_by`, once known.
-    pub key: Option<String>,
+    /// The receipt's `computed_by` (`<host>#<key id>`), once steps 1-4 passed.
+    pub computed_by: Option<String>,
     /// Whether step 7.7 ran and passed.
     pub blob_checked: bool,
     /// A human explanation of the failure (or of `EvalUnavailable`); empty otherwise.
@@ -157,7 +157,7 @@ pub fn verify(receipt: &[u8], keys: &Keys, resolver: Option<&dyn Resolver>, blob
         code: None,
         level: None,
         hash: None,
-        key: None,
+        computed_by: None,
         blob_checked: false,
         detail: String::new(),
         path: String::new(),
@@ -167,13 +167,13 @@ pub fn verify(receipt: &[u8], keys: &Keys, resolver: Option<&dyn Resolver>, blob
         Err((e, r)) => {
             if let Some(r) = r {
                 out.hash = Some(r.hash().to_string());
-                out.key = Some(r.computed_by().to_string());
+                out.computed_by = Some(r.computed_by().to_string());
             }
             return fail(out, e);
         }
     };
     out.hash = Some(r.hash().to_string());
-    out.key = Some(r.computed_by().to_string());
+    out.computed_by = Some(r.computed_by().to_string());
     let mut level = Level::Signed;
     if let Some(res) = resolver {
         match recompute_steps(&r, keys, res) {
