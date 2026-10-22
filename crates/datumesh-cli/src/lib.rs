@@ -241,7 +241,7 @@ fn expected_outputs(kind: &str) -> &'static [&'static str] {
         "uri" => &["object", "canonical", "sha256", "https"],
         "keyid" => &["key_id"],
         "keys" => &["key_ids"],
-        "receipt" => &["canonical", "sha256", "sig", "level", "blob_checked"],
+        "receipt" => &["canonical", "sha256", "sig", "level", "blob_checked", "code"],
         "unit" => &["unit"],
         "envelope" => &["outcome", "trust", "receipt_hash"],
         _ => &[],

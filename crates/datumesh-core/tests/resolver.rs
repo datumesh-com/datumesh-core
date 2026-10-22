@@ -135,7 +135,8 @@ fn vectors_request_exactly_what_step_7_needs() {
         // And the vector's expected result.
         if matches!(v.get("valid"), Some(Value::Bool(true))) {
             assert!(r.ok, "{id}: {r:?}");
-            assert_eq!(r.code, None, "{id}");
+            // The one code reported with success (spec-0.3.0): E_EVAL_UNAVAILABLE.
+            assert_eq!(r.code.map(ErrorCode::as_str), v.get("code").and_then(Value::as_str), "{id}");
             assert_eq!(r.level.map(Level::as_str), Some(str_of(&v, "level")), "{id}");
         } else {
             assert_eq!(r.code.map(ErrorCode::as_str), Some(str_of(&v, "error")), "{id}");
@@ -356,15 +357,14 @@ fn eval_unavailable_is_known_by_its_code() {
 }
 
 #[test]
-fn envelopes_do_not_carry_eval_unavailable() {
-    // E_EVAL_UNAVAILABLE is this library's code, not one of spec-0.2.1's 10.2: an envelope
-    // naming it is still malformed, as it was in 0.2.1.
+fn error_envelopes_carry_eval_unavailable() {
+    // spec-0.3.0 adds E_EVAL_UNAVAILABLE to 10.2: an `error` envelope may carry it (5.5).
+    // Until 0.3.1 (spec-0.2.1) such an envelope was E_ENVELOPE (RS-28).
     let req = datumesh_core::Request::new(&"0".repeat(64), None).unwrap();
     let keys = Keys::new();
     let ok = datumesh_core::check_envelope(503, br#"{"outcome":"error","error":"E_INPUT_UNAVAILABLE"}"#, &keys, &req);
     assert!(ok.is_ok(), "{ok:?}");
-    let e = datumesh_core::check_envelope(503, br#"{"outcome":"error","error":"E_EVAL_UNAVAILABLE"}"#, &keys, &req)
-        .unwrap_err();
-    assert_eq!(e.code(), ErrorCode::Envelope);
-    assert_eq!(e.path(), "$.error");
+    let env = datumesh_core::check_envelope(503, br#"{"outcome":"error","error":"E_EVAL_UNAVAILABLE"}"#, &keys, &req)
+        .unwrap();
+    assert_eq!(env.error, Some(ErrorCode::EvalUnavailable));
 }

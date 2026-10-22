@@ -97,12 +97,14 @@ fn every_valid_receipt_vector_with_a_keypair_round_trips_and_verifies() {
         let r: VerifyResult =
             verify(&bytes, &keys(&v), res.as_ref().map(|m| m as &dyn datumesh_core::Resolver), blob.as_deref());
         assert!(r.ok, "{id}: {r:?}");
-        assert_eq!(r.code, None, "{id}");
+        // The one code reported with success (spec-0.3.0): E_EVAL_UNAVAILABLE.
+        assert_eq!(r.code.map(|c| c.as_str()), v.get("code").and_then(Value::as_str), "{id}");
         assert_eq!(r.level.map(Level::as_str), Some(str_of(&v, "level")), "{id}");
         count += 1;
     }
-    // Every valid receipt vector (13) but receipt/ed25519-mixed-order-key (built by hand, no seed).
-    assert_eq!(count, 12);
+    // Every valid receipt vector (18 at spec-0.3.0) but receipt/ed25519-mixed-order-key (built
+    // by hand, no seed).
+    assert_eq!(count, 17);
 }
 
 #[test]
@@ -130,7 +132,8 @@ fn invalid_vectors_that_pass_steps_1_to_4_sign_identically() {
             count += 1;
         }
     }
-    assert_eq!(count, 18);
+    // 18 at spec-0.2.1; spec-0.3.0 adds 7 receipt vectors failing in step 7.
+    assert_eq!(count, 25);
 }
 
 fn stored_number() -> (Receipt, SigningKey) {

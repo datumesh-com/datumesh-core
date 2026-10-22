@@ -1,8 +1,13 @@
-//! `datumesh-cli run-vectors` output is byte for byte what 0.2.1 wrote for every vector.
+//! `datumesh-cli run-vectors` output is byte for byte the expected output for every vector.
 //!
 //! `run-vectors-0.2.1.jsonl` was captured from the 0.2.1 binary, fed every file under
-//! `spec/vectors` (sorted by path) as one compact JSON line each. The crosscheck harness
-//! depends on this interface, so any change to it must be deliberate.
+//! `spec/vectors` at spec-0.2.1 (sorted by path) as one compact JSON line each. For
+//! spec-0.3.0, `run-vectors-0.3.0.jsonl` was derived from the vector files' expected results
+//! alone (`id`, `error`, and the kind's output members the vector gives, `code` included, as
+//! one JCS line); the same derivation reproduces `run-vectors-0.2.1.jsonl` byte for byte from
+//! the spec-0.2.1 vectors. The lines of the 339 old vectors are unchanged except
+//! `invalid/envelope-wrong-asof`, whose expected result spec-0.3.0 changed. The crosscheck
+//! harness depends on this interface, so any change to it must be deliberate.
 
 use std::io::Write;
 use std::path::Path;
@@ -11,7 +16,7 @@ use std::process::{Command, Stdio};
 use datumesh_core::json;
 
 #[test]
-fn run_vectors_output_is_unchanged_since_0_2_1() {
+fn run_vectors_output_is_the_expected_output() {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/vectors");
     let mut files = Vec::new();
     datumesh_cli::collect(&dir, &mut files).expect("spec/vectors is readable (git submodule update --init)");
@@ -31,7 +36,7 @@ fn run_vectors_output_is_unchanged_since_0_2_1() {
     child.stdin.take().unwrap().write_all(input.as_bytes()).unwrap();
     let out = child.wait_with_output().unwrap();
     assert!(out.status.success());
-    let want = std::fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/run-vectors-0.2.1.jsonl")).unwrap();
+    let want = std::fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/run-vectors-0.3.0.jsonl")).unwrap();
     let got = String::from_utf8(out.stdout).unwrap();
     let want = String::from_utf8(want).unwrap();
     assert_eq!(got.lines().count(), files.len());
