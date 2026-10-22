@@ -3,7 +3,27 @@
 All notable changes to `datumesh-core`. The crate follows the specification revision named in
 each entry; the public API is frozen from 0.3.0 until 1.0 except for additions.
 
-## 0.3.1 (unreleased)
+## 0.3.2 (unreleased)
+
+Specification: `spec-0.3.0` (`3bac3d4`); all 365 vectors pass. No public API change
+(`API-CHANGES-0.3.2.md` has the empty `cargo public-api diff` against 0.3.1).
+
+### Changed (behaviour, following the specification)
+- `verify`, step 7.5 (D17 revised): an input receipt's `asof` may be earlier than the
+  receipt's; only a later one is `E_TIME_ORDER`. `tx` must still equal the latest input `tx`.
+- `check_envelope`, step 5 (D31 revised): for `ok` as for `stale`, the receipt's `asof` must
+  be at or before the requested `asof` (it had to equal it for `ok`). Without a requested
+  `asof`, any is accepted.
+- `check_envelope`: an `error` envelope may carry `E_EVAL_UNAVAILABLE`, now a code of SPEC
+  10.2 (RS-28 had refused it).
+- `ErrorCode::EvalUnavailable`, `VerifyResult`, `Resolver::descriptor` and `MapResolver`
+  document the `spec-0.3.0` text: `E_EVAL_UNAVAILABLE` is reported with success at level
+  `signed`, step 7.7 still runs after it, and only `None` is an unavailable descriptor
+  (`null` offered is `E_FN_HASH_MISMATCH`, as before).
+- `datumesh-cli run-vectors`: a `recompute` without `value` means evaluation is unavailable,
+  and valid receipt results carry the output `code` (`E_EVAL_UNAVAILABLE`) when reported.
+
+## 0.3.1
 
 Specification: `spec-0.2.1` (`710dabb`), unchanged. Additions only: the 0.3.0 API is unchanged
 apart from one deprecation (`API-CHANGES-0.3.1.md` has the `cargo public-api diff`).

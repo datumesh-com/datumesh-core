@@ -1,12 +1,12 @@
 # datumesh-core
 
-The Rust core of the [Datumesh](https://datumesh.com) protocol: strict JSON and RFC 8785 canonical bytes, cell URIs, key documents, response envelopes, unit resolution, and offline verification of signed receipts. It implements the [specification](https://github.com/datumesh-com/datumesh-spec) (`SPEC.md` and `units.md`, revision `spec-0.2.1`) and passes every one of its 339 test vectors.
+The Rust core of the [Datumesh](https://datumesh.com) protocol: strict JSON and RFC 8785 canonical bytes, cell URIs, key documents, response envelopes, unit resolution, and offline verification of signed receipts. It implements the [specification](https://github.com/datumesh-com/datumesh-spec) (`SPEC.md` and `units.md`, revision `spec-0.3.0`) and passes every one of its 365 test vectors.
 
 ## Example
 
 ```toml
 [dependencies]
-datumesh-core = "0.3.1"
+datumesh-core = "0.3.2"
 ```
 
 Verify the receipt of `spec/vectors/receipt/stored-number.json` against the key documents the vector carries, then recompute it with the descriptor and value the vector's `recompute` object supplies:
@@ -46,7 +46,7 @@ fn main() {
 }
 ```
 
-It prints `verified signed receipt 19a5fe3a744c5792f747fb4c286ce396ab44b95922de4f07937502fe595b6f81`, then the same line with `recomputed`. A resolver that has the descriptor and inputs but cannot evaluate the function (`evaluate` returns `None`) leaves the receipt `ok` at level `signed` with code `E_EVAL_UNAVAILABLE`. Passing blob content runs step 7.7.
+It prints `verified signed receipt 19a5fe3a744c5792f747fb4c286ce396ab44b95922de4f07937502fe595b6f81`, then the same line with `recomputed`. A resolver that has the descriptor and inputs but cannot evaluate the function (`evaluate` returns `None`) leaves the receipt `ok` at level `signed` with code `E_EVAL_UNAVAILABLE`, the one code of SPEC 10.2 that is not a failure. Passing blob content runs step 7.7, after that too. Only `None` from `descriptor` means the descriptor is unavailable: offered text is parsed strictly, and `null` or any other value that is not the descriptor fails the hash check.
 
 With feature `sign`, an engine makes receipts: `SigningKey::from_seed` (deterministic Ed25519, RFC 8032) and `ReceiptBuilder`, whose `sign` checks the members as `Receipt::from_json` would and derives `computed_by` from the signer host and the key. Signing the members of every vector receipt with the vector's seed reproduces its payload, signature and hash byte for byte.
 
@@ -59,11 +59,11 @@ With feature `sign`, an engine makes receipts: `SigningKey::from_seed` (determin
 - `SigningKey` and `ReceiptBuilder` behind the non-default `sign` feature.
 - `keys_from_response` and `Keys`. `fetch_keys` (feature `fetch`) is deprecated since 0.3.1 and removed at 1.0: fetch `https://<host>/.well-known/datumesh.json` with your own HTTP client and pass the status and body to `keys_from_response`.
 - `testkit` (non-default feature `testkit`): a conformance kit for `Resolver` implementations (see below).
-- `check_envelope`: response envelopes, bound to the request.
+- `check_envelope`: response envelopes, bound to the request: the cell id, and a receipt `asof` at or before the requested one (for `ok` and `stale` alike).
 - `resolved_unit`: the unit of a cell's value.
-- `Error` with an `ErrorCode` for every code of SPEC 10.2 (plus `E_EVAL_UNAVAILABLE`, DEFECTS.md RS-28), and a JSON path.
+- `Error` with an `ErrorCode` for every code of SPEC 10.2 (`E_EVAL_UNAVAILABLE` included), and a JSON path.
 
-No `unsafe`, no panics on any input, no global state, no logging, no network outside the deprecated `fetch_keys`. Builds for `wasm32-unknown-unknown`, with or without `sign` and `testkit`. Minimum Rust version 1.97. The public API is frozen until 1.0 except for additions; `API-CHANGES-0.3.0.md` lists what changed from 0.2.1, `API-CHANGES-0.3.1.md` what was added in 0.3.1, and `CHANGELOG.md` the history.
+No `unsafe`, no panics on any input, no global state, no logging, no network outside the deprecated `fetch_keys`. Builds for `wasm32-unknown-unknown`, with or without `sign` and `testkit`. Minimum Rust version 1.97. The public API is frozen until 1.0 except for additions; `API-CHANGES-0.3.0.md` lists what changed from 0.2.1, `API-CHANGES-0.3.1.md` what was added in 0.3.1, `API-CHANGES-0.3.2.md` the (empty) diff of 0.3.2, and `CHANGELOG.md` the history.
 
 ## Testing a resolver
 
@@ -71,7 +71,7 @@ A `Resolver` (a store, a cache, an engine's lookup) can check itself against the
 
 ```toml
 [dev-dependencies]
-datumesh-core = { version = "0.3.1", features = ["testkit"] }
+datumesh-core = { version = "0.3.2", features = ["testkit"] }
 ```
 
 The kit never writes through the resolver. It gives you `Fixtures` (descriptors, receipts and the versions of stored cells, all canonical JSON, from the specification's vectors plus a few receipts signed for the kit), you load them, and it verifies receipts through your resolver and looks things up in it:
@@ -96,7 +96,7 @@ It checks that `verify` asks the resolver only for what step 7 reaches (through 
 - `crates/datumesh-cli`: `datumesh-cli run-vectors` (JSON lines in, one result per line out) and `datumesh-cli check [DIR]`, for the cross-language harness. Not published.
 - `spec/`: the specification, a git submodule.
 - `DEFECTS.md`: every place the specification text was not enough to decide something.
-- `public-api.txt`, `public-api-all-features.txt`: the public API (`cargo public-api -ss`) with default features and with `--all-features`; `API-CHANGES-0.3.0.md`: the diff against 0.2.1, justified; `API-CHANGES-0.3.1.md`: the additions in 0.3.1.
+- `public-api.txt`, `public-api-all-features.txt`: the public API (`cargo public-api -ss`) with default features and with `--all-features`; `API-CHANGES-0.3.0.md`: the diff against 0.2.1, justified; `API-CHANGES-0.3.1.md`: the additions in 0.3.1; `API-CHANGES-0.3.2.md`: the diff of 0.3.2 against 0.3.1.
 - `crates/datumesh-core/src/testkit/data.rs`: the kit's fixtures, generated from `spec/` (and signed with feature `sign`) by `tests/testkit_data.rs`, which fails if they drift.
 - `fuzz/`: cargo-fuzz targets. `wasm-smoke/`: the WebAssembly smoke test.
 - `tools/gen_tables.py`: regenerates the embedded unit list and Unicode 15.1 table from `spec/`.

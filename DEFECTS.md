@@ -9,8 +9,10 @@ draft) when that commit was announced, then to `58eb0d9`, which folds in RS-18 t
 Entries RS-1 to RS-17 were found against `5f93b36` and are resolved by `bfe5a38`; RS-18 to
 RS-27 were found against `bfe5a38` and are resolved by `58eb0d9`. No entry is open at
 `58eb0d9`. Each entry gives the section, the problem, what this crate does, and proposed
-wording. The submodule is now pinned at the tag `spec-0.2.1` (`710dabb`, text and vectors
-identical to `58eb0d9`); RS-28, from the 0.3.0 API work, is open for `spec-0.2.2`.
+wording. The submodule was then pinned at the tag `spec-0.2.1` (`710dabb`, text and vectors
+identical to `58eb0d9`); RS-28, from the 0.3.0 API work, was proposed for the next revision.
+For 0.3.2 the submodule is at `3bac3d4` (`spec-0.3.0`), which resolves RS-28. RS-29 and RS-30,
+found while implementing `spec-0.3.0`, are open.
 
 Disclosure: before the submodule existed I ran oracle probes against a copy of
 `/root/datumesh-spec`, a working tree that turned out to contain uncommitted `spec-0.2.1` edits to
@@ -257,7 +259,7 @@ lines are identical except for one case, RS-27.
 (`json::check_value_depth`, `E_PARSE_JSON`), and JCS serialisation no longer recurses, so a
 deep value built in memory cannot exhaust the stack.
 
-## Found for datumesh-core 0.3.0 (against `spec-0.2.1`, `710dabb`), for spec-0.2.2
+## Found for datumesh-core 0.3.0 (against `spec-0.2.1`, `710dabb`), resolved by spec-0.3.0 (`3bac3d4`)
 
 ### RS-28. 10.1 step 7.6: a verifier that cannot evaluate the function
 - **Section.** 10.1 step 7.6 ("Evaluate the function"), 10.2, 11 (`recompute.value`).
@@ -283,4 +285,62 @@ deep value built in memory cannot exhaust the stack.
   evaluate the function; the receipt stays at level `signed`." **(11)** A `recompute` object
   without `value` would then mean "cannot evaluate": expected result success at level `signed`
   with `E_EVAL_UNAVAILABLE` reported, which the vector format would need a field for.
-- **Status.** **Open**, for spec-0.2.2.
+- **Status.** **Resolved** by `3bac3d4` (`spec-0.3.0`): 10.1 step 7.6 and 7.7, 10.2 (the code
+  placed after `E_VALUE_MISMATCH`, "not a failure"), 11 (`recompute` without `value`; output
+  `code`), D34, with vectors `receipt/eval-unavailable-*`,
+  `invalid/receipt-eval-unavailable-*` and `envelope/error-eval-unavailable`. The spec text
+  matches this crate's behaviour, except that it also lets an `error` envelope carry the code
+  (5.5), which this crate refused under `spec-0.2.1`; 0.3.2 accepts it. `ErrorCode` keeps
+  `EvalUnavailable` as its last variant (not in 10.2's position) so that `ErrorCode::ALL` and
+  the derived ordering do not change within 0.3.x.
+
+## spec-0.3.0 (`3bac3d4`), implemented in datumesh-core 0.3.2
+
+What the new text settles, checked against this crate:
+
+- **D17 revised (8.2, 10.1 step 7.5).** An input `asof` at or before the receipt's; a later one
+  is `E_TIME_ORDER`. Changed in `verify` (it required equality). Clear; no entry.
+- **D31 revised (5.5 step 5).** `ok` and `stale` both bind a receipt `asof` at or before the
+  requested one. Changed in `check_envelope`. Clear; no entry.
+- **`E_EVAL_UNAVAILABLE`.** RS-28, resolved (above).
+- **D35 / DEF-17 (10.1 step 7.1, 11).** A descriptor is a JSON value; `null` or a string is a
+  descriptor offered (`E_FN_HASH_MISMATCH`), only absence is `E_FN_UNAVAILABLE`. This crate
+  already behaved so: `Resolver::descriptor` returns bytes, `None` only when unavailable, and
+  the vector runner offered a vector's descriptor as its JCS bytes (`null` as `null`, a string
+  as its JSON serialisation). Documented on `Resolver::descriptor` and `MapResolver`.
+- **DEF-16(b) (9.3, 11).** Only the integer 200 is a retrieved key document. `keys_from_response`
+  takes the status as `u16`, so a non-integer status cannot reach it; the vector runner maps a
+  non-number or missing `status` to `Keys::insert_unavailable` (`E_KEY_UNAVAILABLE`), as before.
+- **Note 32 (3.7).** The 128-character limit is on the whole media type; this crate had no
+  per-name limit. No change.
+
+### RS-29. 11: an entry of `recompute.inputs` that is not a string
+- **Section.** 11 (`recompute.inputs`), 10.1 step 7.5.
+- **Problem.** `spec-0.3.0` settles for the descriptor that a vector's member is a JSON value and
+  that only absence is unavailability (D35). For `inputs` it says "a map from receipt hash to
+  the input receipt's JSON text; a hash with no entry is unavailable", but not what an entry
+  that is not a string (`null`, an object) means: an input offered that fails (as D35 reads
+  for descriptors) or an input not obtained. No vector has one, so implementations may differ
+  and the cross-check could not tell.
+- **Resolution.** The runner offers such an entry as empty text, which fails strict parsing in
+  step 1 of the input's own verification: `E_INPUT_INVALID`, an input offered. Only a missing
+  entry is `E_INPUT_UNAVAILABLE`.
+- **Proposed wording (11, `inputs`).** "...; a hash with no entry is unavailable. Entries are
+  always JSON strings; an entry that is not a string is a malformed vector." (Or, if such
+  entries are to be meaningful: "An entry that is not a string is an input receipt offered
+  that is not signature-valid (`E_INPUT_INVALID`); only a hash with no entry is unavailable.")
+- **Status.** **Open.**
+
+### RS-30. 5.5: wording of the `error` member
+- **Section.** 5.5, member `error`.
+- **Problem.** "For `error`, any code in 10.2 except `E_ENVELOPE`, which is a client's code,
+  e.g. `E_INPUT_UNAVAILABLE`, or `E_EVAL_UNAVAILABLE` when the mesh could not evaluate the
+  cell's function." The "e.g." clause follows "which is a client's code", so it can be read as
+  giving examples of client codes, not of codes the mesh may send. The meaning is clear from
+  the schema (`schemas/envelope.schema.json` lists both codes) and the vectors; only the
+  sentence is ambiguous.
+- **Resolution.** Any code of 10.2 but `E_ENVELOPE` (as the schema says).
+- **Proposed wording.** "For `error`, any code in 10.2 except `E_ENVELOPE` (a client's code),
+  for example `E_INPUT_UNAVAILABLE`, or `E_EVAL_UNAVAILABLE` when the mesh could not evaluate
+  the cell's function."
+- **Status.** **Open** (wording only).

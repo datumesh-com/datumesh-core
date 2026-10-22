@@ -54,8 +54,9 @@
 //! stored cells. Computed cells (`convert`, language `expr`) are not evaluable, so receipts
 //! of them end at `E_EVAL_UNAVAILABLE`. A panic in the resolver propagates to the caller.
 //!
-//! The fixtures come from the specification's vectors (revision `spec-0.2.1`), in canonical
-//! form, plus receipts signed for the kit with the vectors' seeds (feature `sign`): a second
+//! The fixtures come from the specification's vectors (revision `spec-0.3.0`; the files
+//! used are unchanged since `spec-0.2.1`), in canonical form, plus receipts signed for the
+//! kit with the vectors' seeds (feature `sign`): a second
 //! `fx_rate` cell (EUR/CHF) with versions at two times, and a `convert` receipt whose first
 //! input is not loaded. They are embedded in the crate (`src/testkit/data.rs`), generated and
 //! checked against `spec/` by the crate's test `tests/testkit_data.rs`.

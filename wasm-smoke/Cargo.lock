@@ -62,7 +62,7 @@ dependencies = [
 
 [[package]]
 name = "datumesh-core"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "curve25519-dalek",
  "sha2",
