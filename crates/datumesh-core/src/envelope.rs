@@ -10,9 +10,12 @@ use crate::schema;
 /// The eight outcomes of 5.5.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Outcome {
-    /// 200: the receipt answers the cell as of the requested `asof`.
+    /// 200: the receipt answers the cell as of the requested `asof`: its `asof` is at or
+    /// before the requested one, and the mesh asserts it is the cell's latest version known
+    /// as of then.
     Ok,
-    /// 200: the last receipt the mesh knows.
+    /// 200: as `Ok`, except that the mesh cannot assert the receipt is current; it serves the
+    /// last receipt it knows.
     Stale,
     /// 404: no receipt for this cell.
     NotCovered,
@@ -292,8 +295,9 @@ pub fn check_envelope(status: u16, body: &[u8], keys: &Keys, request: &Request) 
         let code = e.as_str().and_then(ErrorCode::from_code);
         let ok = match (outcome, code) {
             (Outcome::BadRequest, Some(c)) => BAD_REQUEST_CODES.contains(&c),
-            // E_EVAL_UNAVAILABLE is not a code of spec-0.2.1's 10.2 (RS-28).
-            (_, Some(c)) => c != ErrorCode::Envelope && c != ErrorCode::EvalUnavailable,
+            // Any code of 10.2 but the client's E_ENVELOPE; E_EVAL_UNAVAILABLE included since
+            // spec-0.3.0.
+            (_, Some(c)) => c != ErrorCode::Envelope,
             (_, None) => false,
         };
         if !ok {
@@ -316,12 +320,10 @@ pub fn check_envelope(status: u16, body: &[u8], keys: &Keys, request: &Request) 
         return env_err("$.receipt.cell", "the receipt is for another cell than the one requested");
     }
     if let Some(asked) = &request.asof {
-        let bound = match outcome {
-            Outcome::Stale => r.asof() <= asked.as_str(),
-            _ => r.asof() == asked.as_str(),
-        };
-        if !bound {
-            return env_err("$.receipt.asof", "the receipt does not answer the requested asof");
+        // D31 (revised in spec-0.3.0): at or before the requested asof, for ok and stale
+        // alike; instants are canonical, so text order is time order.
+        if r.asof() > asked.as_str() {
+            return env_err("$.receipt.asof", "the receipt's asof is after the requested asof");
         }
     }
     // 6.

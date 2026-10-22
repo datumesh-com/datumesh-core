@@ -196,11 +196,16 @@ fn run_receipt(v: &Value) -> Result<Outputs, Error> {
     let resolver = match v.get("recompute") {
         None => None,
         Some(rc) => {
-            let value = rc.get("value").ok_or_else(|| vector_error("recompute without value"))?;
-            let value = Scalar::from_json(&value.to_jcs())?;
             // SPEC 11: the descriptor is offered for the receipt's cell.fn_hash, and value is
-            // what evaluating the receipt's own cell gives. A receipt too broken to name its
-            // cell fails before step 7 and never asks.
+            // what evaluating the receipt's own cell gives; without value, evaluation is
+            // unavailable (E_EVAL_UNAVAILABLE). The descriptor is a JSON value, offered as its
+            // JCS bytes (null as `null`, a string as its JSON serialisation): only an absent
+            // member is unavailable. A receipt too broken to name its cell fails before step 7
+            // and never asks.
+            let value = match rc.get("value") {
+                Some(v) => Some(Scalar::from_json(&v.to_jcs())?),
+                None => None,
+            };
             let cell = json::parse(&input).ok().and_then(|r| r.get("cell").cloned());
             let mut m = MapResolver::new();
             if let (Some(d), Some(h)) = (rc.get("descriptor"), cell.as_ref().and_then(|c| c.get("fn_hash"))) {
@@ -209,7 +214,7 @@ fn run_receipt(v: &Value) -> Result<Outputs, Error> {
             for (h, r) in rc.get("inputs").and_then(Value::as_object).unwrap_or(&[]) {
                 m.insert_receipt(h.as_str(), r.as_str().unwrap_or("").as_bytes());
             }
-            if let Some(c) = cell.as_ref().and_then(|c| Cell::from_value(c).ok()) {
+            if let (Some(value), Some(c)) = (value, cell.as_ref().and_then(|c| Cell::from_value(c).ok())) {
                 m.insert_value(c.id(), value);
             }
             Some(m)
@@ -231,6 +236,10 @@ fn run_receipt(v: &Value) -> Result<Outputs, Error> {
     out.push(("level".into(), s(result.level.map_or("", |l| l.as_str()))));
     if blob.is_some() {
         out.push(("blob_checked".into(), Value::Bool(result.blob_checked)));
+    }
+    // The one code reported with success (E_EVAL_UNAVAILABLE); absent otherwise.
+    if let Some(code) = result.code {
+        out.push(("code".into(), s(code.as_str())));
     }
     Ok(out)
 }

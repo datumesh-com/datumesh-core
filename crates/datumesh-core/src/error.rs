@@ -4,8 +4,13 @@ use core::fmt;
 
 macro_rules! codes {
     ($( $(#[$doc:meta])* $variant:ident = $text:literal, )*) => {
-        /// One variant per `E_*` code of SPEC 10.2, and `E_EVAL_UNAVAILABLE` (RS-28).
+        /// One variant per `E_*` code of SPEC 10.2 (`spec-0.3.0`).
         /// Non-exhaustive: codes added by later revisions of the specification are additions.
+        ///
+        /// The variants are declared in the order of 10.2, except `EvalUnavailable`: it was
+        /// added in 0.3.0, before the specification had it, and stays last so that
+        /// [`ErrorCode::ALL`] and the derived ordering do not change within 0.3.x.
+        /// `spec-0.3.0` lists it between `E_VALUE_MISMATCH` and `E_BLOB_MISMATCH`.
         #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
         #[non_exhaustive]
         pub enum ErrorCode {
@@ -13,7 +18,8 @@ macro_rules! codes {
         }
 
         impl ErrorCode {
-            /// Every code, in the order of SPEC 10.2, then `E_EVAL_UNAVAILABLE`.
+            /// Every code, in the order of SPEC 10.2 except `E_EVAL_UNAVAILABLE`, which is last
+            /// (see [`ErrorCode`]).
             pub const ALL: &'static [ErrorCode] = &[$(ErrorCode::$variant,)*];
 
             /// The code as written in the specification, e.g. `"E_SIGNATURE"`.
@@ -112,10 +118,10 @@ codes! {
     BlobMismatch = "E_BLOB_MISMATCH",
     /// A response envelope breaks a rule of 5.5.
     Envelope = "E_ENVELOPE",
-    /// The resolver could not evaluate the function (step 7.6): no runtime for its language,
-    /// a budget exceeded, or inputs the evaluator cannot obtain. Not a failure: the receipt
-    /// stays signature-valid (see [`crate::VerifyResult`]). This crate's code, proposed for
-    /// spec-0.2.2 (DEFECTS.md RS-28); not in spec-0.2.1's 10.2, so envelopes cannot carry it.
+    /// The verifier could not evaluate the function (10.1 step 7.6): no runtime for its
+    /// language, a budget exceeded, or inputs the evaluator cannot obtain. Not a failure: it
+    /// is reported with success at level `signed` (see [`crate::VerifyResult`]). A mesh may
+    /// carry it in an `error` envelope (5.5). In 10.2 since `spec-0.3.0` (RS-28).
     EvalUnavailable = "E_EVAL_UNAVAILABLE",
 }
 

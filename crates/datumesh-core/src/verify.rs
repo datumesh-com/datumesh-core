@@ -45,7 +45,10 @@ impl Level {
 /// it and 7.5 reports an unparseable input as `E_INPUT_INVALID`, as the specification orders.
 pub trait Resolver {
     /// The descriptor JSON text offered for `fn_hash`, or `None` if unavailable
-    /// (`E_FN_UNAVAILABLE`).
+    /// (`E_FN_UNAVAILABLE`). Only `None` is unavailability: the text is parsed strictly
+    /// (unparseable text reports its parse code), and any other JSON value, `null` included,
+    /// is a descriptor offered that fails the hash check (`E_FN_HASH_MISMATCH`, SPEC 10.1
+    /// step 7.1).
     fn descriptor(&self, fn_hash: &str) -> Option<Cow<'_, [u8]>>;
 
     /// The receipt JSON text offered for receipt hash `hash`, or `None` if unavailable
@@ -64,7 +67,10 @@ pub trait Resolver {
 /// (SPEC 11): the descriptor goes under the receipt's `cell.fn_hash`, the inputs under their
 /// hashes, and `value` under the receipt's own [`Cell::id`].
 ///
-/// A map holds one value per cell: [`evaluate`](Resolver::evaluate) ignores `asof`.
+/// A map holds one value per cell: [`evaluate`](Resolver::evaluate) ignores `asof`. A cell
+/// with no value inserted cannot be evaluated (`E_EVAL_UNAVAILABLE`), as a `recompute`
+/// without `value` means. A vector's `descriptor` is a JSON value: insert its JCS bytes
+/// (`null` as `null`, a string as its JSON serialisation); only an absent one is left out.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct MapResolver {
     descriptors: BTreeMap<String, Vec<u8>>,
@@ -110,12 +116,14 @@ impl Resolver for MapResolver {
 
 /// The outcome of [`verify`].
 ///
-/// `code` is `None` when `ok`, with one exception: [`ErrorCode::EvalUnavailable`]. When a
-/// resolver is given and 7.1-7.5 pass but [`Resolver::evaluate`] returns `None`, the receipt
-/// is still signature-valid, so the result is `ok`, level [`Level::Signed`], with
+/// `code` is `None` when `ok`, with one exception: [`ErrorCode::EvalUnavailable`], the one
+/// code of SPEC 10.2 that is not a failure (10.1 step 7.6). When a resolver is given and
+/// 7.1-7.5 pass but [`Resolver::evaluate`] returns `None`, the receipt is still
+/// signature-valid, so the result is `ok`, level [`Level::Signed`], with
 /// `code: Some(EvalUnavailable)`, `path` `$.value` and a `detail`: recomputation did not
-/// happen, and the code says why. Step 7.7 still runs afterwards; a failure there replaces it
-/// as a normal failure (`ok` false, its own code).
+/// happen, and the code says why. Step 7.7 still runs afterwards: if it passes,
+/// `blob_checked` is true and the code is kept; if it fails, its failure replaces the code as
+/// a normal failure (`ok` false, its own code).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VerifyResult {
     /// Whether the receipt verified.
@@ -310,8 +318,10 @@ fn recompute_steps(r: &Receipt, keys: &Keys, res: &dyn Resolver) -> Result<Recom
                 format!("{} is not a declared input", input.cell().function_name()),
             );
         }
-        if input.asof() != r.asof() {
-            return err(ErrorCode::TimeOrder, &p, "an input has another asof");
+        // D17 (revised in spec-0.3.0): at or before the receipt's asof; instants are
+        // canonical, so text order is time order.
+        if input.asof() > r.asof() {
+            return err(ErrorCode::TimeOrder, &p, "an input's asof is after the receipt's asof");
         }
         if latest_tx.as_ref().is_none_or(|t| input.tx() > t.as_str()) {
             latest_tx = Some(input.tx().to_string());
