@@ -3,7 +3,50 @@
 All notable changes to `datumesh-core`. The crate follows the specification revision named in
 each entry; the public API is frozen from 0.3.0 until 1.0 except for additions.
 
-## 0.3.3 (unreleased)
+## 0.3.4 (unreleased)
+
+Specification: `spec-0.4.0` (`dedd132`); all 432 vectors for verifier libraries pass (the
+546 `formula`, `formula-eval`, `excel` and `decimal` vectors are for formula evaluators and
+are skipped). Additions only (`API-CHANGES-0.3.4.md` has the `cargo public-api diff`
+against 0.3.3); a resolver, descriptor user or envelope user written for 0.3.3 compiles and
+behaves as before on everything `spec-0.3.0` had.
+
+### Added
+- Slice-as-lineage: `Slice` (slice objects with open and range arguments, version slices;
+  `id`, `contains`), `Manifest` (`new`, `members`, `members_hash`, `entry`),
+  `canonicalize_slice`, `lexical::check_input_entry`, `lexical::limits::{EXTENT, MEMBERS}`.
+- `Resolver::manifest(entry)` and `Resolver::evaluation(cell, asof) -> Option<Evaluation>`,
+  provided methods (no manifests; `evaluate` without a lineage). `Evaluation`
+  (`#[non_exhaustive]`: `value`, `lineage`). `MapResolver::insert_manifest`,
+  `MapResolver::insert_lineage`.
+- `FunctionDescriptor` (`#[non_exhaustive]`) and `Extent`: descriptors with
+  `signature.order` and argument `extent`; `to_descriptor`, `From<Descriptor>`,
+  `resolve_unit`.
+- `ErrorCode::SliceMember` (`E_SLICE_MEMBER`) and `ErrorCode::InputSuperseded`
+  (`E_INPUT_SUPERSEDED`), after `EvalUnavailable`, so `ErrorCode::ALL` and the order only grow.
+- `Fault`, `EnvelopeExtras`, `check_envelope_extras`: the `fault` of a `not_covered` envelope.
+- Units `min`, `h`, `d`, `km`, `deg`.
+- `testkit`: `Fixtures::slices` (`SliceFixtures`: key documents, descriptors, receipts and
+  manifests from the slice-lineage vectors, and two probes), `Kit::slices`,
+  `Kit::check_slices`, `Call::LookupManifest`; `Recording` forwards `manifest` and
+  `evaluation`. Without `slices(true)` the kit is the 0.3.3 kit.
+
+### Changed (behaviour, following the specification)
+- `verify`: `inputs` entries may be slice entries (step 3); slice entries are checked through
+  their manifests and members (step 7.5, `E_SLICE_MEMBER`), and the `tx` rule covers members;
+  a different value whose lineage shows a replaced input is `E_INPUT_SUPERSEDED`, success at
+  level `signed`, path `$.inputs` (step 7.6). `verify` calls `Resolver::evaluation` (which by
+  default calls `evaluate`) instead of `evaluate`.
+- `verify`, `function_hash`, `canonicalize_descriptor` and `resolved_unit` accept descriptors
+  with `order` and `extent`. `Descriptor::from_json` still refuses them (`E_SCHEMA`, as in
+  0.3.3): it has no field for them.
+- `check_envelope`: a `not_covered` envelope may carry `fault`; an `error` envelope may carry
+  `E_SLICE_MEMBER` or `E_INPUT_SUPERSEDED`.
+- `datumesh-cli`: the `slice` kind, `recompute.manifests` and `recompute.lineage`; vectors of
+  the kinds for formula evaluators give `{"error":null,"id":…,"skipped":<kind>}`, and `check`
+  counts them apart.
+
+## 0.3.3
 
 Specification: `spec-0.3.0` (`3bac3d4`), unchanged; all 365 vectors pass. Additions only
 (`API-CHANGES-0.3.3.md` has the `cargo public-api diff` against 0.3.2). Only the test kit

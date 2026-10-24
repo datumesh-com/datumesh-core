@@ -12,7 +12,8 @@ RS-27 were found against `bfe5a38` and are resolved by `58eb0d9`. No entry is op
 wording. The submodule was then pinned at the tag `spec-0.2.1` (`710dabb`, text and vectors
 identical to `58eb0d9`); RS-28, from the 0.3.0 API work, was proposed for the next revision.
 For 0.3.2 the submodule is at `3bac3d4` (`spec-0.3.0`), which resolves RS-28. RS-29 and RS-30,
-found while implementing `spec-0.3.0`, are open.
+found while implementing `spec-0.3.0`, are resolved by `dedd132` (`spec-0.4.0`), where the
+submodule is for 0.3.4; RS-31 to RS-37, found while implementing `spec-0.4.0`, are open.
 
 Disclosure: before the submodule existed I ran oracle probes against a copy of
 `/root/datumesh-spec`, a working tree that turned out to contain uncommitted `spec-0.2.1` edits to
@@ -329,7 +330,11 @@ What the new text settles, checked against this crate:
   always JSON strings; an entry that is not a string is a malformed vector." (Or, if such
   entries are to be meaningful: "An entry that is not a string is an input receipt offered
   that is not signature-valid (`E_INPUT_INVALID`); only a hash with no entry is unavailable.")
-- **Status.** **Open.**
+- **Status.** **Resolved** by `spec-0.4.0` (`dedd132`), SPEC 11: "`inputs`: a map from receipt
+  hash to the input receipt's JSON text (slice members included); a hash with no entry is
+  unavailable. Entries are always JSON strings; an entry that is not a string is a malformed
+  vector" (the first proposal; `schemas/vector.schema.json` now types them as strings). The
+  runner keeps offering such an entry as empty text; no vector has one.
 
 ### RS-30. 5.5: wording of the `error` member
 - **Section.** 5.5, member `error`.
@@ -343,4 +348,141 @@ What the new text settles, checked against this crate:
 - **Proposed wording.** "For `error`, any code in 10.2 except `E_ENVELOPE` (a client's code),
   for example `E_INPUT_UNAVAILABLE`, or `E_EVAL_UNAVAILABLE` when the mesh could not evaluate
   the cell's function."
+- **Status.** **Resolved** by `spec-0.4.0` (`dedd132`), SPEC 5.5 `error`: "For `error`, any
+  code in 10.2 except `E_ENVELOPE` (a client's code), for example `E_INPUT_UNAVAILABLE`, or
+  `E_EVAL_UNAVAILABLE` when the mesh could not evaluate the cell's function", the proposed
+  wording. `E_SLICE_MEMBER` and `E_INPUT_SUPERSEDED` are codes of 10.2 and may be carried.
+
+## spec-0.4.0 (`dedd132`), implemented in datumesh-core 0.3.4
+
+What the new text settles, checked against this crate: slice entries in step 3 (one form,
+`E_CANON_HEX` otherwise, one entry each for the limit); the manifest and member checks of step
+7.5 and the `tx` rule over plain inputs and members (none when the only inputs are empty
+slices); `E_INPUT_SUPERSEDED` in 7.6 when a lineage is offered; `signature.order` and argument
+`extent` with the check order of 7; the envelope `fault`; the limits `extent` and `members`;
+units `min`, `h`, `d`, `km`, `deg`. RS-29 and RS-30 are resolved (above).
+
+How the oracle was used: 163 probes (`tools/probes/`, kept with the reference tool's results
+in `crates/datumesh-cli/tests/probes-0.4.0.jsonl`) were run through `canon.py check` at
+`dedd132` as a black box, its source unread; `datumesh-cli` agrees on all of them. Where a
+probe decided something the text leaves open, the entry below says so.
+
+### RS-31. 10.1 step 7.6: which lineages show a superseded input
+- **Section.** 10.1 step 7.6 ("A superseded input"), D62.
+- **Problem.** The text says the receipt is historical when "an entry of the receipt's
+  `inputs` was replaced in that lineage by a receipt of the same cell with a later `tx`
+  (signature-valid through step 6), or by an entry for the same slice id with another
+  members hash", then explains "an input was superseded at a `tx` earlier than the
+  receipt's own". Unstated: (a) whether "replaced" requires the old entry to be absent from
+  the lineage; (b) "later" than what, and whether the replacement's `tx` must be at or before
+  the receipt's `asof` (the explanation suggests so); (c) whether the replacement must hash to
+  its entry; (d) whether a slice replacement needs its manifest (the text says the lineage
+  comes "with the receipts and manifests of those not listed"); (e) whether the lineage must
+  be ascending. Oracle: (a) yes: with the old entry still listed, `E_VALUE_MISMATCH`; (b)
+  strictly later than the replaced input's `tx` (an equal `tx` is a mismatch), with no bound
+  by the receipt's `tx` or `asof` (a replacement with `tx` after the receipt's `asof` is
+  `E_INPUT_SUPERSEDED`); (c) yes (another hash: mismatch), and an unavailable or
+  signature-invalid replacement is a mismatch; (d) no: the entry alone decides, no manifest is
+  read; (e) no.
+- **Resolution.** As the oracle. `verify` asks for the receipts of the lineage's plain entries
+  that `inputs` does not list, in lineage order, until one shows a replacement.
+- **Proposed wording.** "...the verifier checks whether an entry of the receipt's `inputs`
+  that the lineage does not list was replaced by an entry the lineage lists and `inputs` does
+  not: a receipt hash whose receipt is offered, hashes to it, is signature-valid (through
+  step 6) and is of the same cell with a strictly later `tx`; or a slice entry with the same
+  slice id and another members hash (its manifest is not needed). The lineage is a set; its
+  order does not matter." Drop or reword "at a `tx` earlier than the receipt's own" (a
+  replacement's `tx` is not compared with the receipt's).
+- **Status.** **Open.**
+
+### RS-32. 4.4 / 11: telling a slice object, a version slice, a range and a manifest apart
+- **Section.** 4.4 (slice objects, range objects), 11 (`slice` vectors: "a slice object (4.4)
+  or a manifest (15.13)").
+- **Problem.** Nothing says how an input is recognised as a manifest rather than a slice
+  object, a version slice rather than a cell object, or a range object rather than a typed
+  scalar, which decides the error code of a malformed input (e.g. `{"slice": …}` alone,
+  `{"cell", "from", "to", "x"}`, a range object with an extra member). Oracle: a `slice`
+  vector's input is a manifest exactly when it has a `members` member; an object is a version
+  slice exactly when its members are `cell`, `from` and `to`; an argument object is a range
+  exactly when its members are `hi`, `lo` and `type`; anything else is read as a cell object or
+  a typed scalar (so the three examples are `E_SCHEMA`: a missing `args`, a missing `args`, and
+  a missing `value`).
+- **Resolution.** As the oracle (`Slice::from_json`, `Manifest::from_json`, the CLI's `slice`
+  kind).
+- **Proposed wording (4.4).** "An object whose members are exactly `cell`, `from` and `to` is a
+  version slice; any other slice object is read as a cell object. In a slice object's
+  arguments, an object whose members are exactly `hi`, `lo` and `type` is a range object; any
+  other object is read as a typed scalar." (11) "A `slice` input with a member `members` is a
+  manifest."
+- **Status.** **Open.**
+
+### RS-33. 4.4 / 10.1 step 7.5: check order inside slice objects and manifests
+- **Section.** 4.4 ("A slice object is checked in JCS order like a cell"), 10.1 step 7.5
+  (manifest structure and canonical form).
+- **Problem.** JCS order inside a range object is `hi`, `lo`, `type`, but `hi` and `lo` cannot
+  be read without `type`. For a manifest the text lists structure, then members, then the
+  slice object, but not whether the slice object's own structure belongs to the first step.
+  Nor does it say when `E_SLICE` (no open or ranged argument) is checked. Oracle: a range's
+  `type` first (unknown, boolean or blob: `E_CANON_TYPE` at `type`), then `hi`, then `lo`; a
+  manifest's structure, the slice object's included, before any canonical-form rule, then the
+  members (each hex, then order, then count), then the slice object; `E_SLICE` after the
+  whole cell object's canonical form; a version slice's cell with a marker is `E_SLICE` when
+  the cell is checked (before `from` and `to`).
+- **Resolution.** As the oracle.
+- **Proposed wording (4.4).** "...checked in JCS order like a cell, except that a range
+  object's `type` is checked before its ends (`hi`, then `lo`). `E_SLICE` for a cell object
+  without an open or ranged argument is checked after its canonical form." (10.1 step 7.5)
+  "...check its structure, the slice object's included (`E_SCHEMA`), then its canonical
+  form: ...".
+- **Status.** **Open.**
+
+### RS-34. 7: `order` entries that are not names, and extent range check order
+- **Section.** 7 (`signature.order`, argument `extent`).
+- **Problem.** (a) An `order` entry that is not a valid argument name (`"A"`) could be
+  `E_CANON_ARG_NAME` or `E_CANON_SET`; the schema types entries as argument names. (b) For a
+  number extent range the order of the lexical check, the integer check and the two ends is
+  not given. Oracle: (a) `E_CANON_SET` (any entry that is not a declared argument); (b) `hi`
+  (canonical number, then integer), then `lo` (the same), then `lo <= hi`.
+- **Resolution.** As the oracle.
+- **Proposed wording.** (a) "...a list that misses an argument, repeats one or names anything
+  that is not a declared argument is `E_CANON_SET`". (b) "...a range `{"hi", "lo"}`: `hi`, then
+  `lo`, each in the type's lexical form and, for numbers, an integer (`E_CANON_NUMBER`), then
+  `lo <= hi` (`E_CANON_SET`)."
+- **Status.** **Open.**
+
+### RS-35. 10.1 step 7.5: when two members that are one cell are found
+- **Section.** 10.1 step 7.5 (members).
+- **Problem.** "...and that no two members of a membership slice are one cell (`E_SLICE_MEMBER`);
+  check its `asof`..." does not say whether this is a check of the whole member set (before
+  or after the members' own checks) or of each member against those before it, which decides
+  the code when the duplicate also has a later `asof`. Oracle: per member, at the second of
+  the two, after its membership check and before its `asof` (`E_SLICE_MEMBER`, not
+  `E_TIME_ORDER`). Version slices may list several versions of their one cell.
+- **Resolution.** As the oracle.
+- **Proposed wording.** "...check that its cell belongs to the slice ...; for a membership
+  slice, that no member before it is the same cell (`E_SLICE_MEMBER`); check its `asof`...".
+- **Status.** **Open.**
+
+### RS-36. 4.4 / 10.1 step 7.5: membership for ranges of another type, and open arguments
+- **Section.** 10.1 step 7.5 ("ranged arguments of the range's type and within it, any value
+  for an open argument").
+- **Problem.** Clear for numbers once "within" is read in the type's order (numbers
+  numerically: `9.5` and `10` are within `[9..10.5]`), which only 15.13 states. "Any value"
+  could exclude a value of another type than the function declares. Oracle: numeric order for
+  number ranges; a member whose ranged argument has another type than the range's is
+  `E_SLICE_MEMBER`; an open argument admits a value of any type.
+- **Resolution.** As the oracle; `Slice::contains`.
+- **Proposed wording.** "...ranged arguments of the range's type and within it in that type's
+  order (15.13), any value of any type for an open argument".
 - **Status.** **Open** (wording only).
+
+### RS-37. 10.1 / 11: a lineage item that is not an `inputs` entry
+- **Section.** 11 (`recompute.lineage`), 10.1 step 7.6.
+- **Problem.** The vector schema types lineage items as `inputs` entries, but nothing says what
+  a verifier does with one that is not (a library taking a lineage from a resolver cannot rule
+  it out). Oracle: such an entry replaces nothing (`E_VALUE_MISMATCH` when nothing else does).
+- **Resolution.** Ignored, as the oracle. The test kit's `check_slices` reports a resolver whose
+  lineage holds one.
+- **Proposed wording (10.1 step 7.6).** "An item of the lineage that is not an `inputs` entry
+  replaces nothing."
+- **Status.** **Open.**
