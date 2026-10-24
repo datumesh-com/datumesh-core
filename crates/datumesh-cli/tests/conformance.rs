@@ -1,4 +1,8 @@
 //! Test 1: every vector in spec/vectors passes (valid: all outputs equal; invalid: exact code).
+//!
+//! Since spec-0.4.0 the vectors include kinds for formula evaluators (`formula`, `formula-eval`,
+//! `excel`, `decimal`; SPEC 11), which a verifier library does not run: 432 of the 978 vectors
+//! apply, and the runner reports the others as skipped.
 
 use std::path::{Path, PathBuf};
 
@@ -12,19 +16,28 @@ fn vectors() -> Vec<PathBuf> {
     files
 }
 
+/// The kinds for formula evaluators, not for verifier libraries (SPEC 11, spec-0.4.0).
+const FORMULA_KINDS: [&str; 4] = ["formula", "formula-eval", "excel", "decimal"];
+
 #[test]
 fn every_vector_passes() {
     let files = vectors();
-    assert!(files.len() >= 365, "expected at least 365 vectors, found {}", files.len());
+    assert_eq!(files.len(), 978, "spec-0.4.0 (dedd132) has 978 vectors");
     let mut failures = Vec::new();
+    let mut applicable = 0;
     for f in &files {
         let v = json::parse(&std::fs::read(f).unwrap()).unwrap_or_else(|e| panic!("{}: {e}", f.display()));
+        if FORMULA_KINDS.contains(&v.get("kind").and_then(json::Value::as_str).unwrap_or("")) {
+            continue;
+        }
+        applicable += 1;
         let problems = datumesh_cli::check_vector(&v);
         if !problems.is_empty() {
             failures.push(format!("{}: {}", f.display(), problems.join("; ")));
         }
     }
-    assert!(failures.is_empty(), "{} of {} vectors fail:\n{}", failures.len(), files.len(), failures.join("\n"));
+    assert_eq!(applicable, 432, "vectors a verifier library runs");
+    assert!(failures.is_empty(), "{} of {applicable} vectors fail:\n{}", failures.len(), failures.join("\n"));
 }
 
 #[test]
