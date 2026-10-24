@@ -47,8 +47,25 @@
 //!   is given still passes).
 //! * [`check_asof`](Kit::check_asof): `evaluate` receives the receipt's `asof`, and stored
 //!   cells recompute. With [`Kit::time_aware`], a cell with versions at several times gives
-//!   the value of its latest version with `tx <= asof` (inclusive at each `tx`, `None` before
-//!   the first), both through `verify` and through direct `evaluate` calls.
+//!   the value of its latest version that answers as of the requested time under the kit's
+//!   [`AnswerRule`] (`None` before the first), both through `verify` and through direct
+//!   `evaluate` calls.
+//!
+//! The answer rule ([`Kit::answer_rule`]) says when a version of a stored cell answers as of
+//! a time `A`:
+//!
+//! * [`AnswerRule::TxAndAsof`], the default: its `tx <= A` **and** its receipt's
+//!   `asof <= A`. This is what SPEC 5.5 step 5 (D31 revised) requires of an `ok` response
+//!   to a request with `asof` `A`: the receipt's `asof`, and so the version answering, at or
+//!   before `A`. A version is not an answer between its `tx` and the time it became known.
+//! * [`AnswerRule::TxOnly`]: its `tx <= A`, whenever its receipt was made (the kit's only
+//!   rule before 0.3.3). A time-aware resolver with this rule must say so.
+//!
+//! In the fixtures, the EUR/CHF cell's first version has `tx` 2024-03-15T16:00 and receipt
+//! `asof` 2024-03-16T09:00: under `TxAndAsof` it answers from 2024-03-16T09:00 on (and nothing
+//! does before); under `TxOnly`, from 2024-03-15T16:00 on. The rule matters only to a resolver
+//! declared time-aware. Receipts recompute through `verify` the same under both, since each
+//! receipt is verified as of its own `asof`.
 //!
 //! The kit expects a resolver to evaluate only what the fixtures give it: the versions of
 //! stored cells. Computed cells (`convert`, language `expr`) are not evaluable, so receipts
@@ -80,8 +97,9 @@ mod data;
 /// Load every descriptor under its `fn_hash`, every receipt under its hash, and the
 /// versions: for a time-aware resolver (a store), version `v` says that cell `v.cell_id`
 /// has, from transaction time `v.tx` on, the value of receipt `v.receipt_hash` (which is
-/// `v.value`); a resolver holding one value per cell keeps the latest. Versions are listed
-/// in `tx` order per cell.
+/// `v.value`), answering as of a time under the kit's [`AnswerRule`] (by default only once
+/// that receipt's `asof` is reached too); a resolver holding one value per cell keeps the
+/// latest. Versions are listed in `tx` order per cell.
 #[non_exhaustive]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Fixtures {
@@ -107,7 +125,9 @@ impl Fixtures {
     }
 }
 
-/// A version of a stored cell: from `tx` on, the cell's value is that of the receipt.
+/// A version of a stored cell: from `tx` on, the cell's value is that of the receipt. When
+/// it answers a request as of some time is the kit's [`AnswerRule`]; the receipt's `asof`
+/// is that of receipt `receipt_hash`.
 #[non_exhaustive]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Version {
@@ -119,6 +139,23 @@ pub struct Version {
     pub receipt_hash: String,
     /// The receipt's value.
     pub value: Scalar,
+}
+
+/// When a version of a stored cell answers as of a time `A`, for a resolver declared
+/// time-aware ([`Kit::time_aware`]). Set with [`Kit::answer_rule`]; the default is
+/// [`TxAndAsof`](AnswerRule::TxAndAsof). Among the versions that answer, the one with the
+/// latest `tx` gives the value; when none does, `evaluate` gives `None`.
+#[non_exhaustive]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum AnswerRule {
+    /// A version answers as of `A` when its `tx <= A` and its receipt's `asof <= A`: an `ok`
+    /// response to a request as of `A` carries a receipt with an `asof` at or before `A`
+    /// (SPEC 5.5 step 5, D31 revised), so a version does not answer before it was known.
+    #[default]
+    TxAndAsof,
+    /// A version answers as of `A` when its `tx <= A`, whatever its receipt's `asof`: the
+    /// kit's rule before 0.3.3.
+    TxOnly,
 }
 
 /// A call made to a [`Resolver`], as [`Recording`] records it.
@@ -230,6 +267,7 @@ pub struct Kit {
     fixtures: Fixtures,
     cases: Vec<Case>,
     time_aware: bool,
+    answer_rule: AnswerRule,
     setup: Vec<String>,
 }
 
@@ -243,7 +281,8 @@ impl Default for Kit {
 const NOT_JSON: &str = "not-json";
 
 impl Kit {
-    /// The kit, for a resolver that is not time-aware.
+    /// The kit, for a resolver that is not time-aware, with the default [`AnswerRule`]
+    /// (`TxAndAsof`) for when it is declared time-aware.
     pub fn new() -> Kit {
         let mut setup = Vec::new();
         let mut fx =
@@ -287,15 +326,25 @@ impl Kit {
         cases.push(Case { name: NOT_JSON, bytes: b"{".to_vec() });
         // Versions in tx order per cell (a stable sort keeps the cells' order otherwise).
         fx.versions.sort_by(|a, b| a.cell_id.cmp(&b.cell_id).then_with(|| a.tx.cmp(&b.tx)));
-        Kit { fixtures: fx, cases, time_aware: false, setup }
+        Kit { fixtures: fx, cases, time_aware: false, answer_rule: AnswerRule::default(), setup }
     }
 
     /// Declares whether the resolver under test is time-aware: whether
     /// [`evaluate`](Resolver::evaluate) gives, for a cell with several versions, the value of
-    /// the latest version with `tx <= asof`. Time-aware resolvers (a store) are held to it;
+    /// the latest version that answers as of `asof` under the kit's
+    /// [`answer_rule`](Kit::answer_rule) (by default `TxAndAsof`: `tx <= asof` and the
+    /// receipt's `asof` at or before it). Time-aware resolvers (a store) are held to it;
     /// others (`MapResolver`) are not.
     pub fn time_aware(mut self, yes: bool) -> Kit {
         self.time_aware = yes;
+        self
+    }
+
+    /// Sets the [`AnswerRule`] a time-aware resolver is held to (default `TxAndAsof`). It
+    /// can be set before or after [`time_aware`](Kit::time_aware), and changes nothing for
+    /// a resolver that is not time-aware.
+    pub fn answer_rule(mut self, rule: AnswerRule) -> Kit {
+        self.answer_rule = rule;
         self
     }
 
@@ -456,7 +505,7 @@ impl Kit {
     }
 
     /// `evaluate` receives the receipt's `asof`; for a time-aware resolver, a cell's value is
-    /// that of its latest version with `tx <= asof`.
+    /// that of its latest version that answers under the kit's [`AnswerRule`].
     pub fn check_asof(&self, resolver: &dyn Resolver) -> Result<(), Report> {
         self.setup_ok()?;
         let mut f = Failures::new("asof");
@@ -484,21 +533,36 @@ impl Kit {
             self.expect(&mut f, resolver, &keys, name, Want::Recomputed);
         }
         self.expect(&mut f, resolver, &keys, "timeline-0", Want::EvalUnavailable);
-        // Directly: inclusive at each tx, None before the first.
+        // Directly: None before the first version answers. TxOnly: inclusive at each tx.
+        // TxAndAsof: version 1 (tx 2024-03-15T16:00, asof 2024-03-16T09:00) answers from its
+        // asof on, inclusive, and nothing does from its tx up to then; version 2 has tx = asof.
         let (Some(v1), Some(v2)) = (self.receipt_of("timeline-1"), self.receipt_of("timeline-2")) else {
             f.push("timeline", "fixtures missing".to_string());
             return f.finish();
         };
         let cell = v1.cell();
-        let points: [(&str, Option<&Scalar>); 7] = [
-            ("0001-01-01T00:00:00.000000Z", None),
-            ("2024-03-15T15:59:59.999999Z", None),
-            (v1.tx(), Some(v1.value())),
-            ("2024-03-17T00:00:00.000000Z", Some(v1.value())),
-            ("2024-03-18T09:59:59.999999Z", Some(v1.value())),
-            (v2.tx(), Some(v2.value())),
-            ("9999-12-31T23:59:59.999999Z", Some(v2.value())),
-        ];
+        let points: Vec<(&str, Option<&Scalar>)> = match self.answer_rule {
+            AnswerRule::TxOnly => vec![
+                ("0001-01-01T00:00:00.000000Z", None),
+                ("2024-03-15T15:59:59.999999Z", None),
+                (v1.tx(), Some(v1.value())),
+                ("2024-03-17T00:00:00.000000Z", Some(v1.value())),
+                ("2024-03-18T09:59:59.999999Z", Some(v1.value())),
+                (v2.tx(), Some(v2.value())),
+                ("9999-12-31T23:59:59.999999Z", Some(v2.value())),
+            ],
+            AnswerRule::TxAndAsof => vec![
+                ("0001-01-01T00:00:00.000000Z", None),
+                ("2024-03-15T15:59:59.999999Z", None),
+                (v1.tx(), None),
+                ("2024-03-16T08:59:59.999999Z", None),
+                (v1.asof(), Some(v1.value())),
+                ("2024-03-17T00:00:00.000000Z", Some(v1.value())),
+                ("2024-03-18T09:59:59.999999Z", Some(v1.value())),
+                (v2.tx(), Some(v2.value())),
+                ("9999-12-31T23:59:59.999999Z", Some(v2.value())),
+            ],
+        };
         for (asof, want) in points {
             let got = resolver.evaluate(cell, asof);
             if got.as_ref() != want {

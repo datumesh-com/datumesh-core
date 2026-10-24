@@ -56,6 +56,22 @@ pub fn datumesh_core::lexical::is_index_unit(&str) -> bool
 pub fn datumesh_core::lexical::is_literal_unit(&str) -> bool
 pub fn datumesh_core::lexical::to_hex(&[u8]) -> alloc::string::String
 pub mod datumesh_core::testkit
+#[non_exhaustive] pub enum datumesh_core::testkit::AnswerRule
+pub datumesh_core::testkit::AnswerRule::TxAndAsof
+pub datumesh_core::testkit::AnswerRule::TxOnly
+impl core::clone::Clone for datumesh_core::testkit::AnswerRule
+pub fn datumesh_core::testkit::AnswerRule::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_core::testkit::AnswerRule
+impl core::cmp::PartialEq for datumesh_core::testkit::AnswerRule
+pub fn datumesh_core::testkit::AnswerRule::eq(&self, &Self) -> bool
+impl core::default::Default for datumesh_core::testkit::AnswerRule
+pub fn datumesh_core::testkit::AnswerRule::default() -> Self
+impl core::fmt::Debug for datumesh_core::testkit::AnswerRule
+pub fn datumesh_core::testkit::AnswerRule::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for datumesh_core::testkit::AnswerRule
+pub fn datumesh_core::testkit::AnswerRule::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for datumesh_core::testkit::AnswerRule
+impl core::marker::StructuralPartialEq for datumesh_core::testkit::AnswerRule
 #[non_exhaustive] pub enum datumesh_core::testkit::Call
 pub datumesh_core::testkit::Call::Evaluate
 pub datumesh_core::testkit::Call::Evaluate::asof: alloc::string::String
@@ -87,6 +103,7 @@ pub fn datumesh_core::testkit::Fixtures::fmt(&self, &mut core::fmt::Formatter<'_
 impl core::marker::StructuralPartialEq for datumesh_core::testkit::Fixtures
 pub struct datumesh_core::testkit::Kit
 impl datumesh_core::testkit::Kit
+pub fn datumesh_core::testkit::Kit::answer_rule(self, datumesh_core::testkit::AnswerRule) -> datumesh_core::testkit::Kit
 pub fn datumesh_core::testkit::Kit::check(&self, &dyn datumesh_core::Resolver) -> core::result::Result<(), datumesh_core::testkit::Report>
 pub fn datumesh_core::testkit::Kit::check_asof(&self, &dyn datumesh_core::Resolver) -> core::result::Result<(), datumesh_core::testkit::Report>
 pub fn datumesh_core::testkit::Kit::check_bytes(&self, &dyn datumesh_core::Resolver) -> core::result::Result<(), datumesh_core::testkit::Report>

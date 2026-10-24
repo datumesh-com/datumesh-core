@@ -6,7 +6,7 @@ The Rust core of the [Datumesh](https://datumesh.com) protocol: strict JSON and 
 
 ```toml
 [dependencies]
-datumesh-core = "0.3.2"
+datumesh-core = "0.3.3"
 ```
 
 Verify the receipt of `spec/vectors/receipt/stored-number.json` against the key documents the vector carries, then recompute it with the descriptor and value the vector's `recompute` object supplies:
@@ -63,7 +63,7 @@ With feature `sign`, an engine makes receipts: `SigningKey::from_seed` (determin
 - `resolved_unit`: the unit of a cell's value.
 - `Error` with an `ErrorCode` for every code of SPEC 10.2 (`E_EVAL_UNAVAILABLE` included), and a JSON path.
 
-No `unsafe`, no panics on any input, no global state, no logging, no network outside the deprecated `fetch_keys`. Builds for `wasm32-unknown-unknown`, with or without `sign` and `testkit`. Minimum Rust version 1.97. The public API is frozen until 1.0 except for additions; `API-CHANGES-0.3.0.md` lists what changed from 0.2.1, `API-CHANGES-0.3.1.md` what was added in 0.3.1, `API-CHANGES-0.3.2.md` the (empty) diff of 0.3.2, and `CHANGELOG.md` the history.
+No `unsafe`, no panics on any input, no global state, no logging, no network outside the deprecated `fetch_keys`. Builds for `wasm32-unknown-unknown`, with or without `sign` and `testkit`. Minimum Rust version 1.97. The public API is frozen until 1.0 except for additions; `API-CHANGES-0.3.0.md` lists what changed from 0.2.1, `API-CHANGES-0.3.1.md` what was added in 0.3.1, `API-CHANGES-0.3.2.md` the (empty) diff of 0.3.2, `API-CHANGES-0.3.3.md` the additions in 0.3.3, and `CHANGELOG.md` the history.
 
 ## Testing a resolver
 
@@ -71,7 +71,7 @@ A `Resolver` (a store, a cache, an engine's lookup) can check itself against the
 
 ```toml
 [dev-dependencies]
-datumesh-core = { version = "0.3.2", features = ["testkit"] }
+datumesh-core = { version = "0.3.3", features = ["testkit"] }
 ```
 
 The kit never writes through the resolver. It gives you `Fixtures` (descriptors, receipts and the versions of stored cells, all canonical JSON, from the specification's vectors plus a few receipts signed for the kit), you load them, and it verifies receipts through your resolver and looks things up in it:
@@ -82,13 +82,15 @@ use datumesh_core::testkit::Kit;
 #[test]
 fn my_resolver_conforms() {
     let kit = Kit::new().time_aware(true); // false (the default) for one value per cell
+    // A time-aware resolver is held to AnswerRule::TxAndAsof unless it says otherwise:
+    // let kit = Kit::new().time_aware(true).answer_rule(datumesh_core::testkit::AnswerRule::TxOnly);
     if let Err(report) = kit.run(|fixtures| load_into_a_fresh_store(fixtures)) {
         panic!("{report}");
     }
 }
 ```
 
-It checks that `verify` asks the resolver only for what step 7 reaches (through the `Recording` wrapper), that what the resolver lacks is `E_FN_UNAVAILABLE`, `E_INPUT_UNAVAILABLE` or `E_EVAL_UNAVAILABLE` and that unknown or malformed hashes give `None`, that `descriptor` and `receipt` return exactly the bytes loaded, and that `evaluate` gets the receipt's `asof`; for a time-aware resolver, that a cell with versions at several times gives the latest version with `tx <= asof`. Each check (`check_lazy_calls`, `check_unavailable`, `check_bytes`, `check_asof`) can also run on its own. `MapResolver` passes it (not time-aware).
+It checks that `verify` asks the resolver only for what step 7 reaches (through the `Recording` wrapper), that what the resolver lacks is `E_FN_UNAVAILABLE`, `E_INPUT_UNAVAILABLE` or `E_EVAL_UNAVAILABLE` and that unknown or malformed hashes give `None`, that `descriptor` and `receipt` return exactly the bytes loaded, and that `evaluate` gets the receipt's `asof`; for a time-aware resolver, that a cell with versions at several times gives the latest version that answers as of the requested time under the kit's answer rule. `Kit::answer_rule` sets it: `AnswerRule::TxAndAsof` (the default) lets a version answer as of `A` only when its `tx <= A` and its receipt's `asof <= A`, as SPEC 5.5 step 5 (D31 revised) requires of an `ok` response to a request as of `A`; `AnswerRule::TxOnly` (the only rule before 0.3.3) only when its `tx <= A`. The fixtures' EUR/CHF version 1 (`tx` 2024-03-15T16:00, `asof` 2024-03-16T09:00) gives no value from its `tx` up to its `asof` under `TxAndAsof`. Each check (`check_lazy_calls`, `check_unavailable`, `check_bytes`, `check_asof`) can also run on its own. `MapResolver` passes it (not time-aware).
 
 ## Repository
 
@@ -96,7 +98,7 @@ It checks that `verify` asks the resolver only for what step 7 reaches (through 
 - `crates/datumesh-cli`: `datumesh-cli run-vectors` (JSON lines in, one result per line out) and `datumesh-cli check [DIR]`, for the cross-language harness. Not published.
 - `spec/`: the specification, a git submodule.
 - `DEFECTS.md`: every place the specification text was not enough to decide something.
-- `public-api.txt`, `public-api-all-features.txt`: the public API (`cargo public-api -ss`) with default features and with `--all-features`; `API-CHANGES-0.3.0.md`: the diff against 0.2.1, justified; `API-CHANGES-0.3.1.md`: the additions in 0.3.1; `API-CHANGES-0.3.2.md`: the diff of 0.3.2 against 0.3.1.
+- `public-api.txt`, `public-api-all-features.txt`: the public API (`cargo public-api -ss`) with default features and with `--all-features`; `API-CHANGES-0.3.0.md`: the diff against 0.2.1, justified; `API-CHANGES-0.3.1.md`: the additions in 0.3.1; `API-CHANGES-0.3.2.md`: the diff of 0.3.2 against 0.3.1; `API-CHANGES-0.3.3.md`: the additions in 0.3.3.
 - `crates/datumesh-core/src/testkit/data.rs`: the kit's fixtures, generated from `spec/` (and signed with feature `sign`) by `tests/testkit_data.rs`, which fails if they drift.
 - `fuzz/`: cargo-fuzz targets. `wasm-smoke/`: the WebAssembly smoke test.
 - `tools/gen_tables.py`: regenerates the embedded unit list and Unicode 15.1 table from `spec/`.

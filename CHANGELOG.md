@@ -3,7 +3,29 @@
 All notable changes to `datumesh-core`. The crate follows the specification revision named in
 each entry; the public API is frozen from 0.3.0 until 1.0 except for additions.
 
-## 0.3.2 (unreleased)
+## 0.3.3 (unreleased)
+
+Specification: `spec-0.3.0` (`3bac3d4`), unchanged; all 365 vectors pass. Additions only
+(`API-CHANGES-0.3.3.md` has the `cargo public-api diff` against 0.3.2). Only the test kit
+changes.
+
+### Added
+- `testkit::AnswerRule` (`#[non_exhaustive]`: `TxAndAsof`, `TxOnly`) and
+  `Kit::answer_rule(rule)`: when a version of a stored cell answers as of a time `A` for a
+  resolver declared time-aware. `time_aware(true)` keeps working and uses the kit's rule.
+
+### Changed (test kit)
+- The default rule is `TxAndAsof`: a version answers as of `A` only if its `tx <= A` and its
+  receipt's `asof <= A`, as SPEC 5.5 step 5 (D31 revised) requires of an `ok` response to a
+  request as of `A`. The EUR/CHF fixture's version 1 (`tx` 2024-03-15T16:00, `asof`
+  2024-03-16T09:00) now gives no value from its `tx` up to (not including) its `asof`;
+  `check_asof` checks its `tx`, just before its `asof` (`None`) and its `asof` (version 1).
+  Recomputation through `verify` is checked as before. `TxOnly` is the 0.3.2 kit exactly.
+- **A time-aware resolver with the tx-only rule must now say `TxOnly`**:
+  `Kit::new().time_aware(true).answer_rule(AnswerRule::TxOnly)`. Otherwise it fails
+  `check_asof` at those two points.
+
+## 0.3.2
 
 Specification: `spec-0.3.0` (`3bac3d4`); all 365 vectors pass. No public API change
 (`API-CHANGES-0.3.2.md` has the empty `cargo public-api diff` against 0.3.1).
