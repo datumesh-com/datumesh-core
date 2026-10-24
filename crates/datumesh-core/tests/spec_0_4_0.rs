@@ -19,9 +19,9 @@ use common::*;
 use datumesh_core::json::{self, Value};
 use datumesh_core::lexical::{self, limits};
 use datumesh_core::{
-    canonicalize_descriptor, check_envelope, check_envelope_extras, function_hash, verify, Cell, Descriptor,
-    ErrorCode, Evaluation, Extent, Fault, FunctionDescriptor, Keys, Level, Manifest, MapResolver, Outcome, Receipt,
-    Request, Resolver, Scalar, Slice,
+    canonicalize_descriptor, check_envelope, check_envelope_extras, function_hash, verify, Cell, Descriptor, ErrorCode,
+    Evaluation, Extent, Fault, FunctionDescriptor, Keys, Level, Manifest, MapResolver, Outcome, Receipt, Request,
+    Resolver, Scalar, Slice,
 };
 
 fn vector(id: &str) -> Value {
@@ -124,10 +124,7 @@ fn units_resolve_for_descriptors_with_order() {
     .unwrap();
     assert_eq!(d.resolve_unit(&cell).unwrap().as_deref(), Some("USD/EUR"));
     let desc = json::parse(input(&v)).unwrap();
-    assert_eq!(
-        datumesh_core::resolved_unit_value(&desc, &cell.to_value()).unwrap().as_deref(),
-        Some("USD/EUR")
-    );
+    assert_eq!(datumesh_core::resolved_unit_value(&desc, &cell.to_value()).unwrap().as_deref(), Some("USD/EUR"));
 }
 
 #[test]
@@ -399,7 +396,8 @@ fn envelope_faults_are_accepted_and_exposed() {
 #[test]
 fn error_envelopes_may_carry_the_new_codes() {
     let req = Request::new(&"0".repeat(64), None).unwrap();
-    for (code, want) in [("E_SLICE_MEMBER", ErrorCode::SliceMember), ("E_INPUT_SUPERSEDED", ErrorCode::InputSuperseded)] {
+    for (code, want) in [("E_SLICE_MEMBER", ErrorCode::SliceMember), ("E_INPUT_SUPERSEDED", ErrorCode::InputSuperseded)]
+    {
         let body = format!(r#"{{"error":"{code}","outcome":"error"}}"#);
         let env = check_envelope(500, body.as_bytes(), &Keys::new(), &req).unwrap();
         assert_eq!(env.error, Some(want));

@@ -301,7 +301,10 @@ fn descriptor_value(
     Value::Object(vec![
         (
             "code".into(),
-            Value::Object(vec![("body".into(), Value::String(body.into())), ("lang".into(), Value::String(lang.into()))]),
+            Value::Object(vec![
+                ("body".into(), Value::String(body.into())),
+                ("lang".into(), Value::String(lang.into())),
+            ]),
         ),
         ("inputs".into(), Value::Array(inputs.iter().map(|s| Value::String(s.clone())).collect())),
         ("signature".into(), sig_v),
@@ -569,7 +572,10 @@ pub(crate) fn descriptor_canonical(v: &Value) -> Result<FunctionDescriptor> {
             let mut sorted = names.clone();
             sorted.sort_unstable();
             sorted.dedup();
-            if sorted.len() != names.len() || names.len() != decls.len() || !names.iter().all(|n| decls.contains_key(*n)) {
+            if sorted.len() != names.len()
+                || names.len() != decls.len()
+                || !names.iter().all(|n| decls.contains_key(*n))
+            {
                 return err(ErrorCode::CanonSet, "$.signature.order", "order lists every argument exactly once");
             }
             Some(names.iter().map(|n| n.to_string()).collect())

@@ -95,11 +95,12 @@
 //! stored cells. Computed cells (`convert`, language `expr`) are not evaluable, so receipts
 //! of them end at `E_EVAL_UNAVAILABLE`. A panic in the resolver propagates to the caller.
 //!
-//! The fixtures come from the specification's vectors (revision `spec-0.3.0`; the files
-//! used are unchanged since `spec-0.2.1`), in canonical form, plus receipts signed for the
-//! kit with the vectors' seeds (feature `sign`): a second
-//! `fx_rate` cell (EUR/CHF) with versions at two times, and a `convert` receipt whose first
-//! input is not loaded. They are embedded in the crate (`src/testkit/data.rs`), generated and
+//! The fixtures come from the specification's vectors (revision `spec-0.4.0`; the files of
+//! the 0.3.3 fixtures are unchanged since `spec-0.2.1`, the slice fixtures are the
+//! slice-lineage receipt vectors of `spec-0.4.0`), in canonical form, plus receipts signed
+//! for the kit with the vectors' seeds (feature `sign`): a second `fx_rate` cell (EUR/CHF)
+//! with versions at two times, a `convert` receipt whose first input is not loaded, and two
+//! receipts citing a slice whose manifest, or one of whose members, is not loaded. They are embedded in the crate (`src/testkit/data.rs`), generated and
 //! checked against `spec/` by the crate's test `tests/testkit_data.rs`.
 
 use std::borrow::Cow;
@@ -462,7 +463,7 @@ impl Kit {
     pub fn check(&self, resolver: &dyn Resolver) -> Result<(), Report> {
         self.setup_ok()?;
         let mut failures = Vec::new();
-        let mut checks: Vec<fn(&Kit, &dyn Resolver) -> Result<(), Report>> =
+        let mut checks: Vec<Check> =
             vec![Kit::check_lazy_calls, Kit::check_unavailable, Kit::check_bytes, Kit::check_asof];
         if self.slices {
             checks.push(Kit::check_slices);
@@ -533,7 +534,11 @@ impl Kit {
                     for e in &lineage {
                         let form = crate::lexical::check_input_entry(e, "").is_ok();
                         let backed = r.inputs().contains(e)
-                            || if e.starts_with("slice:") { resolver.manifest(e).is_some() } else { resolver.receipt(e).is_some() };
+                            || if e.starts_with("slice:") {
+                                resolver.manifest(e).is_some()
+                            } else {
+                                resolver.receipt(e).is_some()
+                            };
                         if !form || !backed {
                             f.push(case.name, format!("lineage entry {} is not an entry the resolver backs", shown(e)));
                         }
@@ -547,7 +552,10 @@ impl Kit {
             for _ in 0..2 {
                 match resolver.manifest(e) {
                     Some(b) if *b == **bytes => {}
-                    Some(b) => f.push("bytes", format!("manifest {e}: {} bytes differ from the {} loaded", b.len(), bytes.len())),
+                    Some(b) => f.push(
+                        "bytes",
+                        format!("manifest {e}: {} bytes differ from the {} loaded", b.len(), bytes.len()),
+                    ),
                     None => f.push("bytes", format!("manifest {e}: None, but it was loaded")),
                 }
             }
@@ -896,6 +904,9 @@ fn load_slices(sf: &mut SliceFixtures, setup: &mut Vec<String>) -> Vec<Case> {
     cases
 }
 
+/// One of the kit's checks.
+type Check = fn(&Kit, &dyn Resolver) -> Result<(), Report>;
+
 /// How a case should end.
 #[derive(Clone, Copy, Debug)]
 enum Want {
@@ -946,9 +957,9 @@ fn expected_calls_with(r: &Receipt, out: &VerifyResult, members: &[(String, Vec<
             };
             calls.extend(r.inputs()[..i].iter().flat_map(|e| entry_calls(e, members, None)));
             let e = &r.inputs()[i];
-            let member = rest[e.len()..].strip_prefix(".members.").and_then(|h| {
-                members.iter().find(|(x, _)| x == e).and_then(|(_, ms)| ms.iter().position(|m| m == h))
-            });
+            let member = rest[e.len()..]
+                .strip_prefix(".members.")
+                .and_then(|h| members.iter().find(|(x, _)| x == e).and_then(|(_, ms)| ms.iter().position(|m| m == h)));
             calls.extend(entry_calls(e, members, Some(member.map_or(0, |k| k + 1))));
         }
         // 7.5's last check: tx against the latest input tx.
