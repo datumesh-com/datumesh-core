@@ -1,8 +1,10 @@
 //! The fixtures of the resolver test kit (feature `testkit`) are generated, not written by
-//! hand: this test rebuilds `src/testkit/data.rs` from the spec-0.3.0 vectors in `spec/` and,
-//! for the receipts the vectors lack (a cell with several versions over time, a receipt whose
-//! first input is missing), from the vectors' seeds with feature `sign`. It fails when the
-//! file differs; `DATUMESH_TESTKIT_WRITE=1` rewrites it instead.
+//! hand: this test rebuilds `src/testkit/data.rs` from the vectors in `spec/` and, for the
+//! receipts the vectors lack (a cell with several versions over time, a receipt whose first
+//! input is missing, receipts whose manifest or member is missing), from the vectors' seeds
+//! with feature `sign`. It fails when the file differs; `DATUMESH_TESTKIT_WRITE=1` rewrites it
+//! instead. The 0.3.3 fixtures come from vector files unchanged since spec-0.2.1; the slice
+//! fixtures (0.3.4) from the slice-lineage receipt vectors of spec-0.4.0.
 //!
 //! Every embedded receipt and descriptor is canonical (JCS), so a resolver that
 //! canonicalises what it is given still returns the bytes loaded. The probes (receipts the
@@ -16,7 +18,7 @@ use std::fmt::Write as _;
 use common::*;
 use datumesh_core::json::{self, Value};
 use datumesh_core::testkit::Kit;
-use datumesh_core::{function_hash, Cell, Receipt, ReceiptBuilder, Scalar, SigningKey, Type};
+use datumesh_core::{function_hash, Cell, Manifest, Receipt, ReceiptBuilder, Scalar, SigningKey, Type};
 
 fn vector(id: &str) -> Value {
     let (group, _) = id.split_once('/').unwrap();
@@ -48,6 +50,125 @@ struct Data {
     descriptors: Vec<(String, String)>,
     receipts: Vec<(String, String, String)>,
     probes: Vec<(String, String, String)>,
+    slices: SliceData,
+}
+
+/// The slice fixtures: key documents (host, JCS), descriptors (source, JCS), receipts loaded
+/// (name or `member`, source, JCS), manifests (source, JCS) and probes (name, source, JCS).
+#[derive(Default)]
+struct SliceData {
+    key_documents: Vec<(String, String)>,
+    descriptors: Vec<(String, String)>,
+    receipts: Vec<(String, String, String)>,
+    manifests: Vec<(String, String)>,
+    probes: Vec<(String, String, String)>,
+}
+
+/// The slice-lineage receipt vectors the kit loads, by case name.
+const SLICE_CASES: [(&str, &str); 5] = [
+    ("slice-weighted-mean", "receipt/slice-weighted-mean"),
+    ("slice-mixed-inputs", "receipt/slice-mixed-inputs"),
+    ("slice-version", "receipt/slice-version"),
+    ("slice-empty", "receipt/slice-empty"),
+    ("slice-computed-members", "receipt/slice-computed-members"),
+];
+
+fn slices() -> SliceData {
+    let mut d = SliceData::default();
+    let mut hosts = std::collections::BTreeMap::new();
+    let mut seen = std::collections::BTreeSet::new();
+    for (name, id) in SLICE_CASES {
+        let v = vector(id);
+        let rc = v.get("recompute").unwrap();
+        let r = Receipt::from_json(str_of(&v, "input").as_bytes()).unwrap();
+        let desc = String::from_utf8(rc.get("descriptor").unwrap().to_jcs()).unwrap();
+        assert_eq!(function_hash(desc.as_bytes()).unwrap(), r.cell().fn_hash);
+        if seen.insert(desc.clone()) {
+            d.descriptors.push((format!("{id} recompute.descriptor"), desc));
+        }
+        let text = jcs(str_of(&v, "input"));
+        seen.insert(text.clone());
+        d.receipts.push((name.to_string(), id.to_string(), text));
+        let mut signers = vec![r.signer_host().to_string()];
+        for (_, t) in rc.get("inputs").and_then(Value::as_object).unwrap() {
+            let text = jcs(t.as_str().unwrap());
+            signers.push(Receipt::from_json(text.as_bytes()).unwrap().signer_host().to_string());
+            if seen.insert(text.clone()) {
+                d.receipts.push(("member".to_string(), format!("{id} recompute.inputs"), text));
+            }
+        }
+        for (_, t) in rc.get("manifests").and_then(Value::as_object).unwrap() {
+            let text = jcs(t.as_str().unwrap());
+            if seen.insert(text.clone()) {
+                d.manifests.push((format!("{id} recompute.manifests"), text));
+            }
+        }
+        for h in signers {
+            let body = v.get("keys").and_then(|k| k.get(&h)).and_then(|e| e.get("https")).unwrap();
+            let doc = jcs(str_of(body, "body"));
+            assert_eq!(hosts.insert(h.clone(), doc.clone()).unwrap_or(doc.clone()), doc, "{h}: one key document");
+        }
+    }
+    d.key_documents = hosts.into_iter().collect();
+    // The members each entry names must all be loaded, except in the probes below.
+    let loaded = |h: &str| d.receipts.iter().any(|(_, _, t)| Receipt::from_json(t.as_bytes()).unwrap().hash() == h);
+    for (_, t) in &d.manifests {
+        let m = Manifest::from_json(t.as_bytes()).unwrap();
+        assert!(m.members().iter().all(|h| loaded(h)), "{}", m.entry());
+    }
+    // Probes, signed with the mesh's seed: slice-weighted-mean with its weight entry replaced
+    // by one whose manifest is not loaded (the weights less one), and by one whose manifest is
+    // loaded but names a member that is not (the weights plus 64 f's).
+    let v = vector("receipt/slice-weighted-mean");
+    let mesh = seed(&v);
+    let base = Receipt::from_json(str_of(&v, "input").as_bytes()).unwrap();
+    let weights = d
+        .manifests
+        .iter()
+        .map(|(_, t)| Manifest::from_json(t.as_bytes()).unwrap())
+        .find(|m| base.inputs().contains(&m.entry()) && m.slice().function_name().ends_with("/weight"))
+        .unwrap();
+    let less = Manifest::new(weights.slice().clone(), weights.members()[1..].to_vec()).unwrap();
+    let mut more = weights.members().to_vec();
+    more.push("f".repeat(64));
+    let more = Manifest::new(weights.slice().clone(), more).unwrap();
+    assert!(!loaded(&"f".repeat(64)));
+    let with_entry = |e: String| {
+        let mut inputs: Vec<String> = base.inputs().iter().filter(|i| **i != weights.entry()).cloned().collect();
+        inputs.push(e);
+        inputs.sort();
+        let r = ReceiptBuilder::new()
+            .cell(base.cell().clone())
+            .value(base.value().clone())
+            .valid(base.valid().clone())
+            .asof(base.asof())
+            .tx(base.tx())
+            .issued(base.issued())
+            .publisher(base.publisher())
+            .signer_host(base.signer_host())
+            .inputs(inputs)
+            .licence(base.licence())
+            .summary(base.summary())
+            .sign(&mesh)
+            .unwrap();
+        receipt_json(&r)
+    };
+    d.manifests.push(("generated: the weights of slice-weighted-mean and a member not loaded".into(), {
+        String::from_utf8(more.canonical()).unwrap()
+    }));
+    d.probes = vec![
+        (
+            "slice-manifest-missing".into(),
+            "generated: slice-weighted-mean citing a manifest that is not loaded".into(),
+            with_entry(less.entry()),
+        ),
+        (
+            "slice-member-missing".into(),
+            "generated: slice-weighted-mean citing a manifest with a member that is not loaded".into(),
+            with_entry(more.entry()),
+        ),
+    ];
+    d
 }
 
 fn generate() -> Data {
@@ -167,7 +288,7 @@ fn generate() -> Data {
         as_given("tampered-value", "invalid/receipt-tampered-value"),
         as_given("duplicate-member", "invalid/receipt-duplicate-member"),
     ];
-    Data { key_documents, descriptors, receipts, probes }
+    Data { key_documents, descriptors, receipts, probes, slices: slices() }
 }
 
 fn raw(s: &str) -> String {
@@ -178,8 +299,8 @@ fn raw(s: &str) -> String {
 fn render(d: &Data) -> String {
     let mut out = String::new();
     out.push_str(
-        "//! Fixtures of the resolver test kit. Generated by `tests/testkit_data.rs` from the spec-0.3.0\n\
-         //! vectors and, for the entries marked `generated:`, signed with feature `sign` using the\n\
+        "//! Fixtures of the resolver test kit. Generated by `tests/testkit_data.rs` from the vectors\n\
+         //! of `spec/` and, for the entries marked `generated:`, signed with feature `sign` using the\n\
          //! vectors' seeds. Do not edit; regenerate with\n\
          //! `DATUMESH_TESTKIT_WRITE=1 cargo test -p datumesh-core --features testkit,sign --test testkit_data`.\n\n",
     );
@@ -203,6 +324,27 @@ fn render(d: &Data) -> String {
         "];\n\n/// Receipts verified but never loaded: name, source, text as given.\npub(super) const PROBES: &[(&str, &str, &str)] = &[\n",
     );
     for (n, s, b) in &d.probes {
+        writeln!(out, "    ({n:?}, {s:?}, {}),", raw(b)).unwrap();
+    }
+    let sd = &d.slices;
+    out.push_str("];\n\n/// Slice fixtures (0.3.4): key documents, host and JCS text.\npub(super) const SLICE_KEY_DOCUMENTS: &[(&str, &str)] = &[\n");
+    for (h, b) in &sd.key_documents {
+        writeln!(out, "    ({h:?}, {}),", raw(b)).unwrap();
+    }
+    out.push_str("];\n\n/// Slice fixtures: descriptors, source and JCS text.\npub(super) const SLICE_DESCRIPTORS: &[(&str, &str)] = &[\n");
+    for (s, b) in &sd.descriptors {
+        writeln!(out, "    ({s:?}, {}),", raw(b)).unwrap();
+    }
+    out.push_str("];\n\n/// Slice fixtures: receipts loaded (citing receipts by case name, then `member`), source and JCS text.\npub(super) const SLICE_RECEIPTS: &[(&str, &str, &str)] = &[\n");
+    for (n, s, b) in &sd.receipts {
+        writeln!(out, "    ({n:?}, {s:?}, {}),", raw(b)).unwrap();
+    }
+    out.push_str("];\n\n/// Slice fixtures: manifests loaded, source and JCS text.\npub(super) const MANIFESTS: &[(&str, &str)] = &[\n");
+    for (s, b) in &sd.manifests {
+        writeln!(out, "    ({s:?}, {}),", raw(b)).unwrap();
+    }
+    out.push_str("];\n\n/// Slice fixtures: receipts verified but never loaded, name, source and JCS text.\npub(super) const SLICE_PROBES: &[(&str, &str, &str)] = &[\n");
+    for (n, s, b) in &sd.probes {
         writeln!(out, "    ({n:?}, {s:?}, {}),", raw(b)).unwrap();
     }
     out.push_str("];\n");
@@ -236,4 +378,24 @@ fn kit_fixtures_are_the_embedded_ones() {
         .map(|(_, _, b)| (Receipt::from_json(b.as_bytes()).unwrap().hash().to_string(), b.clone().into_bytes()))
         .collect();
     assert_eq!(fx.receipts, receipts);
+    let sd = &d.slices;
+    let pairs = |v: &[(String, String)]| -> Vec<(String, Vec<u8>)> {
+        v.iter().map(|(h, b)| (h.clone(), b.clone().into_bytes())).collect()
+    };
+    assert_eq!(fx.slices.key_documents, pairs(&sd.key_documents));
+    let descs: Vec<(String, Vec<u8>)> =
+        sd.descriptors.iter().map(|(_, b)| (function_hash(b.as_bytes()).unwrap(), b.clone().into_bytes())).collect();
+    assert_eq!(fx.slices.descriptors, descs);
+    let receipts: Vec<(String, Vec<u8>)> = sd
+        .receipts
+        .iter()
+        .map(|(_, _, b)| (Receipt::from_json(b.as_bytes()).unwrap().hash().to_string(), b.clone().into_bytes()))
+        .collect();
+    assert_eq!(fx.slices.receipts, receipts);
+    let manifests: Vec<(String, Vec<u8>)> = sd
+        .manifests
+        .iter()
+        .map(|(_, b)| (Manifest::from_json(b.as_bytes()).unwrap().entry(), b.clone().into_bytes()))
+        .collect();
+    assert_eq!(fx.slices.manifests, manifests);
 }

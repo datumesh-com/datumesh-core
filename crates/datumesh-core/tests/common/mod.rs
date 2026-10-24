@@ -47,7 +47,9 @@ pub fn keys(v: &Value) -> Keys {
 /// receipt's `cell.fn_hash`, the input receipts under their hashes, and `value` as the
 /// evaluation of the receipt's own cell. A `descriptor` is a JSON value, offered as its JCS
 /// bytes (`null` as `null`, a string as its JSON serialisation); only an absent member is
-/// unavailable. An absent `value` means evaluation is unavailable (spec-0.3.0).
+/// unavailable. An absent `value` means evaluation is unavailable (spec-0.3.0). Since
+/// spec-0.4.0, `manifests` are offered by entry and `lineage` with the value of the receipt's
+/// own cell.
 pub fn resolver(v: &Value) -> Option<MapResolver> {
     let rc = v.get("recompute")?;
     let receipt = json::parse(str_of(v, "input").as_bytes()).ok();
@@ -59,8 +61,14 @@ pub fn resolver(v: &Value) -> Option<MapResolver> {
     for (h, r) in rc.get("inputs").and_then(Value::as_object).unwrap_or(&[]) {
         out.insert_receipt(h.as_str(), r.as_str().unwrap().as_bytes());
     }
+    for (e, m) in rc.get("manifests").and_then(Value::as_object).unwrap_or(&[]) {
+        out.insert_manifest(e.as_str(), m.as_str().unwrap().as_bytes());
+    }
     if let (Some(value), Some(c)) = (rc.get("value"), cell.and_then(|c| Cell::from_value(c).ok())) {
         out.insert_value(c.id(), Scalar::from_json(&value.to_jcs()).unwrap());
+        if let Some(Value::Array(l)) = rc.get("lineage") {
+            out.insert_lineage(c.id(), l.iter().map(|e| e.as_str().unwrap().to_string()).collect::<Vec<_>>());
+        }
     }
     Some(out)
 }

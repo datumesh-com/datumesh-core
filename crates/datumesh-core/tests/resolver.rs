@@ -1,9 +1,12 @@
 //! The `Resolver` contract of `verify` (step 7 of SPEC 10.1):
 //!
 //! * laziness: a recording resolver sees exactly what step 7 needs for each receipt, in order:
-//!   the descriptor once; the input receipts in `inputs` order up to the first that fails;
-//!   `evaluate` once, only after 7.1-7.5 pass; nothing when steps 1-6 fail; never anything
-//!   about receipts below the inputs;
+//!   the descriptor once; the input receipts in `inputs` order up to the first that fails,
+//!   and for a slice entry (spec-0.4.0) its manifest and then its members in order;
+//!   `evaluation` once, only after 7.1-7.5 pass; when the value differs and the evaluation
+//!   has a lineage, the receipts of the lineage's plain entries that `inputs` does not list,
+//!   in lineage order, until one shows a replaced input; nothing when steps 1-6 fail; never
+//!   anything about receipts below the inputs;
 //! * `E_EVAL_UNAVAILABLE`: `evaluate` returning `None` leaves the receipt signature-valid
 //!   (`ok`, level `signed`) with the code set, and step 7.7 still runs.
 
@@ -14,12 +17,15 @@ use std::cell::RefCell;
 
 use common::*;
 use datumesh_core::json::{self, Value};
-use datumesh_core::{verify, Cell, ErrorCode, Keys, Level, MapResolver, Resolver, Scalar, VerifyResult};
+use datumesh_core::{
+    verify, Cell, ErrorCode, Evaluation, Keys, Level, Manifest, MapResolver, Resolver, Scalar, VerifyResult,
+};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Call {
     Descriptor(String),
     Receipt(String),
+    Manifest(String),
     /// Cell id and `asof`.
     Evaluate(String, String),
 }
@@ -51,9 +57,19 @@ impl Resolver for Recording<'_> {
         self.inner.receipt(hash)
     }
 
+    fn manifest(&self, entry: &str) -> Option<Cow<'_, [u8]>> {
+        self.calls.borrow_mut().push(Call::Manifest(entry.to_string()));
+        self.inner.manifest(entry)
+    }
+
     fn evaluate(&self, cell: &Cell, asof: &str) -> Option<Scalar> {
         self.calls.borrow_mut().push(Call::Evaluate(cell.id(), asof.to_string()));
         self.inner.evaluate(cell, asof)
+    }
+
+    fn evaluation(&self, cell: &Cell, asof: &str) -> Option<Evaluation> {
+        self.calls.borrow_mut().push(Call::Evaluate(cell.id(), asof.to_string()));
+        self.inner.evaluation(cell, asof)
     }
 }
 
@@ -64,26 +80,80 @@ struct Parts {
     cell_id: String,
     asof: String,
     inputs: Vec<String>,
+    /// The members of each slice entry, from the manifest the resolver offers (if it parses).
+    members: Vec<(String, Vec<String>)>,
+    /// The lineage's plain entries that `inputs` does not list, in lineage order.
+    lineage_receipts: Vec<String>,
 }
 
 fn parts(receipt: &[u8]) -> Parts {
+    parts_with(receipt, &MapResolver::new(), None)
+}
+
+fn parts_with(receipt: &[u8], res: &MapResolver, lineage: Option<&Value>) -> Parts {
     let v = json::parse(receipt).unwrap();
     let cell = Cell::from_value(v.get("cell").unwrap()).unwrap();
-    let inputs = match v.get("inputs") {
+    let inputs: Vec<String> = match v.get("inputs") {
         Some(Value::Array(a)) => a.iter().map(|x| x.as_str().unwrap().to_string()).collect(),
         _ => panic!("no inputs"),
     };
-    Parts { fn_hash: cell.fn_hash.clone(), cell_id: cell.id(), asof: str_of(&v, "asof").to_string(), inputs }
+    let members = inputs
+        .iter()
+        .filter_map(|e| {
+            let m = Manifest::from_json(&res.manifest(e)?).ok()?;
+            Some((e.clone(), m.members().to_vec()))
+        })
+        .collect();
+    let lineage_receipts = match lineage {
+        Some(Value::Array(l)) => l
+            .iter()
+            .filter_map(Value::as_str)
+            .filter(|e| e.len() == 64 && !inputs.iter().any(|i| i == e))
+            .map(String::from)
+            .collect(),
+        _ => Vec::new(),
+    };
+    Parts {
+        fn_hash: cell.fn_hash.clone(),
+        cell_id: cell.id(),
+        asof: str_of(&v, "asof").to_string(),
+        inputs,
+        members,
+        lineage_receipts,
+    }
+}
+
+/// The calls for input entry `e`: its receipt, or its manifest and then its members.
+fn entry_calls(p: &Parts, e: &str, members: Option<usize>) -> Vec<Call> {
+    if !e.starts_with("slice:") {
+        return vec![Call::Receipt(e.to_string())];
+    }
+    let mut calls = vec![Call::Manifest(e.to_string())];
+    if let Some((_, ms)) = p.members.iter().find(|(x, _)| x == e) {
+        calls.extend(ms.iter().take(members.unwrap_or(ms.len())).map(|h| Call::Receipt(h.clone())));
+    }
+    calls
 }
 
 /// The calls step 7 needs, given where verification ended.
 fn expected(p: &Parts, r: &VerifyResult) -> Vec<Call> {
     let mut calls = vec![Call::Descriptor(p.fn_hash.clone())];
-    let all_inputs = || p.inputs.iter().map(|h| Call::Receipt(h.clone()));
+    let all_inputs = || p.inputs.iter().flat_map(|e| entry_calls(p, e, None));
     let evaluate = Call::Evaluate(p.cell_id.clone(), p.asof.clone());
     match r.code {
         // Recomputation finished (7.6 compared, or could not evaluate), or 7.7 failed after it.
-        None | Some(ErrorCode::ValueMismatch | ErrorCode::EvalUnavailable | ErrorCode::BlobMismatch) => {
+        None | Some(ErrorCode::EvalUnavailable | ErrorCode::BlobMismatch) => {
+            calls.extend(all_inputs());
+            calls.push(evaluate);
+        }
+        // A different value: with a lineage, every receipt it read that `inputs` does not list.
+        Some(ErrorCode::ValueMismatch) => {
+            calls.extend(all_inputs());
+            calls.push(evaluate);
+            calls.extend(p.lineage_receipts.iter().map(|h| Call::Receipt(h.clone())));
+        }
+        // Superseded: those receipts up to the one that shows the replacement (checked below).
+        Some(ErrorCode::InputSuperseded) => {
             calls.extend(all_inputs());
             calls.push(evaluate);
         }
@@ -91,11 +161,22 @@ fn expected(p: &Parts, r: &VerifyResult) -> Vec<Call> {
             calls.extend(all_inputs());
             calls.push(evaluate);
         }
-        // 7.5: up to and including the failing input.
+        // 7.5: up to and including the failing input; in a slice entry, its manifest and
+        // the members up to the failing one (`.members.<hash>`).
         Some(_) if r.path.starts_with("$.inputs.") => {
-            let failing = &r.path["$.inputs.".len()..];
-            let n = p.inputs.iter().position(|h| h == failing).expect("path names a listed input") + 1;
-            calls.extend(all_inputs().take(n));
+            let rest = &r.path["$.inputs.".len()..];
+            let i = p
+                .inputs
+                .iter()
+                .position(|e| rest == e || rest.starts_with(&format!("{e}.")) || rest.starts_with(&format!("{e}[")))
+                .expect("path names a listed input");
+            calls.extend(p.inputs[..i].iter().flat_map(|e| entry_calls(p, e, None)));
+            let e = &p.inputs[i];
+            let tail = &rest[e.len()..];
+            let member = tail.strip_prefix(".members.").and_then(|h| {
+                p.members.iter().find(|(x, _)| x == e).and_then(|(_, ms)| ms.iter().position(|m| m == h))
+            });
+            calls.extend(entry_calls(p, e, Some(member.map_or(0, |k| k + 1))));
         }
         // 7.5's last check: tx against the latest input tx.
         Some(ErrorCode::TimeOrder) if r.path == "$.tx" => calls.extend(all_inputs()),
@@ -105,7 +186,14 @@ fn expected(p: &Parts, r: &VerifyResult) -> Vec<Call> {
     calls
 }
 
-fn check_laziness(id: &str, receipt: &[u8], keys: &Keys, inner: &MapResolver, blob: Option<&[u8]>) -> VerifyResult {
+fn check_laziness(
+    id: &str,
+    receipt: &[u8],
+    keys: &Keys,
+    inner: &MapResolver,
+    blob: Option<&[u8]>,
+    lineage: Option<&Value>,
+) -> VerifyResult {
     let rec = Recording::new(inner);
     let without = verify(receipt, keys, None, None);
     let r = verify(receipt, keys, Some(&rec), blob);
@@ -116,8 +204,18 @@ fn check_laziness(id: &str, receipt: &[u8], keys: &Keys, inner: &MapResolver, bl
         assert_eq!(r.code, without.code, "{id}");
         return r;
     }
-    let p = parts(receipt);
-    assert_eq!(calls, expected(&p, &r), "{id}: calls for result {r:?}");
+    let p = parts_with(receipt, inner, lineage);
+    let want = expected(&p, &r);
+    if r.code == Some(ErrorCode::InputSuperseded) {
+        // The lineage's receipts up to the one that shows the replacement.
+        let (head, tail) = calls.split_at(want.len().min(calls.len()));
+        assert_eq!(head, want, "{id}: calls for result {r:?}");
+        let tail: Vec<Call> = tail.to_vec();
+        let lineage: Vec<Call> = p.lineage_receipts.iter().map(|h| Call::Receipt(h.clone())).collect();
+        assert!(lineage.starts_with(&tail), "{id}: after evaluation {tail:?}, lineage {lineage:?}");
+    } else {
+        assert_eq!(calls, want, "{id}: calls for result {r:?}");
+    }
     r
 }
 
@@ -131,18 +229,19 @@ fn vectors_request_exactly_what_step_7_needs() {
         seen += 1;
         let id = str_of(&v, "id");
         let blob = v.get("blob_hex").and_then(Value::as_str).map(hex);
-        let r = check_laziness(id, str_of(&v, "input").as_bytes(), &keys(&v), &res, blob.as_deref());
+        let lineage = v.get("recompute").and_then(|rc| rc.get("lineage"));
+        let r = check_laziness(id, str_of(&v, "input").as_bytes(), &keys(&v), &res, blob.as_deref(), lineage);
         // And the vector's expected result.
         if matches!(v.get("valid"), Some(Value::Bool(true))) {
             assert!(r.ok, "{id}: {r:?}");
-            // The one code reported with success (spec-0.3.0): E_EVAL_UNAVAILABLE.
+            // The codes reported with success: E_EVAL_UNAVAILABLE, E_INPUT_SUPERSEDED.
             assert_eq!(r.code.map(ErrorCode::as_str), v.get("code").and_then(Value::as_str), "{id}");
             assert_eq!(r.level.map(Level::as_str), Some(str_of(&v, "level")), "{id}");
         } else {
             assert_eq!(r.code.map(ErrorCode::as_str), Some(str_of(&v, "error")), "{id}");
         }
     }
-    assert!(seen >= 13, "only {seen} vectors with recompute");
+    assert!(seen >= 40, "only {seen} vectors with recompute");
 }
 
 #[test]

@@ -1,13 +1,16 @@
 //! The resolver test kit (feature `testkit`): `MapResolver` passes it, a time-aware
 //! reference resolver passes it with `time_aware(true)` under the default answer rule
 //! (`TxAndAsof`), a tx-only resolver passes it with `AnswerRule::TxOnly`, and resolvers that
-//! break one rule fail the check for that rule (and only that one).
+//! break one rule fail the check for that rule (and only that one). Since 0.3.4 the kit also
+//! holds resolvers that supply manifests to the slice fixtures (`Kit::slices`,
+//! `Kit::check_slices`); a resolver loaded the 0.3.3 way passes the kit as before.
 #![cfg(feature = "testkit")]
 
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 
 use datumesh_core::testkit::{AnswerRule, Call, Fixtures, Kit, Recording, Report};
+use datumesh_core::Manifest;
 use datumesh_core::{
     function_hash, json, receipt_hash, verify, Cell, Descriptor, Level, MapResolver, Receipt, Resolver, Scalar,
 };
@@ -387,4 +390,202 @@ fn report_lists_failures_one_per_line() {
     let e = kit.check(&MapResolver::new()).unwrap_err();
     assert_eq!(e.to_string().lines().count(), e.failures().len());
     let _: &dyn std::error::Error = &e;
+}
+
+/// A loader that also loads the slice fixtures: their key documents are for verification
+/// only; descriptors, receipts (the citing receipts and every member) and manifests by entry.
+fn map_with_slices(fx: &Fixtures) -> MapResolver {
+    let mut m = map(fx);
+    for (h, b) in &fx.slices.descriptors {
+        m.insert_descriptor(h.as_str(), b.as_slice());
+    }
+    for (h, b) in &fx.slices.receipts {
+        m.insert_receipt(h.as_str(), b.as_slice());
+    }
+    for (e, b) in &fx.slices.manifests {
+        m.insert_manifest(e.as_str(), b.as_slice());
+    }
+    m
+}
+
+#[test]
+fn a_resolver_with_manifests_passes_the_slice_kit() {
+    ok(Kit::new().slices(true).run(map_with_slices));
+    let kit = Kit::new();
+    let m = map_with_slices(kit.fixtures());
+    ok(kit.check_slices(&m));
+    // The 0.3.3 checks are unchanged by the slice fixtures.
+    ok(kit.check(&m));
+    ok(kit.clone().time_aware(false).slices(true).check(&m));
+}
+
+#[test]
+fn a_resolver_loaded_the_0_3_3_way_passes_unless_slices_are_asked_for() {
+    ok(Kit::new().run(map));
+    ok(Kit::new().slices(false).run(map));
+    assert_eq!(failed_checks(Kit::new().slices(true).run(map)), ["slices"]);
+    let kit = Kit::new();
+    assert_eq!(failed_checks(kit.check_slices(&map(kit.fixtures()))), ["slices"]);
+}
+
+/// A resolver of 0.3.3: no `manifest`, so slice entries are unavailable.
+struct NoManifests(MapResolver);
+
+impl Resolver for NoManifests {
+    fn descriptor(&self, fn_hash: &str) -> Option<Cow<'_, [u8]>> {
+        self.0.descriptor(fn_hash)
+    }
+    fn receipt(&self, hash: &str) -> Option<Cow<'_, [u8]>> {
+        self.0.receipt(hash)
+    }
+    fn evaluate(&self, cell: &Cell, asof: &str) -> Option<Scalar> {
+        self.0.evaluate(cell, asof)
+    }
+}
+
+#[test]
+fn a_resolver_without_manifests_fails_the_slice_check_only() {
+    let kit = Kit::new();
+    let r = NoManifests(map_with_slices(kit.fixtures()));
+    ok(kit.check(&r));
+    assert_eq!(failed_checks(kit.check_slices(&r)), ["slices"]);
+    assert_eq!(failed_checks(kit.clone().slices(true).check(&r)), ["slices"]);
+}
+
+/// Returns each manifest with a trailing newline: the same JSON, other bytes.
+struct ReformattingManifests(MapResolver);
+
+impl Resolver for ReformattingManifests {
+    fn descriptor(&self, fn_hash: &str) -> Option<Cow<'_, [u8]>> {
+        self.0.descriptor(fn_hash)
+    }
+    fn receipt(&self, hash: &str) -> Option<Cow<'_, [u8]>> {
+        self.0.receipt(hash)
+    }
+    fn manifest(&self, entry: &str) -> Option<Cow<'_, [u8]>> {
+        self.0.manifest(entry).map(|b| Cow::Owned([&b[..], b"\n"].concat()))
+    }
+    fn evaluate(&self, cell: &Cell, asof: &str) -> Option<Scalar> {
+        self.0.evaluate(cell, asof)
+    }
+}
+
+#[test]
+fn a_resolver_that_changes_manifest_bytes_fails_the_slice_check() {
+    let kit = Kit::new();
+    let e = kit.check_slices(&ReformattingManifests(map_with_slices(kit.fixtures()))).unwrap_err();
+    assert!(e.failures().iter().all(|f| f.starts_with("slices: ")), "{e}");
+    assert!(e.failures().iter().any(|f| f.contains("bytes")), "{e}");
+}
+
+/// Answers every manifest lookup, known or not.
+struct AnswersEveryManifest(MapResolver, Vec<u8>);
+
+impl Resolver for AnswersEveryManifest {
+    fn descriptor(&self, fn_hash: &str) -> Option<Cow<'_, [u8]>> {
+        self.0.descriptor(fn_hash)
+    }
+    fn receipt(&self, hash: &str) -> Option<Cow<'_, [u8]>> {
+        self.0.receipt(hash)
+    }
+    fn manifest(&self, entry: &str) -> Option<Cow<'_, [u8]>> {
+        Some(self.0.manifest(entry).unwrap_or(Cow::Borrowed(&self.1)))
+    }
+    fn evaluate(&self, cell: &Cell, asof: &str) -> Option<Scalar> {
+        self.0.evaluate(cell, asof)
+    }
+}
+
+#[test]
+fn a_resolver_that_answers_unknown_entries_fails_the_slice_check() {
+    let kit = Kit::new();
+    let fx = kit.fixtures();
+    let r = AnswersEveryManifest(map_with_slices(fx), fx.slices.manifests[0].1.clone());
+    assert_eq!(failed_checks(kit.check_slices(&r)), ["slices"]);
+}
+
+/// Offers a lineage whose entries it cannot back with receipts or manifests.
+struct BadLineage(MapResolver);
+
+impl Resolver for BadLineage {
+    fn descriptor(&self, fn_hash: &str) -> Option<Cow<'_, [u8]>> {
+        self.0.descriptor(fn_hash)
+    }
+    fn receipt(&self, hash: &str) -> Option<Cow<'_, [u8]>> {
+        self.0.receipt(hash)
+    }
+    fn manifest(&self, entry: &str) -> Option<Cow<'_, [u8]>> {
+        self.0.manifest(entry)
+    }
+    fn evaluate(&self, cell: &Cell, asof: &str) -> Option<Scalar> {
+        self.0.evaluate(cell, asof)
+    }
+    fn evaluation(&self, _cell: &Cell, _asof: &str) -> Option<datumesh_core::Evaluation> {
+        let one = Scalar::from_lexical(datumesh_core::Type::Number, "1").unwrap();
+        Some(datumesh_core::Evaluation::with_lineage(one, vec!["0".repeat(64), "not an entry".to_string()]))
+    }
+}
+
+#[test]
+fn a_lineage_must_be_entries_the_resolver_can_back() {
+    let kit = Kit::new();
+    let e = kit.check_slices(&BadLineage(map_with_slices(kit.fixtures()))).unwrap_err();
+    assert!(e.failures().iter().any(|f| f.contains("lineage")), "{e}");
+}
+
+#[test]
+fn slice_fixtures_are_canonical_and_consistent() {
+    let kit = Kit::new();
+    let fx = &kit.fixtures().slices;
+    assert!(fx.descriptors.len() >= 3);
+    assert!(fx.manifests.len() >= 6);
+    let keys = fx.keys();
+    for (h, b) in &fx.descriptors {
+        assert_eq!(json::parse(b).unwrap().to_jcs(), *b, "descriptor {h} is canonical");
+        assert_eq!(&function_hash(b).unwrap(), h);
+    }
+    for (h, b) in &fx.receipts {
+        assert_eq!(json::parse(b).unwrap().to_jcs(), *b, "receipt {h} is canonical");
+        assert_eq!(&receipt_hash(b).unwrap(), h);
+        let r = verify(b, &keys, None, None);
+        assert!(r.ok, "{h}: {r:?}");
+    }
+    for (e, b) in &fx.manifests {
+        assert_eq!(json::parse(b).unwrap().to_jcs(), *b, "manifest {e} is canonical");
+        let m = Manifest::from_json(b).unwrap();
+        assert_eq!(&m.entry(), e);
+        for h in m.members() {
+            if let Some((_, rb)) = fx.receipts.iter().find(|(x, _)| x == h) {
+                assert!(m.slice().contains(&Receipt::from_json(rb).unwrap()), "{e}: {h}");
+            }
+        }
+    }
+    // Some receipt cites more than one slice, one a slice and a plain input, one an empty slice.
+    let citing: Vec<Receipt> = fx
+        .receipts
+        .iter()
+        .map(|(_, b)| Receipt::from_json(b).unwrap())
+        .filter(|r| r.inputs().iter().any(|i| i.starts_with("slice:")))
+        .collect();
+    assert!(citing.iter().any(|r| r.inputs().iter().filter(|i| i.starts_with("slice:")).count() >= 2));
+    assert!(citing.iter().any(|r| r.inputs().iter().any(|i| !i.starts_with("slice:"))));
+    let empty = Manifest::new(Manifest::from_json(&fx.manifests[0].1).unwrap().slice().clone(), vec![]).unwrap();
+    assert!(fx.manifests.iter().any(|(_, b)| Manifest::from_json(b).unwrap().members().is_empty()), "{empty:?}");
+    // The old fixtures do not change.
+    assert_eq!(kit.fixtures().descriptors.len(), 2);
+}
+
+#[test]
+fn recording_records_manifests_and_evaluations() {
+    let kit = Kit::new();
+    let fx = kit.fixtures();
+    let m = map_with_slices(fx);
+    let (e, bytes) = &fx.slices.manifests[0];
+    let rec = Recording::new(&m);
+    assert_eq!(rec.manifest(e).as_deref(), Some(bytes.as_slice()));
+    assert_eq!(rec.take(), [Call::LookupManifest(e.clone())]);
+    let (_, rb) = fx.receipts.first().unwrap();
+    let r = Receipt::from_json(rb).unwrap();
+    let _ = rec.evaluation(r.cell(), r.asof());
+    assert_eq!(rec.take(), [Call::Evaluate { cell_id: r.cell().id(), asof: r.asof().to_string() }]);
 }
