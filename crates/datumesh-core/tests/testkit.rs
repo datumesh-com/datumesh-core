@@ -1,12 +1,13 @@
 //! The resolver test kit (feature `testkit`): `MapResolver` passes it, a time-aware
-//! reference resolver passes it with `time_aware(true)`, and resolvers that break one rule
-//! fail the check for that rule (and only that one).
+//! reference resolver passes it with `time_aware(true)` under the default answer rule
+//! (`TxAndAsof`), a tx-only resolver passes it with `AnswerRule::TxOnly`, and resolvers that
+//! break one rule fail the check for that rule (and only that one).
 #![cfg(feature = "testkit")]
 
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 
-use datumesh_core::testkit::{Call, Fixtures, Kit, Recording, Report};
+use datumesh_core::testkit::{AnswerRule, Call, Fixtures, Kit, Recording, Report};
 use datumesh_core::{
     function_hash, json, receipt_hash, verify, Cell, Descriptor, Level, MapResolver, Receipt, Resolver, Scalar,
 };
@@ -27,8 +28,8 @@ fn map(fx: &Fixtures) -> MapResolver {
     m
 }
 
-/// A time-aware resolver: the value of a cell as of `asof` is that of its latest version
-/// with `tx <= asof` (instants compare as text).
+/// A time-aware resolver under the tx-only rule (`AnswerRule::TxOnly`): the value of a cell
+/// as of `asof` is that of its latest version with `tx <= asof` (instants compare as text).
 #[derive(Default)]
 struct TimeMap {
     inner: MapResolver,
@@ -52,6 +53,40 @@ fn time_map(fx: &Fixtures) -> TimeMap {
     let mut t = TimeMap { inner: map(fx), versions: BTreeMap::new() };
     for v in &fx.versions {
         t.versions.entry(v.cell_id.clone()).or_default().push((v.tx.clone(), v.value.clone()));
+    }
+    t
+}
+
+/// The reference time-aware resolver, under the default rule (`AnswerRule::TxAndAsof`): a
+/// version answers as of `asof` only if its `tx <= asof` and its receipt's `asof <= asof`;
+/// the value is that of the latest version that answers.
+#[derive(Default)]
+struct AsofMap {
+    inner: MapResolver,
+    /// Per cell, in tx order: (tx, the receipt's asof, value).
+    versions: BTreeMap<String, Vec<(String, String, Scalar)>>,
+}
+
+impl Resolver for AsofMap {
+    fn descriptor(&self, fn_hash: &str) -> Option<Cow<'_, [u8]>> {
+        self.inner.descriptor(fn_hash)
+    }
+    fn receipt(&self, hash: &str) -> Option<Cow<'_, [u8]>> {
+        self.inner.receipt(hash)
+    }
+    fn evaluate(&self, cell: &Cell, asof: &str) -> Option<Scalar> {
+        let vs = self.versions.get(&cell.id())?;
+        vs.iter().rfind(|(tx, known, _)| tx.as_str() <= asof && known.as_str() <= asof).map(|(_, _, v)| v.clone())
+    }
+}
+
+fn asof_map(fx: &Fixtures) -> AsofMap {
+    let mut t = AsofMap { inner: map(fx), versions: BTreeMap::new() };
+    for v in &fx.versions {
+        // The receipt's asof: from the receipt the version names.
+        let (_, bytes) = fx.receipts.iter().find(|(h, _)| *h == v.receipt_hash).expect("receipt of a version");
+        let known = Receipt::from_json(bytes).unwrap().asof().to_string();
+        t.versions.entry(v.cell_id.clone()).or_default().push((v.tx.clone(), known, v.value.clone()));
     }
     t
 }
@@ -85,9 +120,98 @@ fn map_resolver_passes_the_kit() {
 }
 
 #[test]
+fn the_default_answer_rule_is_tx_and_asof() {
+    assert_eq!(AnswerRule::default(), AnswerRule::TxAndAsof);
+    assert_ne!(AnswerRule::TxAndAsof, AnswerRule::TxOnly);
+    let a = AnswerRule::TxOnly;
+    let b = a; // Copy
+    assert_eq!(format!("{a:?} {b:?}"), "TxOnly TxOnly");
+    // Kit::new() and Kit::answer_rule(AnswerRule::TxAndAsof) are the same kit.
+    assert_eq!(format!("{:?}", Kit::new()), format!("{:?}", Kit::new().answer_rule(AnswerRule::TxAndAsof)));
+    assert_ne!(format!("{:?}", Kit::new()), format!("{:?}", Kit::new().answer_rule(AnswerRule::TxOnly)));
+}
+
+#[test]
 fn time_aware_resolver_passes_the_time_aware_kit() {
-    ok(Kit::new().time_aware(true).run(time_map));
+    // The reference resolver follows the default rule.
+    ok(Kit::new().time_aware(true).run(asof_map));
+    ok(Kit::new().answer_rule(AnswerRule::TxAndAsof).time_aware(true).run(asof_map));
+    ok(Kit::new().time_aware(true).answer_rule(AnswerRule::TxAndAsof).run(asof_map));
+    ok(Kit::new().run(asof_map));
+    // A tx-only resolver passes when it says so, in either order of the options.
+    ok(Kit::new().time_aware(true).answer_rule(AnswerRule::TxOnly).run(time_map));
+    ok(Kit::new().answer_rule(AnswerRule::TxOnly).time_aware(true).run(time_map));
+    ok(Kit::new().answer_rule(AnswerRule::TxOnly).run(time_map));
     ok(Kit::new().run(time_map));
+}
+
+/// The EUR/CHF cell's first version: tx 2024-03-15T16:00, asof 2024-03-16T09:00.
+const V1_TX: &str = "2024-03-15T16:00:00.000000Z";
+const V1_JUST_BEFORE_ASOF: &str = "2024-03-16T08:59:59.999999Z";
+const V1_ASOF: &str = "2024-03-16T09:00:00.000000Z";
+
+fn eur_chf(fx: &Fixtures) -> (Cell, Scalar) {
+    // The one cell with more than one version; its first.
+    let v = fx.versions.windows(2).find(|w| w[0].cell_id == w[1].cell_id).map(|w| &w[0]).expect("EUR/CHF version 1");
+    assert_eq!(v.tx, V1_TX);
+    let (_, bytes) = fx.receipts.iter().find(|(h, _)| *h == v.receipt_hash).unwrap();
+    let r = Receipt::from_json(bytes).unwrap();
+    assert_eq!(r.asof(), V1_ASOF);
+    (r.cell().clone(), v.value.clone())
+}
+
+#[test]
+fn under_tx_and_asof_version_1_answers_only_from_its_asof() {
+    let kit = Kit::new();
+    let (cell, v1) = eur_chf(kit.fixtures());
+    let r = asof_map(kit.fixtures());
+    assert_eq!(r.evaluate(&cell, V1_TX), None);
+    assert_eq!(r.evaluate(&cell, V1_JUST_BEFORE_ASOF), None);
+    assert_eq!(r.evaluate(&cell, V1_ASOF), Some(v1.clone()));
+    // The tx-only resolver answers v1 over the whole range.
+    let t = time_map(kit.fixtures());
+    assert_eq!(t.evaluate(&cell, V1_TX), Some(v1.clone()));
+    assert_eq!(t.evaluate(&cell, V1_JUST_BEFORE_ASOF), Some(v1.clone()));
+    assert_eq!(t.evaluate(&cell, V1_ASOF), Some(v1));
+}
+
+#[test]
+fn a_tx_only_resolver_fails_tx_and_asof_exactly_before_version_1_is_known() {
+    let kit = Kit::new().time_aware(true);
+    let t = time_map(kit.fixtures());
+    let e = kit.check(&t).expect_err("a tx-only resolver fails the default rule");
+    // Only the asof check, only the direct points from v1's tx up to (not including) its asof.
+    assert_eq!(e.failures().len(), 2, "{e}");
+    assert!(e.failures().iter().all(|l| l.starts_with("asof: timeline: evaluate as of ")), "{e}");
+    assert!(e.failures()[0].contains(V1_TX), "{e}");
+    assert!(e.failures()[1].contains(V1_JUST_BEFORE_ASOF), "{e}");
+    ok(kit.check_lazy_calls(&t));
+    ok(kit.check_unavailable(&t));
+    ok(kit.check_bytes(&t));
+    assert_eq!(failed_checks(kit.check_asof(&t)), ["asof"]);
+    // Named explicitly, the default rule gives the same report.
+    assert_eq!(Kit::new().answer_rule(AnswerRule::TxAndAsof).time_aware(true).check(&t), Err(e));
+    // Not time-aware, the rule is not checked.
+    ok(Kit::new().check(&t));
+}
+
+#[test]
+fn a_tx_and_asof_resolver_fails_tx_only_at_version_1_tx() {
+    let kit = Kit::new().time_aware(true).answer_rule(AnswerRule::TxOnly);
+    let r = asof_map(kit.fixtures());
+    let e = kit.check(&r).expect_err("TxOnly wants v1 at its tx");
+    assert_eq!(e.failures().len(), 1, "{e}");
+    assert!(e.failures()[0].starts_with("asof: timeline: evaluate as of "), "{e}");
+    assert!(e.failures()[0].contains(V1_TX), "{e}");
+}
+
+#[test]
+fn map_resolver_passes_under_either_rule_when_not_time_aware() {
+    for rule in [AnswerRule::TxAndAsof, AnswerRule::TxOnly] {
+        ok(Kit::new().answer_rule(rule).run(map));
+        let kit = Kit::new().answer_rule(rule).time_aware(true);
+        assert_eq!(failed_checks(kit.run(map)), ["asof"], "{rule:?}");
+    }
 }
 
 #[test]
@@ -176,6 +300,14 @@ impl Resolver for FixedTime {
 
 #[test]
 fn a_resolver_that_ignores_asof_fails_the_time_aware_asof_check() {
+    // Under either rule.
+    for rule in [AnswerRule::TxAndAsof, AnswerRule::TxOnly] {
+        let kit = Kit::new().time_aware(true).answer_rule(rule);
+        let r = FixedTime(time_map(kit.fixtures()));
+        assert_eq!(failed_checks(kit.check(&r)), ["asof"], "{rule:?}");
+        let r = FixedTime(time_map(kit.fixtures()));
+        assert_eq!(failed_checks(Kit::new().answer_rule(rule).time_aware(true).check(&r)), ["asof"], "{rule:?}");
+    }
     let kit = Kit::new().time_aware(true);
     let r = FixedTime(time_map(kit.fixtures()));
     assert_eq!(failed_checks(kit.check(&r)), ["asof"]);
