@@ -87,7 +87,7 @@ pub trait Resolver {
     /// in place of [`evaluate`](Resolver::evaluate). When the value differs from the receipt's,
     /// a lineage that replaces one of the receipt's inputs by a later version of the same cell
     /// (whose receipt it offers through [`receipt`](Resolver::receipt)), or one of its slice
-    /// entries by another members hash for the same slice, makes the result
+    /// entries by an item beginning `slice:<the same slice id>:`, makes the result
     /// `E_INPUT_SUPERSEDED` instead of `E_VALUE_MISMATCH`. Provided: `evaluate`'s value, with
     /// no lineage.
     fn evaluation(&self, cell: &Cell, asof: &str) -> Option<Evaluation> {
@@ -525,11 +525,12 @@ fn slice_entry(
     Ok(())
 }
 
-/// 10.1 step 7.6 (`spec-0.4.0`): whether the lineage replaces an entry of the receipt's
-/// `inputs`: an entry the lineage does not list, replaced by a receipt the lineage lists (and
-/// `inputs` does not) of the same cell with a later `tx`, signature-valid and of its hash; or
-/// a slice entry replaced by one for the same slice id with another members hash. Returns a
-/// detail when it does.
+/// 10.1 step 7.6 (`spec-0.4.0`): whether the lineage replaces an entry `e` of the receipt's
+/// `inputs`: the lineage does not list `e` and lists an item `n` that `inputs` does not, where
+/// for a receipt hash `e`, a receipt offered for `n` is signature-valid, hashes to `n`, and is
+/// of the same cell id as `e`'s receipt with a strictly later `tx` (not compared with the
+/// receipt's own); for a slice entry `e`, `n` begins `slice:<e's slice id>:`. The lineage is a
+/// set; other items replace nothing. Returns a detail when it does.
 fn superseded(r: &Receipt, keys: &Keys, res: &dyn Resolver, seen: &Inputs, lineage: &[String]) -> Option<String> {
     let dropped: Vec<&String> = r.inputs().iter().filter(|e| !lineage.contains(e)).collect();
     if dropped.is_empty() {
@@ -539,8 +540,10 @@ fn superseded(r: &Receipt, keys: &Keys, res: &dyn Resolver, seen: &Inputs, linea
         dropped.iter().filter_map(|e| lexical::split_slice_entry(e)).map(|(id, _)| id).collect();
     let dropped_cells: Vec<&(String, String)> = dropped.iter().filter_map(|e| seen.cells.get(*e)).collect();
     for e in lineage.iter().filter(|e| !r.inputs().contains(e)) {
-        if let Some((id, _)) = lexical::split_slice_entry(e) {
-            if dropped_slices.contains(&id) {
+        // A slice entry is replaced by any item that begins `slice:<its slice id>:`; the rest
+        // of the item is not checked and no manifest is read (10.1 step 7.6, 18be70f).
+        if e.starts_with("slice:") {
+            if let Some(id) = dropped_slices.iter().find(|id| e.starts_with(&format!("slice:{id}:"))) {
                 return Some(format!("the evaluation read slice {id} with other members ({e})"));
             }
             continue;

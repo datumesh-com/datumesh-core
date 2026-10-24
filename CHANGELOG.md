@@ -5,7 +5,7 @@ each entry; the public API is frozen from 0.3.0 until 1.0 except for additions.
 
 ## 0.3.4 (unreleased)
 
-Specification: `spec-0.4.0` (`dedd132`); all 432 vectors for verifier libraries pass (the
+Specification: `spec-0.4.0` (`18be70f`, the text of `dedd132` with the libraries' findings settled); all 432 vectors for verifier libraries pass (the
 546 `formula`, `formula-eval`, `excel` and `decimal` vectors are for formula evaluators and
 are skipped). Additions only (`API-CHANGES-0.3.4.md` has the `cargo public-api diff`
 against 0.3.3); a resolver, descriptor user or envelope user written for 0.3.3 compiles and
@@ -35,7 +35,9 @@ behaves as before on everything `spec-0.3.0` had.
 - `verify`: `inputs` entries may be slice entries (step 3); slice entries are checked through
   their manifests and members (step 7.5, `E_SLICE_MEMBER`), and the `tx` rule covers members;
   a different value whose lineage shows a replaced input is `E_INPUT_SUPERSEDED`, success at
-  level `signed`, path `$.inputs` (step 7.6). `verify` calls `Resolver::evaluation` (which by
+  level `signed`, path `$.inputs` (step 7.6), by the rules `18be70f` states: the replaced
+  entry absent from the lineage, a plain replacement of the same cell id with a strictly later
+  `tx`, and a slice entry replaced by any item beginning `slice:<its slice id>:`. `verify` calls `Resolver::evaluation` (which by
   default calls `evaluate`) instead of `evaluate`.
 - `verify`, `function_hash`, `canonicalize_descriptor` and `resolved_unit` accept descriptors
   with `order` and `extent`. `Descriptor::from_json` still refuses them (`E_SCHEMA`, as in

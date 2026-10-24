@@ -12,8 +12,9 @@ RS-27 were found against `bfe5a38` and are resolved by `58eb0d9`. No entry is op
 wording. The submodule was then pinned at the tag `spec-0.2.1` (`710dabb`, text and vectors
 identical to `58eb0d9`); RS-28, from the 0.3.0 API work, was proposed for the next revision.
 For 0.3.2 the submodule is at `3bac3d4` (`spec-0.3.0`), which resolves RS-28. RS-29 and RS-30,
-found while implementing `spec-0.3.0`, are resolved by `dedd132` (`spec-0.4.0`), where the
-submodule is for 0.3.4; RS-31 to RS-37, found while implementing `spec-0.4.0`, are open.
+found while implementing `spec-0.3.0`, are resolved by `dedd132` (`spec-0.4.0`). RS-31 to
+RS-37, found while implementing `spec-0.4.0` at `dedd132`, are resolved by `18be70f`, where the
+submodule is for 0.3.4. No entry is open.
 
 Disclosure: before the submodule existed I ran oracle probes against a copy of
 `/root/datumesh-spec`, a working tree that turned out to contain uncommitted `spec-0.2.1` edits to
@@ -353,7 +354,7 @@ What the new text settles, checked against this crate:
   `E_EVAL_UNAVAILABLE` when the mesh could not evaluate the cell's function", the proposed
   wording. `E_SLICE_MEMBER` and `E_INPUT_SUPERSEDED` are codes of 10.2 and may be carried.
 
-## spec-0.4.0 (`dedd132`), implemented in datumesh-core 0.3.4
+## spec-0.4.0 (`dedd132`, then `18be70f`), implemented in datumesh-core 0.3.4
 
 What the new text settles, checked against this crate: slice entries in step 3 (one form,
 `E_CANON_HEX` otherwise, one entry each for the limit); the manifest and member checks of step
@@ -364,7 +365,9 @@ units `min`, `h`, `d`, `km`, `deg`. RS-29 and RS-30 are resolved (above).
 
 How the oracle was used: 163 probes (`tools/probes/`, kept with the reference tool's results
 in `crates/datumesh-cli/tests/probes-0.4.0.jsonl`) were run through `canon.py check` at
-`dedd132` as a black box, its source unread; `datumesh-cli` agrees on all of them. Where a
+`dedd132` as a black box, its source unread; `datumesh-cli` agrees on all of them. At
+`18be70f` the same 163 give the same results, and 5 more (lineage items that are not entries,
+RS-31 and RS-37) were added: 168, all agreeing. Where a
 probe decided something the text leaves open, the entry below says so.
 
 ### RS-31. 10.1 step 7.6: which lineages show a superseded input
@@ -393,7 +396,18 @@ probe decided something the text leaves open, the entry below says so.
   slice id and another members hash (its manifest is not needed). The lineage is a set; its
   order does not matter." Drop or reword "at a `tx` earlier than the receipt's own" (a
   replacement's `tx` is not compared with the receipt's).
-- **Status.** **Open.**
+- **Status.** **Resolved** by `18be70f`, SPEC 10.1 step 7.6: "The lineage is a set: its order
+  does not matter. `e` is replaced when the lineage does not list `e` and lists an entry `n`
+  that `inputs` does not list, such that: for a receipt hash `e`: a receipt is offered for `n`,
+  it is signature-valid through step 6, it hashes to `n`, it has the same cell id (4.4) as
+  `e`'s receipt, and its `tx` is strictly later than that receipt's `tx`. Its `tx` is not
+  compared with the receipt's `tx` or `asof` ...; for a slice entry `e`: `n` is a string that
+  begins `slice:` followed by `e`'s slice id and `:`. The slice id alone decides: no manifest
+  is read, and the rest of `n` is not checked." The "earlier than the receipt's own" clause is
+  gone. **One change in 0.3.4 follows from it:** at `dedd132` this crate required a replacing
+  slice item to be a well-formed slice entry (`slice:<64 hex>:<64 hex>`); it now accepts any
+  item beginning `slice:<slice id>:`, as the text says and the reference tool does (probe
+  `y-malformed-rest`).
 
 ### RS-32. 4.4 / 11: telling a slice object, a version slice, a range and a manifest apart
 - **Section.** 4.4 (slice objects, range objects), 11 (`slice` vectors: "a slice object (4.4)
@@ -414,7 +428,11 @@ probe decided something the text leaves open, the entry below says so.
   arguments, an object whose members are exactly `hi`, `lo` and `type` is a range object; any
   other object is read as a typed scalar." (11) "A `slice` input with a member `members` is a
   manifest."
-- **Status.** **Open.**
+- **Status.** **Resolved** by `18be70f`, SPEC 4.4 "Which shape": "An object whose members are
+  exactly `cell`, `from` and `to` is a version slice; any other slice object is read as a cell
+  object ... an object whose members are exactly `hi`, `lo` and `type` is a range object, and
+  any other value is read as a typed scalar"; SPEC 11 (`slice`): "It is a manifest exactly when
+  it is an object with a `members` member". As implemented.
 
 ### RS-33. 4.4 / 10.1 step 7.5: check order inside slice objects and manifests
 - **Section.** 4.4 ("A slice object is checked in JCS order like a cell"), 10.1 step 7.5
@@ -434,7 +452,13 @@ probe decided something the text leaves open, the entry below says so.
   without an open or ranged argument is checked after its canonical form." (10.1 step 7.5)
   "...check its structure, the slice object's included (`E_SCHEMA`), then its canonical
   form: ...".
-- **Status.** **Open.**
+- **Status.** **Resolved** by `18be70f`, SPEC 4.4 "Check order" ("Within a range object, `type`
+  comes first ..., then `hi`, then `lo` ... Last, a slice object with no open or ranged
+  argument is `E_SLICE`"; a version slice: "its `cell` is checked whole, ... then for slice
+  markers (`E_SLICE`), then `from` and `to`"), and 10.1 step 7.5 ("check its structure,
+  `{"members", "slice"}` with the slice object's structure included (`E_SCHEMA`); then its
+  canonical form: each member ... (`E_CANON_HEX`), then ascending and unique (`E_CANON_SET`),
+  then at most 1,048,576 (`E_CANON_LIMIT`), then the slice object"). As implemented.
 
 ### RS-34. 7: `order` entries that are not names, and extent range check order
 - **Section.** 7 (`signature.order`, argument `extent`).
@@ -448,7 +472,11 @@ probe decided something the text leaves open, the entry below says so.
   that is not a declared argument is `E_CANON_SET`". (b) "...a range `{"hi", "lo"}`: `hi`, then
   `lo`, each in the type's lexical form and, for numbers, an integer (`E_CANON_NUMBER`), then
   `lo <= hi` (`E_CANON_SET`)."
-- **Status.** **Open.**
+- **Status.** **Resolved** by `18be70f`, SPEC 7: `order` "holds any string that is not a
+  declared argument (whatever its form: `"Date"` and `""` too) is `E_CANON_SET`"; an extent
+  range: "`hi`, then `lo`, each in the type's lexical form (for a number, 3.1's form and then
+  its 128-character limit) and, for a number, an integer (`E_CANON_NUMBER`); then `lo <= hi`
+  (`E_CANON_SET`)". As implemented.
 
 ### RS-35. 10.1 step 7.5: when two members that are one cell are found
 - **Section.** 10.1 step 7.5 (members).
@@ -461,7 +489,10 @@ probe decided something the text leaves open, the entry below says so.
 - **Resolution.** As the oracle.
 - **Proposed wording.** "...check that its cell belongs to the slice ...; for a membership
   slice, that no member before it is the same cell (`E_SLICE_MEMBER`); check its `asof`...".
-- **Status.** **Open.**
+- **Status.** **Resolved** by `18be70f`, SPEC 10.1 step 7.5: "then, for a membership slice, that
+  no member before it in the manifest is the same cell (`E_SLICE_MEMBER`, so of two such
+  members the second is reported, before its `asof`) ... A version slice may list several
+  versions of its one cell." As implemented.
 
 ### RS-36. 4.4 / 10.1 step 7.5: membership for ranges of another type, and open arguments
 - **Section.** 10.1 step 7.5 ("ranged arguments of the range's type and within it, any value
@@ -474,7 +505,10 @@ probe decided something the text leaves open, the entry below says so.
 - **Resolution.** As the oracle; `Slice::contains`.
 - **Proposed wording.** "...ranged arguments of the range's type and within it in that type's
   order (15.13), any value of any type for an open argument".
-- **Status.** **Open** (wording only).
+- **Status.** **Resolved** by `18be70f`, SPEC 10.1 step 7.5: "ranged arguments of the range's
+  type and within it, `lo <= v <= hi` in that type's order (numbers numerically, so `9.5` and
+  `10` are within `[9..10.5]`; ...), and any value, of any type, for an open argument". As
+  implemented.
 
 ### RS-37. 10.1 / 11: a lineage item that is not an `inputs` entry
 - **Section.** 11 (`recompute.lineage`), 10.1 step 7.6.
@@ -485,4 +519,12 @@ probe decided something the text leaves open, the entry below says so.
   lineage holds one.
 - **Proposed wording (10.1 step 7.6).** "An item of the lineage that is not an `inputs` entry
   replaces nothing."
-- **Status.** **Open.**
+- **Status.** **Resolved** by `18be70f`, SPEC 10.1 step 7.6: "An item of the lineage that is not
+  a string replaces nothing, and lineage items are not otherwise validated", and SPEC 11
+  (`lineage`): "Vectors hold only entries; 7.6 says what a verifier does with anything else".
+  A string item that is not an entry is not ignored as such: it replaces a slice entry when it
+  begins `slice:<slice id>:` (RS-31) and is otherwise looked up as a receipt, which cannot hash
+  to it. `Evaluation::lineage` holds strings, so the runner drops non-string vector items, as
+  the text says. The test kit's `check_slices` still reports a resolver whose lineage holds an
+  item that is not an entry: a kit policy (a resolver should report only what it read), not
+  a verification rule.
