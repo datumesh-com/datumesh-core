@@ -1,6 +1,6 @@
-//! Oracle probes for spec-0.4.0: 163 vectors written for this crate (`tools/probes/`) where
+//! Oracle probes for spec-0.4.0: 168 vectors written for this crate (`tools/probes/`) where
 //! the text leaves an order of checks or a corner to decide, each with the result of the
-//! reference tool (`canon.py check`, run as a black box) at dedd132: slice objects and
+//! reference tool (`canon.py check`, run as a black box) at 18be70f: slice objects and
 //! manifests (range objects, version slices, check order), descriptors with `order` and
 //! `extent` (check order, type orders, integer range ends), receipts citing slices (manifest
 //! parsing, membership with numeric ranges and open arguments, duplicate cells, member
@@ -25,6 +25,6 @@ fn every_probe_gives_the_reference_tool_result() {
             failures.push(format!("{id}: {}", problems.join("; ")));
         }
     }
-    assert_eq!(n, 163);
+    assert_eq!(n, 168);
     assert!(failures.is_empty(), "{} of {n} probes differ:\n{}", failures.len(), failures.join("\n"));
 }

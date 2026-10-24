@@ -49,5 +49,5 @@ for f in sorted(os.listdir(src)):
                     v["slice_id"] = v["sha256"]
         else:
             v["valid"] = False; v["error"] = r0.split(" ")[0]
-    v["description"] = f"Probe {name}: result of the reference tool (canon.py check) at dedd132."
+    v["description"] = f"Probe {name}: result of the reference tool (canon.py check) at 18be70f."
     json.dump(v, open(os.path.join(out, f), "w", encoding="utf-8"), ensure_ascii=False, indent=1)

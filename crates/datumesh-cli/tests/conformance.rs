@@ -22,7 +22,7 @@ const FORMULA_KINDS: [&str; 4] = ["formula", "formula-eval", "excel", "decimal"]
 #[test]
 fn every_vector_passes() {
     let files = vectors();
-    assert_eq!(files.len(), 978, "spec-0.4.0 (dedd132) has 978 vectors");
+    assert_eq!(files.len(), 978, "spec-0.4.0 (18be70f) has 978 vectors");
     let mut failures = Vec::new();
     let mut applicable = 0;
     for f in &files {
