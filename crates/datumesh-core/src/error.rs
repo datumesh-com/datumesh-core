@@ -4,13 +4,16 @@ use core::fmt;
 
 macro_rules! codes {
     ($( $(#[$doc:meta])* $variant:ident = $text:literal, )*) => {
-        /// One variant per `E_*` code of SPEC 10.2 (`spec-0.3.0`).
+        /// One variant per `E_*` code of SPEC 10.2 (`spec-0.4.0`).
         /// Non-exhaustive: codes added by later revisions of the specification are additions.
         ///
-        /// The variants are declared in the order of 10.2, except `EvalUnavailable`: it was
-        /// added in 0.3.0, before the specification had it, and stays last so that
-        /// [`ErrorCode::ALL`] and the derived ordering do not change within 0.3.x.
-        /// `spec-0.3.0` lists it between `E_VALUE_MISMATCH` and `E_BLOB_MISMATCH`.
+        /// The variants are declared in the order of 10.2, except the codes added within
+        /// 0.3.x, which follow in the order they were added so that [`ErrorCode::ALL`] and the
+        /// derived ordering only grow: `EvalUnavailable` (0.3.0; 10.2 lists it between
+        /// `E_VALUE_MISMATCH` and `E_BLOB_MISMATCH`), then `SliceMember` and `InputSuperseded`
+        /// (0.3.4, `spec-0.4.0`; 10.2 lists them after `E_INPUT_UNDECLARED` and after
+        /// `E_EVAL_UNAVAILABLE`). The formula codes of SPEC 15.11 are not verification codes
+        /// and have no variant; the envelope's `fault` is a [`crate::Fault`].
         #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
         #[non_exhaustive]
         pub enum ErrorCode {
@@ -18,8 +21,8 @@ macro_rules! codes {
         }
 
         impl ErrorCode {
-            /// Every code, in the order of SPEC 10.2 except `E_EVAL_UNAVAILABLE`, which is last
-            /// (see [`ErrorCode`]).
+            /// Every code, in the order of SPEC 10.2 except the codes added within 0.3.x, which
+            /// come last (see [`ErrorCode`]).
             pub const ALL: &'static [ErrorCode] = &[$(ErrorCode::$variant,)*];
 
             /// The code as written in the specification, e.g. `"E_SIGNATURE"`.
@@ -68,15 +71,17 @@ codes! {
     CanonString = "E_CANON_STRING",
     /// Blob not `<sha256>:<length>:<media type>`.
     CanonBlob = "E_CANON_BLOB",
-    /// Hash, key id or signature not lowercase hex of the right length.
+    /// Hash, key id, signature or slice entry not lowercase hex of the right length.
     CanonHex = "E_CANON_HEX",
     /// Licence neither an SPDX identifier nor an `https://` URL.
     CanonLicence = "E_CANON_LICENCE",
-    /// `inputs` not strictly ascending.
+    /// `inputs`, an extent or manifest members not strictly ascending; `order` not every
+    /// argument exactly once.
     CanonSet = "E_CANON_SET",
     /// A limit from 4.5 exceeded.
     CanonLimit = "E_CANON_LIMIT",
-    /// A slice marker where a single cell is required.
+    /// A slice marker where a single cell is required; a slice object without an open or
+    /// ranged argument.
     Slice = "E_SLICE",
     /// `publisher` differs from `cell.ns`.
     PublisherMismatch = "E_PUBLISHER_MISMATCH",
@@ -110,7 +115,7 @@ codes! {
     InputUnavailable = "E_INPUT_UNAVAILABLE",
     /// An input receipt is not signature-valid.
     InputInvalid = "E_INPUT_INVALID",
-    /// An input receipt is a cell of an undeclared function.
+    /// An input receipt, or a slice, is of a function not in the descriptor's `inputs`.
     InputUndeclared = "E_INPUT_UNDECLARED",
     /// Recomputation gives a different type or value.
     ValueMismatch = "E_VALUE_MISMATCH",
@@ -123,6 +128,14 @@ codes! {
     /// is reported with success at level `signed` (see [`crate::VerifyResult`]). A mesh may
     /// carry it in an `error` envelope (5.5). In 10.2 since `spec-0.3.0` (RS-28).
     EvalUnavailable = "E_EVAL_UNAVAILABLE",
+    /// A member receipt does not belong to its slice, or two members of a membership slice
+    /// are one cell (10.1 step 7.5, `spec-0.4.0`).
+    SliceMember = "E_SLICE_MEMBER",
+    /// Recomputation read a later version of an input cell, or other members of an input
+    /// slice (10.1 step 7.6, `spec-0.4.0`): the receipt is historical, not wrong. Not a
+    /// failure: it is reported with success at level `signed`, at path `$.inputs` (see
+    /// [`crate::VerifyResult`]).
+    InputSuperseded = "E_INPUT_SUPERSEDED",
 }
 
 impl fmt::Display for ErrorCode {

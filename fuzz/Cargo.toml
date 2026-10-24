@@ -45,3 +45,10 @@ path = "fuzz_targets/sign.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "slice"
+path = "fuzz_targets/slice.rs"
+test = false
+doc = false
+bench = false

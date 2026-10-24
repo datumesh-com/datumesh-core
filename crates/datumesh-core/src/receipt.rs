@@ -88,7 +88,8 @@ impl Receipt {
         &self.computed_by
     }
 
-    /// Receipt hashes of the inputs, ascending.
+    /// The inputs entries, ascending: receipt hashes and, since `spec-0.4.0`, slice entries
+    /// `slice:<slice id>:<members hash>` (which sort after every receipt hash).
     pub fn inputs(&self) -> &[String] {
         &self.inputs
     }
@@ -228,7 +229,7 @@ fn canonical(v: &Value) -> Result<Receipt> {
         _ => Vec::new(),
     };
     for (i, h) in inputs.iter().enumerate() {
-        lexical::check_hex(h, 64, &index("$.inputs", i))?;
+        lexical::check_input_entry(h, &index("$.inputs", i))?;
     }
     if inputs.windows(2).any(|w| w[0] >= w[1]) {
         return err(ErrorCode::CanonSet, "$.inputs", "entries must be strictly ascending");

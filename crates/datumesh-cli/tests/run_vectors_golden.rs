@@ -33,8 +33,12 @@ fn run_vectors_output_is_the_expected_output() {
         .stdout(Stdio::piped())
         .spawn()
         .unwrap();
-    child.stdin.take().unwrap().write_all(input.as_bytes()).unwrap();
+    // Written from another thread: the output is read while the input is still being sent,
+    // so neither pipe can fill up and block the other.
+    let mut stdin = child.stdin.take().unwrap();
+    let writer = std::thread::spawn(move || stdin.write_all(input.as_bytes()));
     let out = child.wait_with_output().unwrap();
+    writer.join().unwrap().unwrap();
     assert!(out.status.success());
     let want = std::fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/run-vectors-0.4.0.jsonl")).unwrap();
     let got = String::from_utf8(out.stdout).unwrap();

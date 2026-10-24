@@ -212,6 +212,11 @@ pub(crate) const PHYSICAL: &[&str] = &[
     "km/h",
     "hPa",
     "W/m2",
+    "min",
+    "h",
+    "d",
+    "km",
+    "deg",
 ];
 
 /// Ratios and counts, `units.md` 2.3, in file order.

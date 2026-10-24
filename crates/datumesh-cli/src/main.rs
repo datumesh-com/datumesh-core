@@ -1,10 +1,12 @@
 //! `datumesh-cli`: runs Datumesh test vectors (SPEC 11) against `datumesh-core`.
 //!
 //! * `datumesh-cli run-vectors`: one vector object per stdin line; one result line per input:
-//!   `{"id": …, "error": <code or null>, …outputs}`.
+//!   `{"id": …, "error": <code or null>, …outputs}`. A vector of a kind for formula
+//!   evaluators (`formula`, `formula-eval`, `excel`, `decimal`; SPEC 11) is not run: its line
+//!   is `{"error": null, "id": …, "skipped": <kind>}`.
 //! * `datumesh-cli check [DIR]`: checks every vector file under DIR (default `spec/vectors`),
-//!   prints `FAIL <file>` lines with details and `<passed>/<total> vectors pass`; exits 1 on
-//!   any failure.
+//!   prints `FAIL <file>` lines with details, the number skipped, and
+//!   `<passed>/<total> vectors pass` over the vectors run; exits 1 on any failure.
 
 #![forbid(unsafe_code)]
 

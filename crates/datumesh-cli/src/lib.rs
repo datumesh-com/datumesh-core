@@ -11,8 +11,18 @@ use std::process::ExitCode;
 use datumesh_core::json::{self, Value};
 use datumesh_core::{
     check_envelope, format_uri, https_url, key_id, parse_uri, resolved_unit_value, sha256_hex, verify, Cell, CellRef,
-    Descriptor, Error, ErrorCode, Keys, MapResolver, Receipt, Request, Scalar,
+    Error, ErrorCode, FunctionDescriptor, Keys, Manifest, MapResolver, Receipt, Request, Scalar, Slice,
 };
+
+/// The vector kinds for formula evaluators (SPEC 11, `spec-0.4.0`): a verifier library does
+/// not run them. `run-vectors` answers each with `{"error": null, "id": …, "skipped": <kind>}`
+/// and `check` counts them as skipped.
+pub const SKIPPED_KINDS: [&str; 4] = ["formula", "formula-eval", "excel", "decimal"];
+
+/// Whether a vector is of a kind this runner skips ([`SKIPPED_KINDS`]).
+pub fn skipped(v: &Value) -> bool {
+    SKIPPED_KINDS.contains(&v.get("kind").and_then(Value::as_str).unwrap_or(""))
+}
 
 /// The mesh host URI vectors map to (SPEC 11).
 pub const MESH: &str = "mesh.example";
@@ -46,6 +56,14 @@ pub fn run_vectors() -> ExitCode {
             Ok(vector) => {
                 let id = vector.get("id").cloned().unwrap_or(Value::Null);
                 let mut m = vec![("id".to_string(), id)];
+                if skipped(&vector) {
+                    m.push(("error".into(), Value::Null));
+                    m.push(("skipped".into(), vector.get("kind").cloned().unwrap_or(Value::Null)));
+                    if writeln!(out, "{}", line(&Value::Object(m))).is_err() {
+                        return ExitCode::from(2);
+                    }
+                    continue;
+                }
                 match run(&vector) {
                     Ok(outputs) => {
                         m.push(("error".into(), Value::Null));
@@ -120,7 +138,25 @@ pub fn run(v: &Value) -> Result<Outputs, Error> {
         "scalar" => Ok(canon_outputs(Scalar::from_json(&input_bytes(v)?)?.canonical())),
         "cell" => Ok(canon_outputs(Cell::from_json(&input_bytes(v)?)?.canonical())),
         "ref" => Ok(canon_outputs(CellRef::from_json(&input_bytes(v)?)?.canonical())),
-        "function" => Ok(canon_outputs(Descriptor::from_json(&input_bytes(v)?)?.canonical())),
+        "function" => Ok(canon_outputs(FunctionDescriptor::from_json(&input_bytes(v)?)?.canonical())),
+        "slice" => {
+            // SPEC 11: a slice object or a manifest; an object with `members` is a manifest.
+            let input = input_bytes(v)?;
+            let parsed = json::parse(&input)?;
+            if parsed.get("members").is_some() {
+                let m = Manifest::from_value(&parsed)?;
+                let mut out = canon_outputs(m.canonical());
+                out.push(("slice_id".into(), s(m.slice().id())));
+                out.push(("members_hash".into(), s(m.members_hash())));
+                out.push(("entry".into(), s(&m.entry())));
+                Ok(out)
+            } else {
+                let sl = Slice::from_value(&parsed)?;
+                let mut out = canon_outputs(sl.canonical());
+                out.push(("slice_id".into(), s(sl.id())));
+                Ok(out)
+            }
+        }
         "uri" => {
             let uri = v.get("input").and_then(Value::as_str).ok_or_else(|| vector_error("no input"))?;
             let sig = v.get("signature").cloned().unwrap_or(Value::Null);
@@ -214,8 +250,15 @@ fn run_receipt(v: &Value) -> Result<Outputs, Error> {
             for (h, r) in rc.get("inputs").and_then(Value::as_object).unwrap_or(&[]) {
                 m.insert_receipt(h.as_str(), r.as_str().unwrap_or("").as_bytes());
             }
+            // spec-0.4.0: manifests by entry, and the lineage reported with the value.
+            for (e, t) in rc.get("manifests").and_then(Value::as_object).unwrap_or(&[]) {
+                m.insert_manifest(e.as_str(), t.as_str().unwrap_or("").as_bytes());
+            }
             if let (Some(value), Some(c)) = (value, cell.as_ref().and_then(|c| Cell::from_value(c).ok())) {
                 m.insert_value(c.id(), value);
+                if let Some(Value::Array(l)) = rc.get("lineage") {
+                    m.insert_lineage(c.id(), l.iter().filter_map(Value::as_str));
+                }
             }
             Some(m)
         }
@@ -237,7 +280,8 @@ fn run_receipt(v: &Value) -> Result<Outputs, Error> {
     if blob.is_some() {
         out.push(("blob_checked".into(), Value::Bool(result.blob_checked)));
     }
-    // The one code reported with success (E_EVAL_UNAVAILABLE); absent otherwise.
+    // The codes reported with success (E_EVAL_UNAVAILABLE, E_INPUT_SUPERSEDED); absent
+    // otherwise.
     if let Some(code) = result.code {
         out.push(("code".into(), s(code.as_str())));
     }
@@ -253,6 +297,7 @@ fn expected_outputs(kind: &str) -> &'static [&'static str] {
         "receipt" => &["canonical", "sha256", "sig", "level", "blob_checked", "code"],
         "unit" => &["unit"],
         "envelope" => &["outcome", "trust", "receipt_hash"],
+        "slice" => &["canonical", "sha256", "slice_id", "members_hash", "entry"],
         _ => &[],
     }
 }
@@ -306,7 +351,8 @@ pub fn collect(dir: &Path, out: &mut Vec<PathBuf>) -> std::io::Result<()> {
     Ok(())
 }
 
-/// Checks every vector file under `dir`, printing a report like the reference tool's `check`.
+/// Checks every vector file under `dir`, printing a report like the reference tool's `check`;
+/// vectors of the [`SKIPPED_KINDS`] are counted apart.
 pub fn check(dir: &Path) -> ExitCode {
     let mut files = Vec::new();
     if let Err(e) = collect(dir, &mut files) {
@@ -315,11 +361,16 @@ pub fn check(dir: &Path) -> ExitCode {
     }
     files.sort();
     let mut passed = 0;
+    let mut skips = 0;
     for f in &files {
         let problems = match std::fs::read(f)
             .map_err(|e| e.to_string())
             .and_then(|b| json::parse(&b).map_err(|e| e.to_string()))
         {
+            Ok(v) if skipped(&v) => {
+                skips += 1;
+                continue;
+            }
             Ok(v) => check_vector(&v),
             Err(e) => vec![format!("unreadable vector: {e}")],
         };
@@ -332,8 +383,12 @@ pub fn check(dir: &Path) -> ExitCode {
             }
         }
     }
-    println!("{passed}/{} vectors pass", files.len());
-    if passed == files.len() {
+    let total = files.len() - skips;
+    if skips > 0 {
+        println!("{skips} vectors skipped (kinds for formula evaluators: {})", SKIPPED_KINDS.join(", "));
+    }
+    println!("{passed}/{total} vectors pass");
+    if passed == total {
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE

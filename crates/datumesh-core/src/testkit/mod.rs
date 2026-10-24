@@ -67,6 +67,30 @@
 //! declared time-aware. Receipts recompute through `verify` the same under both, since each
 //! receipt is verified as of its own `asof`.
 //!
+//! **Slices** (0.3.4, `spec-0.4.0`). [`Fixtures::slices`] holds receipts whose lineage cites
+//! slices: their descriptors, the citing receipts and every member, the manifests by entry,
+//! and the key documents of their signers. A resolver that supplies manifests
+//! ([`Resolver::manifest`]) loads them too and is held to
+//! [`check_slices`](Kit::check_slices), which [`Kit::check`] and [`Kit::run`] include once
+//! [`Kit::slices`] says so:
+//!
+//! * each citing receipt passes step 7.5 through the resolver: it recomputes, or ends at
+//!   `E_EVAL_UNAVAILABLE`; never another code;
+//! * `verify` asks, per slice entry, for the manifest once and then for each member in the
+//!   manifest's order; a probe whose manifest is not loaded stops at it, and one whose
+//!   manifest names a member that is not loaded stops at that member, both
+//!   `E_INPUT_UNAVAILABLE`;
+//! * `manifest` returns exactly the bytes loaded, and `None` for entries it was not given
+//!   (unknown, malformed, a receipt hash);
+//! * a lineage the resolver reports with an evaluation ([`Resolver::evaluation`]) is made of
+//!   `inputs` entries, and those the receipt does not list are ones the resolver can back with
+//!   a receipt or a manifest.
+//!
+//! The descriptors of the slice fixtures are formula descriptors with `signature.order`:
+//! read them with [`crate::FunctionDescriptor`] (a [`Descriptor`] refuses `order`). A resolver
+//! loaded as for 0.3.3, without the slice fixtures, passes the kit as before as long as
+//! `slices` is not set.
+//!
 //! The kit expects a resolver to evaluate only what the fixtures give it: the versions of
 //! stored cells. Computed cells (`convert`, language `expr`) are not evaluable, so receipts
 //! of them end at `E_EVAL_UNAVAILABLE`. A panic in the resolver propagates to the caller.
@@ -87,7 +111,8 @@ use crate::error::ErrorCode;
 use crate::keys::Keys;
 use crate::model::{Cell, Scalar};
 use crate::receipt::Receipt;
-use crate::verify::{verify, Level, Resolver, VerifyResult};
+use crate::slice::Manifest;
+use crate::verify::{verify, Evaluation, Level, Resolver, VerifyResult};
 
 #[rustfmt::skip]
 mod data;
@@ -112,16 +137,46 @@ pub struct Fixtures {
     pub receipts: Vec<(String, Vec<u8>)>,
     /// Versions of stored cells, one per loaded receipt of a `stored` function.
     pub versions: Vec<Version>,
+    /// The slice fixtures (0.3.4), for a resolver that supplies manifests ([`Kit::slices`]).
+    pub slices: SliceFixtures,
 }
 
 impl Fixtures {
     /// The key documents as [`Keys`].
     pub fn keys(&self) -> Keys {
-        let mut keys = Keys::new();
-        for (host, body) in &self.key_documents {
-            keys.insert_response(host, 200, Some(body));
-        }
-        keys
+        keys_of(&self.key_documents)
+    }
+}
+
+fn keys_of(docs: &[(String, Vec<u8>)]) -> Keys {
+    let mut keys = Keys::new();
+    for (host, body) in docs {
+        keys.insert_response(host, 200, Some(body));
+    }
+    keys
+}
+
+/// The slice fixtures (0.3.4, `spec-0.4.0`): receipts whose lineage cites slices, from the
+/// specification's slice-lineage receipt vectors. All bytes are canonical JSON (JCS). A
+/// resolver that supplies manifests loads the descriptors under their `fn_hash`, the receipts
+/// (citing receipts and members) under their hashes and the manifests under their entries.
+#[non_exhaustive]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SliceFixtures {
+    /// Key documents of the signers, by host (verification only; see [`SliceFixtures::keys`]).
+    pub key_documents: Vec<(String, Vec<u8>)>,
+    /// Descriptors: function hash, descriptor JSON text (formula descriptors with `order`).
+    pub descriptors: Vec<(String, Vec<u8>)>,
+    /// Receipts: receipt hash, receipt JSON text; the citing receipts and every member.
+    pub receipts: Vec<(String, Vec<u8>)>,
+    /// Manifests: slice entry (`slice:<slice id>:<members hash>`), manifest JSON text.
+    pub manifests: Vec<(String, Vec<u8>)>,
+}
+
+impl SliceFixtures {
+    /// The key documents as [`Keys`].
+    pub fn keys(&self) -> Keys {
+        keys_of(&self.key_documents)
     }
 }
 
@@ -170,7 +225,10 @@ pub enum Call {
     LookupDescriptor(String),
     /// [`Resolver::receipt`] with this receipt hash.
     LookupReceipt(String),
-    /// [`Resolver::evaluate`] with the cell of this id, as of this time.
+    /// [`Resolver::manifest`] with this slice entry (0.3.4).
+    LookupManifest(String),
+    /// [`Resolver::evaluate`] or [`Resolver::evaluation`] with the cell of this id, as of this
+    /// time.
     Evaluate {
         /// [`Cell::id`] of the cell.
         cell_id: String,
@@ -223,11 +281,21 @@ impl Resolver for Recording<'_> {
         self.calls.borrow_mut().push(Call::Evaluate { cell_id: cell.id(), asof: asof.to_string() });
         self.inner.evaluate(cell, asof)
     }
+
+    fn manifest(&self, entry: &str) -> Option<Cow<'_, [u8]>> {
+        self.calls.borrow_mut().push(Call::LookupManifest(entry.to_string()));
+        self.inner.manifest(entry)
+    }
+
+    fn evaluation(&self, cell: &Cell, asof: &str) -> Option<Evaluation> {
+        self.calls.borrow_mut().push(Call::Evaluate { cell_id: cell.id(), asof: asof.to_string() });
+        self.inner.evaluation(cell, asof)
+    }
 }
 
 /// The failures of a check, one line each: `<check>: <case>: <what>`, where `<check>` is
-/// `lazy_calls`, `unavailable`, `bytes`, `asof` (or `setup`, if the embedded fixtures could
-/// not be read, which the crate's tests rule out).
+/// `lazy_calls`, `unavailable`, `bytes`, `asof`, `slices` (or `setup`, if the embedded
+/// fixtures could not be read, which the crate's tests rule out).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Report {
     failures: Vec<String>,
@@ -266,8 +334,10 @@ struct Case {
 pub struct Kit {
     fixtures: Fixtures,
     cases: Vec<Case>,
+    slice_cases: Vec<Case>,
     time_aware: bool,
     answer_rule: AnswerRule,
+    slices: bool,
     setup: Vec<String>,
 }
 
@@ -285,8 +355,18 @@ impl Kit {
     /// (`TxAndAsof`) for when it is declared time-aware.
     pub fn new() -> Kit {
         let mut setup = Vec::new();
-        let mut fx =
-            Fixtures { key_documents: Vec::new(), descriptors: Vec::new(), receipts: Vec::new(), versions: Vec::new() };
+        let mut fx = Fixtures {
+            key_documents: Vec::new(),
+            descriptors: Vec::new(),
+            receipts: Vec::new(),
+            versions: Vec::new(),
+            slices: SliceFixtures {
+                key_documents: Vec::new(),
+                descriptors: Vec::new(),
+                receipts: Vec::new(),
+                manifests: Vec::new(),
+            },
+        };
         let mut cases = Vec::new();
         for (host, text) in data::KEY_DOCUMENTS {
             fx.key_documents.push((host.to_string(), text.as_bytes().to_vec()));
@@ -326,7 +406,25 @@ impl Kit {
         cases.push(Case { name: NOT_JSON, bytes: b"{".to_vec() });
         // Versions in tx order per cell (a stable sort keeps the cells' order otherwise).
         fx.versions.sort_by(|a, b| a.cell_id.cmp(&b.cell_id).then_with(|| a.tx.cmp(&b.tx)));
-        Kit { fixtures: fx, cases, time_aware: false, answer_rule: AnswerRule::default(), setup }
+        let slice_cases = load_slices(&mut fx.slices, &mut setup);
+        Kit {
+            fixtures: fx,
+            cases,
+            slice_cases,
+            time_aware: false,
+            answer_rule: AnswerRule::default(),
+            slices: false,
+            setup,
+        }
+    }
+
+    /// Declares whether the resolver under test supplies manifests ([`Resolver::manifest`])
+    /// and is loaded with [`Fixtures::slices`]: then [`check`](Kit::check) and
+    /// [`run`](Kit::run) include [`check_slices`](Kit::check_slices). Off by default, so a
+    /// resolver loaded as for 0.3.3 passes as before.
+    pub fn slices(mut self, yes: bool) -> Kit {
+        self.slices = yes;
+        self
     }
 
     /// Declares whether the resolver under test is time-aware: whether
@@ -364,12 +462,150 @@ impl Kit {
     pub fn check(&self, resolver: &dyn Resolver) -> Result<(), Report> {
         self.setup_ok()?;
         let mut failures = Vec::new();
-        for check in [Kit::check_lazy_calls, Kit::check_unavailable, Kit::check_bytes, Kit::check_asof] {
+        let mut checks: Vec<fn(&Kit, &dyn Resolver) -> Result<(), Report>> =
+            vec![Kit::check_lazy_calls, Kit::check_unavailable, Kit::check_bytes, Kit::check_asof];
+        if self.slices {
+            checks.push(Kit::check_slices);
+        }
+        for check in checks {
             if let Err(mut r) = check(self, resolver) {
                 failures.append(&mut r.failures);
             }
         }
         report(failures)
+    }
+
+    /// Receipts citing slices verify through the resolver's manifests and members, which it
+    /// returns exactly as loaded; see the [module](self) documentation. A resolver that
+    /// supplies no manifests fails it.
+    pub fn check_slices(&self, resolver: &dyn Resolver) -> Result<(), Report> {
+        self.setup_ok()?;
+        let mut f = Failures::new("slices");
+        let keys = self.fixtures.slices.keys();
+        let members = self.manifest_members();
+        for case in &self.slice_cases {
+            let Ok(r) = Receipt::from_json(&case.bytes) else {
+                f.push(case.name, "the fixture does not parse".to_string());
+                continue;
+            };
+            let rec = Recording::new(resolver);
+            let out = verify(&case.bytes, &keys, Some(&rec), None);
+            let calls = rec.take();
+            let want_code = match case.name {
+                "slice-manifest-missing" | "slice-member-missing" => Some(ErrorCode::InputUnavailable),
+                _ => None,
+            };
+            match want_code {
+                Some(code) => {
+                    if out.ok || out.code != Some(code) {
+                        f.push(case.name, format!("want {code}, got ok={} code={:?} {}", out.ok, out.code, out.path));
+                    }
+                }
+                None => {
+                    let passed = out.ok
+                        && ((out.level == Some(Level::Recomputed) && out.code.is_none())
+                            || (out.level == Some(Level::Signed) && out.code == Some(ErrorCode::EvalUnavailable)));
+                    if !passed {
+                        f.push(
+                            case.name,
+                            format!(
+                                "want step 7.5 to pass (recomputed, or E_EVAL_UNAVAILABLE), got ok={} level={:?} code={:?} {} {}",
+                                out.ok, out.level, out.code, out.path, out.detail
+                            ),
+                        );
+                    }
+                }
+            }
+            let want = expected_calls_with(&r, &out, &members);
+            let same = match out.code {
+                // After a different value, the lineage's receipts may follow.
+                Some(ErrorCode::ValueMismatch | ErrorCode::InputSuperseded) => {
+                    calls.starts_with(&want) && calls[want.len()..].iter().all(|c| matches!(c, Call::LookupReceipt(_)))
+                }
+                _ => calls == want,
+            };
+            if !same {
+                f.push(case.name, format!("asked {calls:?}, step 7 needs {want:?} (result {:?})", out.code));
+            }
+            // A lineage, if reported, is made of entries the resolver can back.
+            if want_code.is_none() {
+                if let Some(Evaluation { lineage: Some(lineage), .. }) = resolver.evaluation(r.cell(), r.asof()) {
+                    for e in &lineage {
+                        let form = crate::lexical::check_input_entry(e, "").is_ok();
+                        let backed = r.inputs().contains(e)
+                            || if e.starts_with("slice:") { resolver.manifest(e).is_some() } else { resolver.receipt(e).is_some() };
+                        if !form || !backed {
+                            f.push(case.name, format!("lineage entry {} is not an entry the resolver backs", shown(e)));
+                        }
+                    }
+                }
+            }
+        }
+        // Bytes: manifests (and the slice receipts and descriptors) exactly as loaded.
+        let sf = &self.fixtures.slices;
+        for (e, bytes) in &sf.manifests {
+            for _ in 0..2 {
+                match resolver.manifest(e) {
+                    Some(b) if *b == **bytes => {}
+                    Some(b) => f.push("bytes", format!("manifest {e}: {} bytes differ from the {} loaded", b.len(), bytes.len())),
+                    None => f.push("bytes", format!("manifest {e}: None, but it was loaded")),
+                }
+            }
+        }
+        for (h, bytes) in &sf.receipts {
+            match resolver.receipt(h) {
+                Some(b) if *b == **bytes => {}
+                Some(_) => f.push("bytes", format!("receipt {h}: the bytes differ from those loaded")),
+                None => f.push("bytes", format!("receipt {h}: None, but it was loaded")),
+            }
+        }
+        for (h, bytes) in &sf.descriptors {
+            match resolver.descriptor(h) {
+                Some(b) if *b == **bytes => {}
+                Some(_) => f.push("bytes", format!("descriptor {h}: the bytes differ from those loaded")),
+                None => f.push("bytes", format!("descriptor {h}: None, but it was loaded")),
+            }
+        }
+        // Entries it was not given.
+        let known = sf.manifests.first().map(|(e, _)| e.clone()).unwrap_or_default();
+        let missing: Vec<String> = self
+            .slice_cases
+            .iter()
+            .filter_map(|c| Receipt::from_json(&c.bytes).ok())
+            .flat_map(|r| r.inputs().to_vec())
+            .filter(|e| e.starts_with("slice:") && !sf.manifests.iter().any(|(x, _)| x == e))
+            .collect();
+        let mut probes = vec![
+            format!("slice:{}:{}", "0".repeat(64), "0".repeat(64)),
+            String::new(),
+            "slice:".into(),
+            known.to_uppercase(),
+            format!("{known}0"),
+            format!(" {known}"),
+            known.get(..134).unwrap_or_default().to_string(),
+            known.replacen("slice:", "SLICE:", 1),
+            "' OR '1'='1".into(),
+            "../../etc/passwd".into(),
+            "a".repeat(100_000),
+        ];
+        probes.extend(sf.receipts.first().map(|(h, _)| h.clone()));
+        probes.extend(missing);
+        for p in &probes {
+            if resolver.manifest(p).is_some() {
+                f.push("lookup", format!("manifest({}) is not None", shown(p)));
+            }
+        }
+        f.finish()
+    }
+
+    /// The members of every loaded manifest, by entry.
+    fn manifest_members(&self) -> Vec<(String, Vec<String>)> {
+        self.fixtures
+            .slices
+            .manifests
+            .iter()
+            .filter_map(|(e, b)| Manifest::from_json(b).ok().map(|m| (e.clone(), m.members().to_vec())))
+            .collect()
     }
 
     /// Step 7 asks the resolver only for what it reaches, and nothing when the receipt
@@ -398,7 +634,15 @@ impl Kit {
             match Receipt::from_json(&case.bytes) {
                 Ok(r) => {
                     let want = expected_calls(&r, &out);
-                    if calls != want {
+                    let same = match out.code {
+                        // After a different value, the receipts of a reported lineage follow.
+                        Some(ErrorCode::ValueMismatch | ErrorCode::InputSuperseded) => {
+                            calls.starts_with(&want)
+                                && calls[want.len()..].iter().all(|c| matches!(c, Call::LookupReceipt(_)))
+                        }
+                        _ => calls == want,
+                    };
+                    if !same {
                         f.push(case.name, format!("asked {calls:?}, step 7 needs {want:?} (result {:?})", out.code));
                     }
                 }
@@ -618,6 +862,40 @@ impl Kit {
     }
 }
 
+/// Reads the embedded slice fixtures into `sf`; returns the slice cases (the citing receipts
+/// loaded, then the probes).
+fn load_slices(sf: &mut SliceFixtures, setup: &mut Vec<String>) -> Vec<Case> {
+    let mut cases = Vec::new();
+    for (host, text) in data::SLICE_KEY_DOCUMENTS {
+        sf.key_documents.push((host.to_string(), text.as_bytes().to_vec()));
+    }
+    for (source, text) in data::SLICE_DESCRIPTORS {
+        match crate::descriptor::FunctionDescriptor::from_json(text.as_bytes()) {
+            Ok(d) => sf.descriptors.push((d.hash(), text.as_bytes().to_vec())),
+            Err(e) => setup.push(format!("setup: {source}: {e}")),
+        }
+    }
+    for (name, source, text) in data::SLICE_RECEIPTS {
+        match Receipt::from_json(text.as_bytes()) {
+            Ok(r) => sf.receipts.push((r.hash().to_string(), text.as_bytes().to_vec())),
+            Err(e) => setup.push(format!("setup: {source}: {e}")),
+        }
+        if *name != "member" {
+            cases.push(Case { name, bytes: text.as_bytes().to_vec() });
+        }
+    }
+    for (source, text) in data::MANIFESTS {
+        match Manifest::from_json(text.as_bytes()) {
+            Ok(m) => sf.manifests.push((m.entry(), text.as_bytes().to_vec())),
+            Err(e) => setup.push(format!("setup: {source}: {e}")),
+        }
+    }
+    for (name, _, text) in data::SLICE_PROBES {
+        cases.push(Case { name, bytes: text.as_bytes().to_vec() });
+    }
+    cases
+}
+
 /// How a case should end.
 #[derive(Clone, Copy, Debug)]
 enum Want {
@@ -628,20 +906,50 @@ enum Want {
 
 /// The calls step 7 needs for receipt `r` (which passed steps 1-6), given how it ended.
 fn expected_calls(r: &Receipt, out: &VerifyResult) -> Vec<Call> {
+    expected_calls_with(r, out, &[])
+}
+
+/// The calls for input entry `e`: its receipt, or its manifest then its first `take`
+/// members (all when `None`), as far as `members` knows them.
+fn entry_calls(e: &str, members: &[(String, Vec<String>)], take: Option<usize>) -> Vec<Call> {
+    if !e.starts_with("slice:") {
+        return vec![Call::LookupReceipt(e.to_string())];
+    }
+    let mut calls = vec![Call::LookupManifest(e.to_string())];
+    if let Some((_, ms)) = members.iter().find(|(x, _)| x == e) {
+        calls.extend(ms.iter().take(take.unwrap_or(ms.len())).map(|h| Call::LookupReceipt(h.clone())));
+    }
+    calls
+}
+
+/// [`expected_calls`] with the members of the manifests the resolver was loaded with.
+fn expected_calls_with(r: &Receipt, out: &VerifyResult, members: &[(String, Vec<String>)]) -> Vec<Call> {
     let mut calls = vec![Call::LookupDescriptor(r.cell().fn_hash.clone())];
-    let all_inputs = || r.inputs().iter().map(|h| Call::LookupReceipt(h.clone()));
+    let all_inputs = || r.inputs().iter().flat_map(|e| entry_calls(e, members, None));
     let evaluate = Call::Evaluate { cell_id: r.cell().id(), asof: r.asof().to_string() };
     match out.code {
-        // 7.6 compared, or could not evaluate.
-        None | Some(ErrorCode::ValueMismatch | ErrorCode::EvalUnavailable) => {
+        // 7.6 compared, or could not evaluate (the lineage's receipts may follow a mismatch).
+        None | Some(ErrorCode::ValueMismatch | ErrorCode::EvalUnavailable | ErrorCode::InputSuperseded) => {
             calls.extend(all_inputs());
             calls.push(evaluate);
         }
-        // 7.5: up to and including the failing input.
+        // 7.5: up to and including the failing input; in a slice entry, its manifest and the
+        // members up to the failing one (path `$.inputs.<entry>.members.<hash>`).
         Some(_) if out.path.starts_with("$.inputs.") => {
-            let failing = &out.path["$.inputs.".len()..];
-            let n = r.inputs().iter().position(|h| h == failing).map_or(r.inputs().len(), |i| i + 1);
-            calls.extend(all_inputs().take(n));
+            let rest = &out.path["$.inputs.".len()..];
+            let at = r.inputs().iter().position(|e| {
+                rest == e.as_str() || rest.starts_with(&format!("{e}.")) || rest.starts_with(&format!("{e}["))
+            });
+            let Some(i) = at else {
+                calls.extend(all_inputs());
+                return calls;
+            };
+            calls.extend(r.inputs()[..i].iter().flat_map(|e| entry_calls(e, members, None)));
+            let e = &r.inputs()[i];
+            let member = rest[e.len()..].strip_prefix(".members.").and_then(|h| {
+                members.iter().find(|(x, _)| x == e).and_then(|(_, ms)| ms.iter().position(|m| m == h))
+            });
+            calls.extend(entry_calls(e, members, Some(member.map_or(0, |k| k + 1))));
         }
         // 7.5's last check: tx against the latest input tx.
         Some(ErrorCode::TimeOrder) if out.path == "$.tx" => calls.extend(all_inputs()),

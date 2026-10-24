@@ -36,6 +36,10 @@ pub mod limits {
     pub const INDEX_UNIT: usize = 64;
     /// The largest blob length, 2^53 - 1.
     pub const BLOB_LENGTH: u64 = 9_007_199_254_740_991;
+    /// Values in an argument's extent (7; `spec-0.4.0`).
+    pub const EXTENT: usize = 4096;
+    /// Member receipt hashes in a slice manifest (15.13; `spec-0.4.0`).
+    pub const MEMBERS: usize = 1_048_576;
 }
 
 fn is_lower_digit(c: u8) -> bool {
@@ -185,6 +189,50 @@ pub(crate) fn is_number_grammar(s: &str) -> bool {
         i = b.len();
     }
     i == b.len() && s != "-0"
+}
+
+/// Compares two numbers in canonical form (3.1) numerically.
+pub(crate) fn cmp_numbers(a: &str, b: &str) -> core::cmp::Ordering {
+    use core::cmp::Ordering;
+    let (an, a) = a.strip_prefix('-').map_or((false, a), |x| (true, x));
+    let (bn, b) = b.strip_prefix('-').map_or((false, b), |x| (true, x));
+    // Canonical: no "-0", so a negative number is below every other.
+    let magnitude = || {
+        let (ai, af) = a.split_once('.').unwrap_or((a, ""));
+        let (bi, bf) = b.split_once('.').unwrap_or((b, ""));
+        ai.len().cmp(&bi.len()).then_with(|| ai.cmp(bi)).then_with(|| af.cmp(bf))
+    };
+    match (an, bn) {
+        (false, false) => magnitude(),
+        (true, true) => magnitude().reverse(),
+        (true, false) => Ordering::Less,
+        (false, true) => Ordering::Greater,
+    }
+}
+
+/// Whether a canonical number is an integer.
+pub(crate) fn is_integer(s: &str) -> bool {
+    !s.contains('.')
+}
+
+/// Whether `s` is an `inputs` entry of the slice form `slice:<64 hex>:<64 hex>` (8.1).
+pub(crate) fn split_slice_entry(s: &str) -> Option<(&str, &str)> {
+    let rest = s.strip_prefix("slice:")?;
+    let (id, members) = rest.split_once(':')?;
+    let hex = |h: &str| h.len() == 64 && h.bytes().all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c));
+    (hex(id) && hex(members)).then_some((id, members))
+}
+
+/// An `inputs` entry (8.1, 10.1 step 3): 64 lowercase hex digits, or since `spec-0.4.0` a
+/// slice entry `slice:<slice id>:<members hash>` (135 characters); `E_CANON_HEX` otherwise.
+pub fn check_input_entry(s: &str, path: &str) -> Result<()> {
+    if s.starts_with("slice:") {
+        if split_slice_entry(s).is_none() {
+            return err(ErrorCode::CanonHex, path, format!("not a slice entry slice:<64 hex>:<64 hex>: {s:?}"));
+        }
+        return Ok(());
+    }
+    check_hex(s, 64, path)
 }
 
 /// A number (3.1): `E_CANON_NUMBER`, then `E_CANON_LIMIT`.

@@ -12,8 +12,10 @@
 //! `fetch` feature), keeps global state or logs.
 //!
 //! [`verify`] runs SPEC 10.1. Keys are an input ([`Keys`]); recomputation (step 7) asks a
-//! [`Resolver`] for the descriptor, the input receipts and the evaluated value, lazily
-//! ([`MapResolver`] holds them in maps). Feature `sign` adds `SigningKey` and
+//! [`Resolver`] for the descriptor, the input receipts, the manifests of slice entries and
+//! the evaluation (with its lineage), lazily ([`MapResolver`] holds them in maps). Since
+//! `spec-0.4.0` a receipt's lineage may cite whole slices of cells ([`Slice`], [`Manifest`]),
+//! and descriptors may carry `signature.order` and argument extents ([`FunctionDescriptor`]). Feature `sign` adds `SigningKey` and
 //! `ReceiptBuilder`, which make receipts that verify byte for byte like the specification's.
 //! Feature `fetch` (`fetch_keys`) is deprecated since 0.3.1 and removed at 1.0: fetch key
 //! documents with your own HTTP client and pass the response to [`keys_from_response`].
@@ -49,6 +51,7 @@ mod receipt;
 mod schema;
 #[cfg(feature = "sign")]
 mod sign;
+mod slice;
 #[rustfmt::skip]
 mod tables;
 #[cfg(feature = "testkit")]
@@ -58,9 +61,13 @@ mod verify;
 
 pub use crypto::{key_id, sha256, sha256_hex, verify_ed25519};
 pub use descriptor::{
-    resolve_with, resolved_unit, resolved_unit_value, ArgDecl, Descriptor, RateSide, Returns, Signature, Unit,
+    resolve_with, resolved_unit, resolved_unit_value, ArgDecl, Descriptor, Extent, FunctionDescriptor, RateSide,
+    Returns, Signature, Unit,
 };
-pub use envelope::{check_envelope, Envelope, InvalidRequest, Outcome, Quote, Request, Trust};
+pub use envelope::{
+    check_envelope, check_envelope_extras, Envelope, EnvelopeExtras, Fault, InvalidRequest, Outcome, Quote, Request,
+    Trust,
+};
 pub use error::{Error, ErrorCode, Result};
 // The re-export is not a use: only callers see the deprecation (Rust 1.97 warns here otherwise).
 #[cfg(feature = "fetch")]
@@ -71,8 +78,9 @@ pub use model::{Arg, Args, Cell, CellRef, Scalar, Type};
 pub use receipt::{receipt_hash, receipt_payload, Receipt};
 #[cfg(feature = "sign")]
 pub use sign::{ReceiptBuilder, SigningKey};
+pub use slice::{Manifest, Slice};
 pub use uri::{cell_uri_from_https, format_uri, https_url, parse_uri};
-pub use verify::{verify, Level, MapResolver, Resolver, VerifyResult};
+pub use verify::{verify, Evaluation, Level, MapResolver, Resolver, VerifyResult};
 
 /// Canonical bytes of a typed scalar given as JSON text (4.1, 6.2).
 pub fn canonicalize_scalar(json: &[u8]) -> Result<Vec<u8>> {
@@ -89,9 +97,10 @@ pub fn canonicalize_ref(json: &[u8]) -> Result<Vec<u8>> {
     Ok(CellRef::from_json(json)?.canonical())
 }
 
-/// Canonical bytes of a function descriptor given as JSON text (7, 6.2).
+/// Canonical bytes of a function descriptor given as JSON text (7, 6.2), `order` and
+/// `extent` included (`spec-0.4.0`; see [`FunctionDescriptor`]).
 pub fn canonicalize_descriptor(json: &[u8]) -> Result<Vec<u8>> {
-    Ok(Descriptor::from_json(json)?.canonical())
+    Ok(FunctionDescriptor::from_json(json)?.canonical())
 }
 
 /// The signed payload of a receipt given as JSON text: canonical bytes without `sig` (8.3).
@@ -105,7 +114,13 @@ pub fn cell_hash(json: &[u8]) -> Result<String> {
     Ok(Cell::from_json(json)?.id())
 }
 
-/// The function hash of a descriptor given as JSON text (7, 6.3).
+/// The function hash of a descriptor given as JSON text (7, 6.3), `order` and `extent`
+/// included.
 pub fn function_hash(json: &[u8]) -> Result<String> {
-    Ok(Descriptor::from_json(json)?.hash())
+    Ok(FunctionDescriptor::from_json(json)?.hash())
+}
+
+/// Canonical bytes of a slice object given as JSON text (4.4, 6.2; `spec-0.4.0`).
+pub fn canonicalize_slice(json: &[u8]) -> Result<Vec<u8>> {
+    Ok(Slice::from_json(json)?.canonical())
 }

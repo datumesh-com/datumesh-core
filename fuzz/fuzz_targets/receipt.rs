@@ -36,8 +36,9 @@ fuzz_target!(|data: &[u8]| {
     });
     let blob = (mode & 2 == 2).then_some(&receipt[..receipt.len().min(17)]);
     let r = verify(receipt, &keys, resolver.as_ref().map(|m| m as &dyn Resolver), blob);
-    // Invariants: ok iff no code, except E_EVAL_UNAVAILABLE (ok, signed); a level only when ok.
-    let eval_unavailable = r.code == Some(ErrorCode::EvalUnavailable);
+    // Invariants: ok iff no code, except E_EVAL_UNAVAILABLE and E_INPUT_SUPERSEDED (ok,
+    // signed); a level only when ok.
+    let eval_unavailable = matches!(r.code, Some(ErrorCode::EvalUnavailable | ErrorCode::InputSuperseded));
     assert_eq!(r.ok, r.code.is_none() || eval_unavailable);
     assert_eq!(r.ok, r.level.is_some());
     if eval_unavailable {

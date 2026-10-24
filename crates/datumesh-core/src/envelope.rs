@@ -17,7 +17,8 @@ pub enum Outcome {
     /// 200: as `Ok`, except that the mesh cannot assert the receipt is current; it serves the
     /// last receipt it knows.
     Stale,
-    /// 404: no receipt for this cell.
+    /// 404: no receipt for this cell. With a `fault` (`spec-0.4.0`, see
+    /// [`check_envelope_extras`]), the cell is a computed cell whose evaluation faulted.
     NotCovered,
     /// 403: the requester may not receive this cell.
     Unlicensed,
@@ -65,7 +66,8 @@ impl Outcome {
         match self {
             Outcome::Ok => (&["receipt", "trust"], &["superseded_by", "reason"]),
             Outcome::Stale => (&["receipt", "trust", "age_seconds"], &["superseded_by", "reason"]),
-            Outcome::NotCovered | Outcome::Unlicensed => (&[], &[]),
+            Outcome::NotCovered => (&[], &["fault"]),
+            Outcome::Unlicensed => (&[], &[]),
             Outcome::PaymentRequired => (&["quote"], &[]),
             Outcome::RateLimited => (&["retry_after_seconds"], &[]),
             Outcome::BadRequest | Outcome::Error => (&["error"], &[]),
@@ -105,6 +107,66 @@ impl Trust {
             Trust::Unverified => "unverified",
         }
     }
+}
+
+/// A formula evaluation fault (SPEC 5.5, 15.11; `spec-0.4.0`): the optional `fault` member
+/// of a `not_covered` envelope. The cell has no value, deterministically; this is not
+/// missing data. These are formula codes, not verification codes, so they are not
+/// [`ErrorCode`]s.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[non_exhaustive]
+pub enum Fault {
+    /// `E_FORMULA_DIV_ZERO`
+    DivZero,
+    /// `E_FORMULA_DOMAIN`
+    Domain,
+    /// `E_FORMULA_RANGE`
+    Range,
+    /// `E_FORMULA_EMPTY`
+    Empty,
+    /// `E_FORMULA_ABSENT`
+    Absent,
+    /// `E_FORMULA_FUTURE`
+    Future,
+}
+
+impl Fault {
+    /// Every fault an envelope may carry, in the order of SPEC 5.5.
+    pub const ALL: &'static [Fault] =
+        &[Fault::DivZero, Fault::Domain, Fault::Range, Fault::Empty, Fault::Absent, Fault::Future];
+
+    /// The code as written, e.g. `"E_FORMULA_DIV_ZERO"`.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Fault::DivZero => "E_FORMULA_DIV_ZERO",
+            Fault::Domain => "E_FORMULA_DOMAIN",
+            Fault::Range => "E_FORMULA_RANGE",
+            Fault::Empty => "E_FORMULA_EMPTY",
+            Fault::Absent => "E_FORMULA_ABSENT",
+            Fault::Future => "E_FORMULA_FUTURE",
+        }
+    }
+
+    /// Looks a fault up by its code; `None` for any other text (a budget, a cycle or too deep
+    /// an evaluation is not a fault but the mesh's failure, SPEC 5.5).
+    pub fn from_code(text: &str) -> Option<Fault> {
+        Fault::ALL.iter().copied().find(|f| f.as_str() == text)
+    }
+}
+
+impl core::fmt::Display for Fault {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// The members of a checked envelope that [`Envelope`] has no field for, because they were
+/// added to SPEC 5.5 after it was frozen (0.3.0): see [`check_envelope_extras`].
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub struct EnvelopeExtras {
+    /// The formula evaluation fault of a `not_covered` envelope (`spec-0.4.0`).
+    pub fault: Option<Fault>,
 }
 
 /// A price quote (`payment_required`).
@@ -224,8 +286,21 @@ fn integer_member(v: &Value, path: &str) -> Result<u64> {
 
 /// Checks a response envelope (5.5) in the order of its procedure: strict JSON, members,
 /// HTTP status, the receipt through step 6 of 10.1, the binding to `request`, then `trust`
-/// and `superseded_by`. Never touches the network.
+/// and `superseded_by`. Never touches the network. A `not_covered` envelope's `fault`
+/// (`spec-0.4.0`) is checked and accepted; [`check_envelope_extras`] also returns it.
 pub fn check_envelope(status: u16, body: &[u8], keys: &Keys, request: &Request) -> Result<Envelope> {
+    check_envelope_extras(status, body, keys, request).map(|(env, _)| env)
+}
+
+/// [`check_envelope`], also returning the members [`Envelope`] has no field for
+/// ([`EnvelopeExtras`]): the `fault` of a `not_covered` envelope, one of the six formula
+/// evaluation faults of SPEC 5.5 (`E_ENVELOPE` for any other value, or on another outcome).
+pub fn check_envelope_extras(
+    status: u16,
+    body: &[u8],
+    keys: &Keys,
+    request: &Request,
+) -> Result<(Envelope, EnvelopeExtras)> {
     // 1.
     let v = json::parse(body)?;
     // 2.
@@ -305,11 +380,18 @@ pub fn check_envelope(status: u16, body: &[u8], keys: &Keys, request: &Request) 
         }
         env.error = code;
     }
+    let mut extras = EnvelopeExtras::default();
+    if let Some(f) = schema::opt(m, "fault") {
+        let Some(fault) = f.as_str().and_then(Fault::from_code) else {
+            return env_err("$.fault", format!("{f:?} is not a formula evaluation fault"));
+        };
+        extras.fault = Some(fault);
+    }
     // 3.
     if !outcome.status_ok(status) {
         return env_err("$.outcome", format!("status {status} does not match outcome {}", outcome.as_str()));
     }
-    let Some(rv) = receipt_v else { return Ok(env) };
+    let Some(rv) = receipt_v else { return Ok((env, extras)) };
     // 4.
     let r = crate::verify::signature_valid_value(rv, keys).map_err(|(e, _)| {
         let inner = e.path().strip_prefix('$').unwrap_or(e.path());
@@ -338,7 +420,7 @@ pub fn check_envelope(status: u16, body: &[u8], keys: &Keys, request: &Request) 
         return env_err("$.superseded_by", "a receipt cannot supersede itself");
     }
     env.receipt = Some(r);
-    Ok(env)
+    Ok((env, extras))
 }
 
 fn quote(q: &Value) -> Result<Quote> {

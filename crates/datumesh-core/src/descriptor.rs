@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use crate::error::{err, index, member, ErrorCode, Result};
 use crate::json::{self, jcs_sorted, Value};
 use crate::lexical::{self, limits};
-use crate::model::{Arg, Cell, Scalar, Type};
+use crate::model::{self, Arg, Cell, Scalar, Type};
 use crate::schema;
 
 /// One side of a rate: a currency code or an argument reference.
@@ -108,7 +108,45 @@ impl Signature {
     }
 }
 
-/// A function descriptor (7): signature, code and declared inputs.
+/// The cells a slice over an argument enumerates (7, `spec-0.4.0`): the argument
+/// declaration's optional `extent`.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum Extent {
+    /// Lexical values of the argument's type, strictly ascending in the type's order
+    /// (numbers numerically, dates and instants chronologically, strings by code point); at
+    /// most 4096.
+    Values(Vec<String>),
+    /// For a `date` or `number` argument, every date (or every integer) from `lo` to `hi`,
+    /// inclusive; number ends are integers, and `lo <= hi`.
+    Range {
+        /// The first value.
+        lo: String,
+        /// The last value.
+        hi: String,
+    },
+}
+
+impl Extent {
+    /// The JSON form: an array of strings, or `{"hi", "lo"}`.
+    pub fn to_value(&self) -> Value {
+        match self {
+            Extent::Values(v) => Value::Array(v.iter().map(|s| Value::String(s.clone())).collect()),
+            Extent::Range { lo, hi } => {
+                Value::Object(vec![("hi".into(), Value::String(hi.clone())), ("lo".into(), Value::String(lo.clone()))])
+            }
+        }
+    }
+}
+
+/// A function descriptor (7) in its `spec-0.3.0` form: signature, code and declared inputs.
+///
+/// It has no place for the members `spec-0.4.0` adds, `signature.order` and argument
+/// `extent`, so [`from_json`](Self::from_json) and [`from_value`](Self::from_value) refuse a
+/// descriptor that has them with `E_SCHEMA`, as in 0.3.3, rather than return a value whose
+/// [`canonical`](Self::canonical) bytes and [`hash`](Self::hash) would drop them. Read any
+/// descriptor with [`FunctionDescriptor`], which has both; [`FunctionDescriptor::to_descriptor`]
+/// gives this form when neither is present.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Descriptor {
     /// `code.lang`, e.g. `stored`.
@@ -122,31 +160,25 @@ pub struct Descriptor {
 }
 
 impl Descriptor {
-    /// Parses a descriptor from JSON text: strict JSON, structure, canonical form (7).
+    /// Parses a descriptor from JSON text: strict JSON, structure, canonical form (7). A
+    /// descriptor with `signature.order` or an argument `extent` is `E_SCHEMA` here (see
+    /// [`Descriptor`]); use [`FunctionDescriptor::from_json`].
     pub fn from_json(bytes: &[u8]) -> Result<Descriptor> {
         Descriptor::from_value(&json::parse(bytes)?)
     }
 
-    /// Checks a parsed JSON value as a descriptor.
+    /// Checks a parsed JSON value as a descriptor; `E_SCHEMA` for `order` or `extent`, as
+    /// [`from_json`](Self::from_json).
     pub fn from_value(v: &Value) -> Result<Descriptor> {
         json::check_value_depth(v)?;
-        descriptor_structure(v)?;
-        descriptor_canonical(v)
+        descriptor_structure(v, false)?;
+        let f = descriptor_canonical(v)?;
+        Ok(Descriptor { lang: f.lang, body: f.body, inputs: f.inputs, signature: f.signature })
     }
 
     /// The JSON form.
     pub fn to_value(&self) -> Value {
-        Value::Object(vec![
-            (
-                "code".into(),
-                Value::Object(vec![
-                    ("body".into(), Value::String(self.body.clone())),
-                    ("lang".into(), Value::String(self.lang.clone())),
-                ]),
-            ),
-            ("inputs".into(), Value::Array(self.inputs.iter().map(|s| Value::String(s.clone())).collect())),
-            ("signature".into(), self.signature.to_value()),
-        ])
+        descriptor_value(&self.lang, &self.body, &self.inputs, &self.signature, None, &BTreeMap::new())
     }
 
     /// The canonical bytes (6.2).
@@ -158,6 +190,122 @@ impl Descriptor {
     pub fn hash(&self) -> String {
         crate::crypto::sha256_hex(&self.canonical())
     }
+}
+
+/// A function descriptor (7) with the optional members of `spec-0.4.0`: `signature.order`
+/// and argument `extent`. Absent, it is the [`Descriptor`] of `spec-0.3.0`, byte for byte and
+/// hash for hash ([`From<Descriptor>`], [`to_descriptor`](Self::to_descriptor)).
+///
+/// The fields are public to read; a value changed by hand is not checked again until it is
+/// parsed: `FunctionDescriptor::from_value(&d.to_value())` checks it.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub struct FunctionDescriptor {
+    /// `code.lang`, e.g. `stored` or `formula`.
+    pub lang: String,
+    /// `code.body`, opaque to this crate.
+    pub body: String,
+    /// Fully qualified names of the functions this one may read, ascending.
+    pub inputs: Vec<String>,
+    /// The signature's arguments and return; its `order` and the arguments' extents are
+    /// [`order`](Self::order) and [`extents`](Self::extents).
+    pub signature: Signature,
+    /// `signature.order`: every argument name exactly once, the order positional arguments
+    /// bind in (15.5); `None` when absent.
+    pub order: Option<Vec<String>>,
+    /// The arguments' `extent` members, by argument name; empty when none has one.
+    pub extents: BTreeMap<String, Extent>,
+}
+
+impl FunctionDescriptor {
+    /// Parses a descriptor from JSON text: strict JSON, structure, canonical form (7), with
+    /// `order` and `extent` and their checks (`E_SCHEMA` for their shapes, `E_CANON_SET`,
+    /// `E_CANON_TYPE`, `E_CANON_NUMBER`, `E_CANON_LIMIT` and the lexical codes otherwise).
+    pub fn from_json(bytes: &[u8]) -> Result<FunctionDescriptor> {
+        FunctionDescriptor::from_value(&json::parse(bytes)?)
+    }
+
+    /// Checks a parsed JSON value as a descriptor.
+    pub fn from_value(v: &Value) -> Result<FunctionDescriptor> {
+        json::check_value_depth(v)?;
+        descriptor_structure(v, true)?;
+        descriptor_canonical(v)
+    }
+
+    /// The JSON form.
+    pub fn to_value(&self) -> Value {
+        descriptor_value(&self.lang, &self.body, &self.inputs, &self.signature, self.order.as_deref(), &self.extents)
+    }
+
+    /// The canonical bytes (6.2).
+    pub fn canonical(&self) -> Vec<u8> {
+        self.to_value().to_jcs()
+    }
+
+    /// The function hash: SHA-256 of the canonical bytes, lowercase hex.
+    pub fn hash(&self) -> String {
+        crate::crypto::sha256_hex(&self.canonical())
+    }
+
+    /// The `spec-0.3.0` form, when there is no `order` and no `extent`.
+    pub fn to_descriptor(&self) -> Option<Descriptor> {
+        (self.order.is_none() && self.extents.is_empty()).then(|| Descriptor {
+            lang: self.lang.clone(),
+            body: self.body.clone(),
+            inputs: self.inputs.clone(),
+            signature: self.signature.clone(),
+        })
+    }
+
+    /// The unit of `cell`'s value (7.1, `units.md` 3), as [`resolve_with`] does for a
+    /// [`Descriptor`]; `None` when the function does not return a number.
+    pub fn resolve_unit(&self, cell: &Cell) -> Result<Option<String>> {
+        resolve_returns(&self.signature.returns, cell)
+    }
+}
+
+impl From<Descriptor> for FunctionDescriptor {
+    fn from(d: Descriptor) -> FunctionDescriptor {
+        FunctionDescriptor {
+            lang: d.lang,
+            body: d.body,
+            inputs: d.inputs,
+            signature: d.signature,
+            order: None,
+            extents: BTreeMap::new(),
+        }
+    }
+}
+
+fn descriptor_value(
+    lang: &str,
+    body: &str,
+    inputs: &[String],
+    sig: &Signature,
+    order: Option<&[String]>,
+    extents: &BTreeMap<String, Extent>,
+) -> Value {
+    let mut sig_v = sig.to_value();
+    if let Value::Object(m) = &mut sig_v {
+        if let Some((_, Value::Object(args))) = m.iter_mut().find(|(k, _)| k == "args") {
+            for (name, decl) in args.iter_mut() {
+                if let (Some(e), Value::Object(dm)) = (extents.get(name), decl) {
+                    dm.push(("extent".into(), e.to_value()));
+                }
+            }
+        }
+        if let Some(o) = order {
+            m.push(("order".into(), Value::Array(o.iter().map(|s| Value::String(s.clone())).collect())));
+        }
+    }
+    Value::Object(vec![
+        (
+            "code".into(),
+            Value::Object(vec![("body".into(), Value::String(body.into())), ("lang".into(), Value::String(lang.into()))]),
+        ),
+        ("inputs".into(), Value::Array(inputs.iter().map(|s| Value::String(s.clone())).collect())),
+        ("signature".into(), sig_v),
+    ])
 }
 
 fn unit_shape(v: &Value, path: &str) -> Result<()> {
@@ -189,7 +337,31 @@ fn unit_shape(v: &Value, path: &str) -> Result<()> {
     }
 }
 
-pub(crate) fn descriptor_structure(v: &Value) -> Result<()> {
+/// The shape of an argument's `extent` (`E_SCHEMA`): an array of strings, or `{"hi", "lo"}`
+/// with string ends.
+fn extent_shape(v: &Value, path: &str) -> Result<()> {
+    match v {
+        Value::Array(items) => {
+            if !items.iter().all(|i| matches!(i, Value::String(_))) {
+                return err(ErrorCode::Schema, path, "an extent array holds lexical values as strings");
+            }
+            Ok(())
+        }
+        Value::Object(m) => {
+            schema::exact(m, &["hi", "lo"], &[], path, ErrorCode::Schema)?;
+            schema::string(m, "hi", path)?;
+            schema::string(m, "lo", path)?;
+            Ok(())
+        }
+        _ => err(ErrorCode::Schema, path, "an extent is an array of values or a range {\"hi\", \"lo\"}"),
+    }
+}
+
+/// The structure of a descriptor (`E_SCHEMA`), over the whole descriptor; with `extended`,
+/// the members of `spec-0.4.0` (`signature.order`, argument `extent`) are allowed.
+pub(crate) fn descriptor_structure(v: &Value, extended: bool) -> Result<()> {
+    let new_sig: &[&str] = if extended { &["order"] } else { &[] };
+    let new_arg: &[&str] = if extended { &["extent", "unit"] } else { &["unit"] };
     let m = schema::object(v, "$")?;
     schema::exact(m, &["code", "inputs", "signature"], &[], "$", ErrorCode::Schema)?;
     let code = schema::object(schema::get(m, "code"), "$.code")?;
@@ -201,18 +373,26 @@ pub(crate) fn descriptor_structure(v: &Value) -> Result<()> {
         _ => return err(ErrorCode::Schema, "$.inputs", "inputs must be an array of strings"),
     }
     let sig = schema::object(schema::get(m, "signature"), "$.signature")?;
-    schema::exact(sig, &["args", "returns"], &[], "$.signature", ErrorCode::Schema)?;
+    schema::exact(sig, &["args", "returns"], new_sig, "$.signature", ErrorCode::Schema)?;
     let args = schema::object(schema::get(sig, "args"), "$.signature.args")?;
     for (k, d) in jcs_sorted(args) {
         let p = member("$.signature.args", k);
         let dm = schema::object(d, &p)?;
-        schema::exact(dm, &["type", "valid"], &["unit"], &p, ErrorCode::Schema)?;
+        schema::exact(dm, &["type", "valid"], new_arg, &p, ErrorCode::Schema)?;
+        if let Some(e) = schema::opt(dm, "extent") {
+            extent_shape(e, &member(&p, "extent"))?;
+        }
         schema::string(dm, "type", &p)?;
         if !matches!(schema::get(dm, "valid"), Value::Bool(_)) {
             return err(ErrorCode::Schema, &member(&p, "valid"), "valid must be a boolean");
         }
         if let Some(u) = schema::opt(dm, "unit") {
             unit_shape(u, &member(&p, "unit"))?;
+        }
+    }
+    if let Some(o) = schema::opt(sig, "order") {
+        if !matches!(o, Value::Array(items) if items.iter().all(|i| matches!(i, Value::String(_)))) {
+            return err(ErrorCode::Schema, "$.signature.order", "order is an array of argument names");
         }
     }
     let rp = "$.signature.returns";
@@ -280,7 +460,61 @@ fn unit_canonical(v: &Value, args: &[(String, Value)], path: &str) -> Result<Uni
     }
 }
 
-pub(crate) fn descriptor_canonical(v: &Value) -> Result<Descriptor> {
+/// Compares two lexical values of `ty` in the type's order (7): numbers numerically, dates
+/// and instants chronologically (their canonical text order), strings by code point (UTF-8
+/// byte order), `false` before `true`.
+pub(crate) fn cmp_lexical(ty: Type, a: &str, b: &str) -> core::cmp::Ordering {
+    match ty {
+        Type::Number => lexical::cmp_numbers(a, b),
+        Type::Boolean => (a == "true").cmp(&(b == "true")),
+        _ => a.cmp(b),
+    }
+}
+
+/// The canonical form of a structurally valid `extent` of an argument of type `ty` (7):
+/// the type, then each value's lexical form, their order, their count; for a range, `hi`
+/// then `lo` (lexical form, integer for numbers), then `lo <= hi`.
+fn extent_canonical(v: &Value, ty: Type, path: &str) -> Result<Extent> {
+    if matches!(ty, Type::Boolean | Type::Blob) {
+        return err(ErrorCode::CanonType, path, format!("a {} argument has no extent", ty.as_str()));
+    }
+    match v {
+        Value::Array(items) => {
+            let values: Vec<&str> = items.iter().filter_map(Value::as_str).collect();
+            for (i, x) in values.iter().enumerate() {
+                model::check_lexical(ty, x, &index(path, i))?;
+            }
+            if values.windows(2).any(|w| cmp_lexical(ty, w[0], w[1]) != core::cmp::Ordering::Less) {
+                return err(ErrorCode::CanonSet, path, "extent values are strictly ascending in their type's order");
+            }
+            if values.len() > limits::EXTENT {
+                return err(ErrorCode::CanonLimit, path, "more than 4096 extent values");
+            }
+            Ok(Extent::Values(values.iter().map(|x| x.to_string()).collect()))
+        }
+        Value::Object(m) => {
+            if !matches!(ty, Type::Date | Type::Number) {
+                return err(ErrorCode::CanonType, path, "an extent range is for date and number arguments");
+            }
+            for side in ["hi", "lo"] {
+                let sp = member(path, side);
+                let x = schema::string(m, side, path)?;
+                model::check_lexical(ty, x, &sp)?;
+                if ty == Type::Number && !lexical::is_integer(x) {
+                    return err(ErrorCode::CanonNumber, &sp, "an extent range over numbers has integer ends");
+                }
+            }
+            let (lo, hi) = (schema::string(m, "lo", path)?, schema::string(m, "hi", path)?);
+            if cmp_lexical(ty, lo, hi) == core::cmp::Ordering::Greater {
+                return err(ErrorCode::CanonSet, path, "an extent range has lo <= hi");
+            }
+            Ok(Extent::Range { lo: lo.into(), hi: hi.into() })
+        }
+        _ => err(ErrorCode::Schema, path, "not an extent"),
+    }
+}
+
+pub(crate) fn descriptor_canonical(v: &Value) -> Result<FunctionDescriptor> {
     let m = schema::object(v, "$")?;
     let code = schema::object(schema::get(m, "code"), "$.code")?;
     let body = schema::string(code, "body", "$.code")?;
@@ -308,6 +542,7 @@ pub(crate) fn descriptor_canonical(v: &Value) -> Result<Descriptor> {
         return err(ErrorCode::CanonLimit, "$.signature.args", "more than 32 arguments");
     }
     let mut decls = BTreeMap::new();
+    let mut extents = BTreeMap::new();
     for (k, d) in jcs_sorted(args) {
         let p = member("$.signature.args", k);
         lexical::check_arg_name(k, &p)?;
@@ -323,8 +558,24 @@ pub(crate) fn descriptor_canonical(v: &Value) -> Result<Descriptor> {
         if valid && !ty.may_be_valid_time() {
             return err(ErrorCode::CanonType, &p, "a valid-time argument must be a date, instant or string");
         }
+        if let Some(e) = schema::opt(dm, "extent") {
+            extents.insert(k.clone(), extent_canonical(e, ty, &member(&p, "extent"))?);
+        }
         decls.insert(k.clone(), ArgDecl { ty, unit, valid });
     }
+    let order = match schema::opt(sig, "order") {
+        Some(Value::Array(items)) => {
+            let names: Vec<&str> = items.iter().filter_map(Value::as_str).collect();
+            let mut sorted = names.clone();
+            sorted.sort_unstable();
+            sorted.dedup();
+            if sorted.len() != names.len() || names.len() != decls.len() || !names.iter().all(|n| decls.contains_key(*n)) {
+                return err(ErrorCode::CanonSet, "$.signature.order", "order lists every argument exactly once");
+            }
+            Some(names.iter().map(|n| n.to_string()).collect())
+        }
+        _ => None,
+    };
 
     let rp = "$.signature.returns";
     let returns = match schema::get(sig, "returns") {
@@ -351,11 +602,13 @@ pub(crate) fn descriptor_canonical(v: &Value) -> Result<Descriptor> {
         }
         _ => return err(ErrorCode::Schema, rp, "returns must be a type name or an object"),
     };
-    Ok(Descriptor {
+    Ok(FunctionDescriptor {
         lang: lang.into(),
         body: body.into(),
         inputs: items.iter().map(|s| s.to_string()).collect(),
         signature: Signature { args: decls, returns },
+        order,
+        extents,
     })
 }
 
@@ -379,13 +632,17 @@ pub fn resolved_unit_value(descriptor: &Value, cell: &Value) -> Result<Option<St
     if hash != cell.fn_hash {
         return err(ErrorCode::FnHashMismatch, "$.descriptor", "the descriptor does not hash to cell.fn_hash");
     }
-    let d = Descriptor::from_value(descriptor)?;
-    resolve_with(&d, &cell)
+    let d = FunctionDescriptor::from_value(descriptor)?;
+    d.resolve_unit(&cell)
 }
 
 /// Substitutes a checked cell's arguments into a checked descriptor's return unit.
 pub fn resolve_with(d: &Descriptor, cell: &Cell) -> Result<Option<String>> {
-    let Some(unit) = &d.signature.returns.unit else { return Ok(None) };
+    resolve_returns(&d.signature.returns, cell)
+}
+
+fn resolve_returns(returns: &Returns, cell: &Cell) -> Result<Option<String>> {
+    let Some(unit) = &returns.unit else { return Ok(None) };
     let arg_value = |name: &str| -> Result<String> {
         let p = member("$.cell.args", name);
         match cell.args.get(name) {

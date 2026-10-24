@@ -127,7 +127,8 @@ impl ReceiptBuilder {
         self
     }
 
-    /// Receipt hashes of the inputs; must be strictly ascending.
+    /// The inputs entries, receipt hashes and slice entries (`slice:<slice id>:<members
+    /// hash>`, see [`crate::Manifest::entry`]); must be strictly ascending.
     pub fn inputs<I, S>(mut self, inputs: I) -> Self
     where
         I: IntoIterator<Item = S>,

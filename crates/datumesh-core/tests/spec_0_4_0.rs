@@ -330,7 +330,7 @@ fn a_0_3_resolver_has_no_manifests_and_no_lineage() {
     let v = vector("receipt/slice-range");
     let r = run(&v, &OnlyThree(resolver(&v).unwrap()));
     assert_eq!(r.code, Some(ErrorCode::InputUnavailable));
-    let entry = &Receipt::from_json(input(&v)).unwrap().inputs()[0];
+    let entry = Receipt::from_json(input(&v)).unwrap().inputs()[0].clone();
     assert_eq!(r.path, format!("$.inputs.{entry}"));
     // Receipts without slices verify exactly as before.
     let v = vector("receipt/computed-with-lineage");

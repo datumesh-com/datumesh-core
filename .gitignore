@@ -7,3 +7,4 @@
 /fuzz/logs
 /fuzz/Cargo.lock
 /crates/datumesh-core/wip
+__pycache__/
