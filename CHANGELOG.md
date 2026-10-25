@@ -5,8 +5,8 @@ each entry; the public API is frozen from 0.3.0 until 1.0 except for additions.
 
 ## 0.3.5 (unreleased)
 
-Specification: `spec-0.4.1` (`0dac072`); all 478 vectors for verifier libraries pass (546 for
-formula evaluators skipped; 1024 in all). Additions only (`API-CHANGES-0.3.5.md` has the
+Specification: `spec-0.4.1` (`3f79313`); all 491 vectors for verifier libraries pass (546 for
+formula evaluators skipped; 1037 in all). Additions only (`API-CHANGES-0.3.5.md` has the
 `cargo public-api diff` against 0.3.4).
 
 ### Added
@@ -26,6 +26,9 @@ formula evaluators skipped; 1024 in all). Additions only (`API-CHANGES-0.3.5.md`
   did; `check_envelope_any` accepts it.
 - `datumesh-cli`: the `mesh` kind (outputs `bindings`, `endpoints`), `request.job` for
   envelope vectors.
+- Following `3f79313`: a `pending` envelope's `poll` must name a DNS host; a lone `}` in a known
+  endpoint template is `E_MESH_DOC`; a key document whose `proto` is missing or not a string is
+  `E_KEY_DOC` (step 5), not `E_MESH_DOC`.
 
 ## 0.3.4
 

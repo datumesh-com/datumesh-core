@@ -15,7 +15,9 @@ nightly image with cargo-fuzz and cargo-public-api) against the 0.3.4 release on
 | `resolve_mesh`, `Retrieval` (`Response { status, body }`, `Failed`), `ResolvedMesh` (`#[non_exhaustive]`: `keys`, `mesh`), `MeshDoc` (`#[non_exhaustive]`: `host`, `bindings`, `endpoints`; `from_json`, `url`) | Mesh documents and cross-mesh resolution (9.6), without a resolver. |
 
 Behaviour changes without a signature change: `check_envelope` and `check_envelope_extras`
-accept `E_JOB_UNKNOWN` only in `bad_request` for a request with a job, and never in `error`.
+accept `E_JOB_UNKNOWN` only in `bad_request` for a request with a job, and never in `error`. Since
+`3f79313` (`spec-0.4.1`, no signature change): `poll` must name a DNS host, a lone `}` in a known
+endpoint template is `E_MESH_DOC`, and a key document without a string `proto` is `E_KEY_DOC`.
 
 ## Full output
 

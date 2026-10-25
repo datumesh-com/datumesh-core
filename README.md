@@ -1,6 +1,6 @@
 # datumesh-core
 
-The Rust core of the [Datumesh](https://datumesh.com) protocol: strict JSON and RFC 8785 canonical bytes, cell URIs, key documents, response envelopes, unit resolution, and offline verification of signed receipts. It implements the [specification](https://github.com/datumesh-com/datumesh-spec) (`SPEC.md` and `units.md`, revision `spec-0.4.1`), including receipts whose lineage cites whole slices of cells, `pending` envelopes and cross-mesh resolution, and passes every one of its 478 test vectors for verifier libraries (the 546 `formula`, `formula-eval`, `excel` and `decimal` vectors are for formula evaluators; this crate evaluates no functions).
+The Rust core of the [Datumesh](https://datumesh.com) protocol: strict JSON and RFC 8785 canonical bytes, cell URIs, key documents, response envelopes, unit resolution, and offline verification of signed receipts. It implements the [specification](https://github.com/datumesh-com/datumesh-spec) (`SPEC.md` and `units.md`, revision `spec-0.4.1`), including receipts whose lineage cites whole slices of cells, `pending` envelopes and cross-mesh resolution, and passes every one of its 491 test vectors for verifier libraries (the 546 `formula`, `formula-eval`, `excel` and `decimal` vectors are for formula evaluators; this crate evaluates no functions).
 
 ## Example
 

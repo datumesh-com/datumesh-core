@@ -1,8 +1,8 @@
 """Derive datumesh-cli run-vectors' expected output, one line per vector file under DIR (sorted
 by path components, as the Rust test sorts), from the files alone: id, error, and the kind's
-output members the vector gives. A valid mesh vector gives none (SPEC 11 names bindings and
-endpoints, the vectors do not carry them; DEFECTS.md RS-38): they are derived from the mesh
-document in its env, unknown endpoints dropped. Usage: python3 tools/gen_golden.py spec/vectors"""
+output members the vector gives. A valid mesh vector without bindings and endpoints (spec
+0dac072, DEFECTS.md RS-38) has them derived from the mesh document in its env, unknown
+endpoints dropped; since 3f79313 the vectors carry them. Usage: python3 tools/gen_golden.py spec/vectors"""
 import json, os, sys
 OUT = {"jcs": ["canonical", "sha256"], "scalar": ["canonical", "sha256"], "cell": ["canonical", "sha256"],
        "ref": ["canonical", "sha256"], "function": ["canonical", "sha256"],

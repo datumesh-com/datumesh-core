@@ -340,8 +340,8 @@ pub fn check_vector(v: &Value) -> Vec<String> {
             for f in expected_outputs(kind) {
                 let want = v.get(f);
                 let have = out.get(*f);
-                // The mesh vectors do not carry their outputs (DEFECTS.md RS-38): compared
-                // only when given.
+                // Mesh vectors carry their outputs since 3f79313 (DEFECTS.md RS-38); before, they
+                // did not, and an absent one is not compared.
                 if kind == "mesh" && want.is_none() {
                     continue;
                 }
