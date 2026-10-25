@@ -56,8 +56,10 @@ impl MeshDoc {
     /// Parses and checks a mesh document fetched from `host`, on its own (without the key
     /// document): strict JSON, an object, `host` equal to `host`, `proto` `"datumesh/1"`, then
     /// `bindings`, `endpoints` (an object holding every required endpoint) and each known
-    /// endpoint in ascending name order (9.6). Every failure is `E_MESH_DOC`. Cross-mesh
-    /// resolution also needs the key document to agree: see [`resolve_mesh`].
+    /// endpoint in ascending name order (9.6): on this host (beginning `https://<host>/`), with
+    /// its placeholders each once and no other brace. Unknown members are not checked. Every
+    /// failure is `E_MESH_DOC`. Cross-mesh resolution also needs the key document to agree:
+    /// see [`resolve_mesh`].
     pub fn from_json(host: &str, body: &[u8]) -> Result<MeshDoc> {
         let v = parse_mesh(body)?;
         let m = v.as_object().unwrap_or(&[]);
@@ -108,9 +110,9 @@ pub struct ResolvedMesh {
 /// 2. the mesh document retrieved: the integer status 200 with a body (`E_MESH_DOC`);
 /// 3. both parsed strictly: the key document (`E_KEY_DOC`), then the mesh document, an object
 ///    (`E_MESH_DOC`);
-/// 4. the two describe the same mesh (`E_MESH_DOC`): the mesh document's `host` is `host`; the
-///    key document's `host`, where it is a string, too; and their `proto`s are both
-///    `"datumesh/1"` (a key document that is not an object is left to step 5);
+/// 4. the two describe the same mesh (`E_MESH_DOC`): the mesh document's `host` is `host` and its
+///    `proto` `"datumesh/1"`; the key document's `host` and `proto`, each where it is a string in
+///    an object, too (anything else about the key document is left to step 5);
 /// 5. the key document by 9.2 (`E_KEY_DOC`);
 /// 6. the mesh document's members (`E_MESH_DOC`, see [`MeshDoc::from_json`]).
 pub fn resolve_mesh(host: &str, key_doc_got: Retrieval<'_>, mesh_doc_got: Retrieval<'_>) -> Result<ResolvedMesh> {
@@ -143,8 +145,11 @@ pub fn resolve_mesh(host: &str, key_doc_got: Retrieval<'_>, mesh_doc_got: Retrie
                 return err(ErrorCode::MeshDoc, "$.host", "the key document names another host");
             }
         }
-        if schema::get(km, "proto").as_str() != Some("datumesh/1") {
-            return err(ErrorCode::MeshDoc, "$.proto", "the two documents' protos differ");
+        // Compared only where it is a string (3f79313); otherwise step 5 gives E_KEY_DOC.
+        if let Some(Value::String(p)) = schema::opt(km, "proto") {
+            if p != "datumesh/1" {
+                return err(ErrorCode::MeshDoc, "$.proto", "the key document names another protocol");
+            }
         }
     }
     // 5.
@@ -201,8 +206,9 @@ fn mesh_members(host: &str, m: &[(String, Value)]) -> Result<MeshDoc> {
             }
             rest = rest.replacen(&token, "", 1);
         }
-        if rest.contains('{') {
-            return err(md, &p, "the template has no other placeholder");
+        // Every brace belongs to a placeholder (3f79313).
+        if rest.contains('{') || rest.contains('}') {
+            return err(md, &p, "every brace of the template belongs to one of its placeholders");
         }
         endpoints.insert(name.to_string(), t.clone());
     }

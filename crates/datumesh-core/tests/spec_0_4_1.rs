@@ -82,7 +82,7 @@ fn every_envelope_vector_through_check_envelope_any() {
             (_, other) => panic!("{id}: {other:?}"),
         }
     }
-    assert_eq!(pending, 3);
+    assert_eq!(pending, 4);
 }
 
 #[test]
@@ -211,9 +211,11 @@ fn key_documents_compare_only_string_members() {
     let env = v.get("env").unwrap();
     let mesh_body = str_of(env.get("mesh").unwrap().get("https").unwrap(), "body").to_string();
     let key_body = str_of(env.get("keys").unwrap().get("https").unwrap(), "body").to_string();
-    let get = |b: &str| Retrieval::Response { status: 200, body: Some(b.as_bytes()) };
     let proto1 = mesh_body.replace("\"proto\": \"datumesh/1\"", "\"proto\": 1");
     assert_ne!(proto1, mesh_body);
+    fn get(b: &str) -> Retrieval<'_> {
+        Retrieval::Response { status: 200, body: Some(b.as_bytes()) }
+    }
     let code = |k: &str, m: &str| resolve_mesh("mesh.example.org", get(k), get(m)).unwrap_err().code();
     assert_eq!(code("\"x\"", &proto1), ErrorCode::MeshDoc);
     assert_eq!(code("\"x\"", &mesh_body), ErrorCode::KeyDoc);

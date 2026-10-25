@@ -521,7 +521,8 @@ impl Pending {
     /// A `pending` envelope answering `request` (its `cell_id` and `asof` are echoed; a job
     /// in it is not), checked by the rules of 5.5: `job` 32 to 64 lowercase hex digits,
     /// `estimate_seconds` at most 2^53 - 1, `poll` an `https://` URL of printable ASCII of at
-    /// most 512 characters ending `/jobs/<job>`. A failure is `E_ENVELOPE`, at the member's
+    /// most 512 characters whose host (up to the first `/`) is a DNS name (2.1), ending
+    /// `/jobs/<job>`. That `poll` names the mesh's own host is the caller's to ensure. A failure is `E_ENVELOPE`, at the member's
     /// path.
     pub fn new(job: &str, estimate_seconds: u64, poll: &str, request: Request) -> Result<Pending> {
         check_job_and_poll(job, poll)?;
@@ -569,6 +570,11 @@ fn check_job_and_poll(job: &str, poll: &str) -> Result<()> {
             && poll.len() <= limits::LICENCE_URL;
     if !url_ok {
         return env_err("$.poll", "poll is an https URL of printable ASCII, at most 512 characters");
+    }
+    // The text between https:// and the next / is a DNS name (2.1; 3f79313).
+    let host = poll["https://".len()..].split('/').next().unwrap_or("");
+    if !poll["https://".len()..].contains('/') || lexical::check_dns_name(host, "").is_err() {
+        return env_err("$.poll", "poll's host is a DNS name");
     }
     if !poll.ends_with(&format!("/jobs/{job}")) {
         return env_err("$.poll", "poll ends /jobs/<job>");
