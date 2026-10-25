@@ -5,7 +5,7 @@ each entry; the public API is frozen from 0.3.0 until 1.0 except for additions.
 
 ## 0.3.4 (unreleased)
 
-Specification: `spec-0.4.0` (`18be70f`, the text of `dedd132` with the libraries' findings settled); all 432 vectors for verifier libraries pass (the
+Specification: `spec-0.4.0` (`f3d3e2c`, the tagged revision; the verification text is that of `18be70f`, which settled the libraries' findings on `dedd132`); all 432 vectors for verifier libraries pass (the
 546 `formula`, `formula-eval`, `excel` and `decimal` vectors are for formula evaluators and
 are skipped). Additions only (`API-CHANGES-0.3.4.md` has the `cargo public-api diff`
 against 0.3.3); a resolver, descriptor user or envelope user written for 0.3.3 compiles and

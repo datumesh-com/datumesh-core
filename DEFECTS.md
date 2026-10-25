@@ -13,8 +13,9 @@ wording. The submodule was then pinned at the tag `spec-0.2.1` (`710dabb`, text 
 identical to `58eb0d9`); RS-28, from the 0.3.0 API work, was proposed for the next revision.
 For 0.3.2 the submodule is at `3bac3d4` (`spec-0.3.0`), which resolves RS-28. RS-29 and RS-30,
 found while implementing `spec-0.3.0`, are resolved by `dedd132` (`spec-0.4.0`). RS-31 to
-RS-37, found while implementing `spec-0.4.0` at `dedd132`, are resolved by `18be70f`, where the
-submodule is for 0.3.4. No entry is open.
+RS-37, found while implementing `spec-0.4.0` at `dedd132`, are resolved by `18be70f`. The
+submodule is at `f3d3e2c` (the `spec-0.4.0` tag), whose verification text, vectors and schemas
+are those of `18be70f`. No entry is open.
 
 Disclosure: before the submodule existed I ran oracle probes against a copy of
 `/root/datumesh-spec`, a working tree that turned out to contain uncommitted `spec-0.2.1` edits to
@@ -354,7 +355,7 @@ What the new text settles, checked against this crate:
   `E_EVAL_UNAVAILABLE` when the mesh could not evaluate the cell's function", the proposed
   wording. `E_SLICE_MEMBER` and `E_INPUT_SUPERSEDED` are codes of 10.2 and may be carried.
 
-## spec-0.4.0 (`dedd132`, then `18be70f`), implemented in datumesh-core 0.3.4
+## spec-0.4.0 (`dedd132`, `18be70f`, `f3d3e2c`), implemented in datumesh-core 0.3.4
 
 What the new text settles, checked against this crate: slice entries in step 3 (one form,
 `E_CANON_HEX` otherwise, one entry each for the limit); the manifest and member checks of step
@@ -367,7 +368,7 @@ How the oracle was used: 163 probes (`tools/probes/`, kept with the reference to
 in `crates/datumesh-cli/tests/probes-0.4.0.jsonl`) were run through `canon.py check` at
 `dedd132` as a black box, its source unread; `datumesh-cli` agrees on all of them. At
 `18be70f` the same 163 give the same results, and 5 more (lineage items that are not entries,
-RS-31 and RS-37) were added: 168, all agreeing. Where a
+RS-31 and RS-37) were added: 168, all agreeing. At `f3d3e2c` the 168 give the same results. Where a
 probe decided something the text leaves open, the entry below says so.
 
 ### RS-31. 10.1 step 7.6: which lineages show a superseded input
