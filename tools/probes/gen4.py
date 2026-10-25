@@ -83,6 +83,19 @@ mesh("md-key-proto-number", keys=env(dict(KD, proto=1)))
 mesh("md-key-host-other-mesh-host-other", keys=env(dict(KD, host="o.example.org")), md=md(host="o.example.org"))
 mesh("md-key-extra-member", keys=env(dict(KD, x=1)))
 mesh("md-mesh-proto-number-key-bad", keys=env(dict(KD, keys=[])), md=md(proto=1))
+# 3f79313: the cross-check's mesh-fuzz/0728-2-1 (a key document that is a JSON string, a mesh
+# document with proto 1), and the settled rules
+mesh("md-fuzz-0728-2-1", keys=env(raw='"x"'), md=md(proto=1))
+mesh("md-key-string-mesh-ok", keys=env(raw='"x"'))
+mesh("md-key-proto-number-mesh-ok", keys=env(dict(KD, proto=1)))
+mesh("md-key-proto-other", keys=env(dict(KD, proto="datumesh/2")))
+mesh("md-key-host-other", keys=env(dict(KD, host="o.example.org")))
+mesh("md-endpoint-lone-close", md=ep(cell=f"https://{H}/c/{{cell}}/x}}"))
+mesh("md-endpoint-lone-open", md=ep(cell=f"https://{H}/c/{{cell}}/{{"))
+mesh("md-endpoint-empty-braces", md=ep(cells=f"https://{H}/c/{{}}"))
+mesh("md-endpoint-unknown-braces", md=ep(x_q=f"https://other/{{"))
+mesh("md-bindings-braces", md=md(bindings=f"https://{H}/b/{{}}}}"))
+mesh("md-bindings-fragment", md=md(bindings=f"https://{H}#x"))
 # pending
 CID = "f566f2838815a8649fe467b7a41876c5d2b4deca9afb974b8c50caafd4633ca5"
 J = "4f9c2a7e1b3d5f60817a9c2e4b6d8f01"
@@ -119,6 +132,10 @@ pend("pe-request-asof-earlier", p(request={"asof": "2024-03-15T09:00:00.000000Z"
 pend("pe-request-job-member", p(request=dict(REQ, job=J)), request=dict(REQ, job=J))
 pend("pe-status-200", p(), status=200)
 pend("pe-with-reason", p(reason="x"))
+for name, host in [("empty", ""), ("port", "mesh.example:443"), ("userinfo", "u@mesh.example"), ("ipv4", "127.0.0.1"),
+                   ("ipv6", "[::1]"), ("upper", "Mesh.example"), ("query", "mesh.example?x=1"), ("single-label", "localhost"),
+                   ("trailing-dot", "mesh.example."), ("underscore", "me_sh.example"), ("idn", "xn--bcher-kva.example")]:
+    pend(f"pe-poll-host-{name}", p(poll=f"https://{host}/jobs/{J}"))
 pend("pe-polled-ok", p(), request=dict(REQ, job=J))
 pend("pe-polled-other", p(), request=dict(REQ, job="b" * 32))
 pend("pe-error-job-unknown-polled", {"error": "E_JOB_UNKNOWN", "outcome": "error"}, status=500, request=dict(REQ, job=J))

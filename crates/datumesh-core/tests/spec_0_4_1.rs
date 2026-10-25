@@ -137,6 +137,12 @@ fn a_built_pending_envelope_checks_back() {
     ] {
         assert_eq!(Pending::new(&j, 1, &poll, req.clone()).unwrap_err().code(), ErrorCode::Envelope, "{j} {poll}");
     }
+    // 3f79313: poll's host is a DNS name (2.1).
+    for host in ["", "mesh.example:443", "u@mesh.example", "127.0.0.1", "Mesh.example", "mesh.example?x=1", "jobs"] {
+        let poll = format!("https://{host}/jobs/{job}");
+        assert_eq!(Pending::new(job, 1, &poll, req.clone()).unwrap_err().code(), ErrorCode::Envelope, "{poll}");
+    }
+    assert!(Pending::new(job, 1, &format!("https://other.example/jobs/{job}"), req.clone()).is_ok());
     assert!(Pending::new(job, 9_007_199_254_740_991, &ok_poll, req.clone()).is_ok());
     assert!(Pending::new(job, 9_007_199_254_740_992, &ok_poll, req).is_err());
 }
@@ -156,7 +162,7 @@ fn retrieval(env: Option<&Value>) -> Retrieval<'_> {
 fn mesh_vectors_through_resolve_mesh() {
     let mut groups = vectors("mesh");
     groups.extend(vectors("invalid").into_iter().filter(|v| str_of(v, "kind") == "mesh"));
-    assert_eq!(groups.len(), 20);
+    assert_eq!(groups.len(), 30);
     for v in groups {
         let id = str_of(&v, "id");
         let env = v.get("env").unwrap();
@@ -195,4 +201,32 @@ fn mesh_documents_parse_alone_and_expand() {
     assert_eq!(MeshDoc::from_json("other.example.org", body.as_bytes()).unwrap_err().code(), ErrorCode::MeshDoc);
     assert_eq!(MeshDoc::from_json("mesh.example.org", b"[]").unwrap_err().code(), ErrorCode::MeshDoc);
     assert_eq!(MeshDoc::from_json("mesh.example.org", b"{").unwrap_err().code(), ErrorCode::MeshDoc);
+}
+
+#[test]
+fn key_documents_compare_only_string_members() {
+    // 3f79313, 9.6 step 4. The cross-check's mesh-fuzz/0728-2-1: a key document that is a JSON
+    // string has nothing to compare, and the mesh document's proto 1 fails step 4.
+    let v = vector("mesh/full");
+    let env = v.get("env").unwrap();
+    let mesh_body = str_of(env.get("mesh").unwrap().get("https").unwrap(), "body").to_string();
+    let key_body = str_of(env.get("keys").unwrap().get("https").unwrap(), "body").to_string();
+    let get = |b: &str| Retrieval::Response { status: 200, body: Some(b.as_bytes()) };
+    let proto1 = mesh_body.replace("\"proto\": \"datumesh/1\"", "\"proto\": 1");
+    assert_ne!(proto1, mesh_body);
+    let code = |k: &str, m: &str| resolve_mesh("mesh.example.org", get(k), get(m)).unwrap_err().code();
+    assert_eq!(code("\"x\"", &proto1), ErrorCode::MeshDoc);
+    assert_eq!(code("\"x\"", &mesh_body), ErrorCode::KeyDoc);
+    // A key document object without proto, or with a non-string one: step 5.
+    let no_proto = key_body.replace(",\n  \"proto\": \"datumesh/1\"", "");
+    assert_ne!(no_proto, key_body);
+    assert_eq!(code(&no_proto, &mesh_body), ErrorCode::KeyDoc);
+    let num_proto = key_body.replace("\"proto\": \"datumesh/1\"", "\"proto\": 1");
+    assert_eq!(code(&num_proto, &mesh_body), ErrorCode::KeyDoc);
+    let other_proto = key_body.replace("\"proto\": \"datumesh/1\"", "\"proto\": \"datumesh/2\"");
+    assert_eq!(code(&other_proto, &mesh_body), ErrorCode::MeshDoc);
+    // A lone `}` in a template.
+    let brace = mesh_body.replace("/cell/{cell}\"", "/cell/{cell}}\"");
+    assert_ne!(brace, mesh_body);
+    assert_eq!(code(&key_body, &brace), ErrorCode::MeshDoc);
 }

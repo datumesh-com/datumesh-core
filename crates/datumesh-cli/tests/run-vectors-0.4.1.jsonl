@@ -47,6 +47,7 @@
 {"error":null,"id":"envelope/ok-verified","outcome":"ok","receipt_hash":"9f4d8814808d783e83b0424f90439fbbedc5f73457828d0ed346b0f424a85527","trust":"verified"}
 {"error":null,"id":"envelope/payment-required","outcome":"payment_required"}
 {"error":null,"id":"envelope/pending-no-asof","outcome":"pending"}
+{"error":null,"id":"envelope/pending-poll-other-host","outcome":"pending"}
 {"error":null,"id":"envelope/pending-polled","outcome":"pending"}
 {"error":null,"id":"envelope/pending","outcome":"pending"}
 {"error":null,"id":"envelope/rate-limited","outcome":"rate_limited"}
@@ -493,7 +494,9 @@
 {"error":"E_ENVELOPE","id":"invalid/envelope-pending-missing-poll"}
 {"error":"E_ENVELOPE","id":"invalid/envelope-pending-missing-request"}
 {"error":"E_ENVELOPE","id":"invalid/envelope-pending-other-cell"}
+{"error":"E_ENVELOPE","id":"invalid/envelope-pending-poll-empty-host"}
 {"error":"E_ENVELOPE","id":"invalid/envelope-pending-poll-other-job"}
+{"error":"E_ENVELOPE","id":"invalid/envelope-pending-poll-port"}
 {"error":"E_ENVELOPE","id":"invalid/envelope-pending-polled-other-job"}
 {"error":"E_ENVELOPE","id":"invalid/envelope-pending-request-extra"}
 {"error":"E_ENVELOPE","id":"invalid/envelope-pending-short-job"}
@@ -737,10 +740,18 @@
 {"error":"E_KEY_DOC","id":"invalid/keys-wrong-id"}
 {"error":"E_MESH_DOC","id":"invalid/mesh-bindings-other-host"}
 {"error":"E_MESH_DOC","id":"invalid/mesh-duplicate-member"}
+{"error":"E_MESH_DOC","id":"invalid/mesh-endpoint-empty-placeholder"}
+{"error":"E_MESH_DOC","id":"invalid/mesh-endpoint-lone-brace"}
+{"error":"E_MESH_DOC","id":"invalid/mesh-endpoint-no-path"}
 {"error":"E_MESH_DOC","id":"invalid/mesh-endpoint-other-host"}
+{"error":"E_MESH_DOC","id":"invalid/mesh-endpoint-port"}
+{"error":"E_MESH_DOC","id":"invalid/mesh-endpoint-userinfo"}
 {"error":"E_MESH_DOC","id":"invalid/mesh-host-mismatch"}
 {"error":"E_MESH_DOC","id":"invalid/mesh-http-endpoint"}
 {"error":"E_KEY_DOC","id":"invalid/mesh-key-doc-malformed"}
+{"error":"E_KEY_DOC","id":"invalid/mesh-key-doc-no-body"}
+{"error":"E_KEY_DOC","id":"invalid/mesh-key-doc-no-proto"}
+{"error":"E_KEY_DOC","id":"invalid/mesh-key-doc-not-object"}
 {"error":"E_MESH_DOC","id":"invalid/mesh-key-doc-other-host"}
 {"error":"E_MESH_DOC","id":"invalid/mesh-key-doc-proto-mismatch"}
 {"error":"E_KEY_UNAVAILABLE","id":"invalid/mesh-key-doc-unavailable"}
@@ -924,9 +935,11 @@
 {"error":null,"id":"keyid/calc-2020","key_id":"f7ec60a92abf4774"}
 {"error":null,"id":"keyid/rates-2020","key_id":"d712b32a2cc5cb7c"}
 {"error":null,"id":"keys/https-document","key_ids":["d712b32a2cc5cb7c","d9a2df65559c4444"]}
+{"bindings":"https://mesh.example.org/bindings/{x}}","endpoints":{"blob":"https://mesh.example.org/blob/{sha256}","cell":"https://mesh.example.org/cell/{cell}","cells":"https://mesh.example.org/cells","descriptor":"https://mesh.example.org/descriptor/{hash}","explain":"https://mesh.example.org/explain/{cell}","find":"https://mesh.example.org/find","jobs":"https://mesh.example.org/jobs/{job}","manifest":"https://mesh.example.org/manifest/{slice_id}/{members_hash}","receipt":"https://mesh.example.org/receipt/{hash}","slice":"https://mesh.example.org/slice/{cell}","verify":"https://mesh.example.org/verify"},"error":null,"id":"mesh/bindings-with-braces"}
 {"bindings":"https://mesh.example.org/bindings","endpoints":{"blob":"https://mesh.example.org/blob/{sha256}","cell":"https://mesh.example.org/cell/{cell}","cells":"https://mesh.example.org/cells","descriptor":"https://mesh.example.org/descriptor/{hash}","explain":"https://mesh.example.org/explain/{cell}","find":"https://mesh.example.org/find","jobs":"https://mesh.example.org/jobs/{job}","manifest":"https://mesh.example.org/manifest/{slice_id}/{members_hash}","receipt":"https://mesh.example.org/receipt/{hash}","slice":"https://mesh.example.org/slice/{cell}","verify":"https://mesh.example.org/verify"},"error":null,"id":"mesh/extension-members"}
 {"bindings":"https://mesh.example.org/bindings","endpoints":{"blob":"https://mesh.example.org/blob/{sha256}","cell":"https://mesh.example.org/cell/{cell}","cells":"https://mesh.example.org/cells","descriptor":"https://mesh.example.org/descriptor/{hash}","explain":"https://mesh.example.org/explain/{cell}","find":"https://mesh.example.org/find","jobs":"https://mesh.example.org/jobs/{job}","manifest":"https://mesh.example.org/manifest/{slice_id}/{members_hash}","receipt":"https://mesh.example.org/receipt/{hash}","slice":"https://mesh.example.org/slice/{cell}","verify":"https://mesh.example.org/verify"},"error":null,"id":"mesh/full"}
 {"bindings":"https://mesh.example.org/bindings","endpoints":{"cell":"https://mesh.example.org/cell/{cell}","descriptor":"https://mesh.example.org/descriptor/{hash}","jobs":"https://mesh.example.org/jobs/{job}","manifest":"https://mesh.example.org/manifest/{slice_id}/{members_hash}","receipt":"https://mesh.example.org/receipt/{hash}"},"error":null,"id":"mesh/required-only"}
+{"bindings":"https://mesh.example.org/bindings","endpoints":{"blob":"https://mesh.example.org/blob/{sha256}","cell":"https://mesh.example.org/cell/{cell}","cells":"https://mesh.example.org/cells","descriptor":"https://mesh.example.org/descriptor/{hash}","explain":"https://mesh.example.org/explain/{cell}","find":"https://mesh.example.org/find","jobs":"https://mesh.example.org/jobs/{job}","manifest":"https://mesh.example.org/manifest/{slice_id}/{members_hash}","receipt":"https://mesh.example.org/receipt/{hash}","slice":"https://mesh.example.org/slice/{cell}","verify":"https://mesh.example.org/verify"},"error":null,"id":"mesh/unknown-endpoint-unchecked"}
 {"blob_checked":true,"canonical":"{\"asof\":\"2024-03-16T09:00:00.000000Z\",\"cell\":{\"args\":{\"company\":{\"type\":\"string\",\"value\":\"01234567\"},\"date\":{\"type\":\"date\",\"value\":\"2024-03-15\"}},\"fn\":\"filing\",\"fn_hash\":\"4c1603b8f930dadc724afe3a023a53596b2f2ac6b0c963e8de99e3ba216b811e\",\"ns\":\"rates.example.org\"},\"computed_by\":\"rates.example.org#d712b32a2cc5cb7c\",\"inputs\":[],\"issued\":\"2024-03-16T09:00:00.000000Z\",\"licence\":\"CC-BY-4.0\",\"proto\":\"datumesh/1\",\"publisher\":\"rates.example.org\",\"summary\":\"The filing of company 01234567 on 15 March 2024.\",\"tx\":\"2024-03-15T16:00:00.000000Z\",\"type\":\"blob\",\"valid\":{\"date\":{\"type\":\"date\",\"value\":\"2024-03-15\"}},\"value\":\"62817c3c4fda158438aab46250f31d77514c50b31db7c6e9e1fa763e91f90c8f:46:text/csv\"}","error":null,"id":"receipt/blob-value-recomputed","level":"recomputed","sha256":"dee1d70dd4d516422e33d1f0aa54756e9e9468795dc44dd3bd9c27ff9f86596a","sig":"07c79ba6d8272ffdd4d1e4c837a2844bbf2dbd0bc9ddc23381a0605f886cdadad3a4d3d85279f9c1dd47aee6293795a1bbf00f165601710be020015b4ee0fa0f"}
 {"blob_checked":true,"canonical":"{\"asof\":\"2024-03-16T09:00:00.000000Z\",\"cell\":{\"args\":{\"company\":{\"type\":\"string\",\"value\":\"01234567\"},\"date\":{\"type\":\"date\",\"value\":\"2024-03-15\"}},\"fn\":\"filing\",\"fn_hash\":\"4c1603b8f930dadc724afe3a023a53596b2f2ac6b0c963e8de99e3ba216b811e\",\"ns\":\"rates.example.org\"},\"computed_by\":\"rates.example.org#d712b32a2cc5cb7c\",\"inputs\":[],\"issued\":\"2024-03-16T09:00:00.000000Z\",\"licence\":\"CC-BY-4.0\",\"proto\":\"datumesh/1\",\"publisher\":\"rates.example.org\",\"summary\":\"The filing of company 01234567 on 15 March 2024.\",\"tx\":\"2024-03-15T16:00:00.000000Z\",\"type\":\"blob\",\"valid\":{\"date\":{\"type\":\"date\",\"value\":\"2024-03-15\"}},\"value\":\"62817c3c4fda158438aab46250f31d77514c50b31db7c6e9e1fa763e91f90c8f:46:text/csv\"}","error":null,"id":"receipt/blob-value","level":"signed","sha256":"dee1d70dd4d516422e33d1f0aa54756e9e9468795dc44dd3bd9c27ff9f86596a","sig":"07c79ba6d8272ffdd4d1e4c837a2844bbf2dbd0bc9ddc23381a0605f886cdadad3a4d3d85279f9c1dd47aee6293795a1bbf00f165601710be020015b4ee0fa0f"}
 {"canonical":"{\"asof\":\"2024-03-16T09:00:00.000000Z\",\"cell\":{\"args\":{\"calendar\":{\"type\":\"string\",\"value\":\"TARGET2\"},\"date\":{\"type\":\"date\",\"value\":\"2024-12-25\"}},\"fn\":\"is_holiday\",\"fn_hash\":\"ed1f0ecb7166dd6d70ae263456e3af94147d4781f43035e534b9368e9561f84a\",\"ns\":\"calendars.example.org/eu\"},\"computed_by\":\"calendars.example.org#b4434e3bcb74eb2a\",\"inputs\":[],\"issued\":\"2024-03-16T09:00:00.000000Z\",\"licence\":\"https://calendars.example.org/licence\",\"proto\":\"datumesh/1\",\"publisher\":\"calendars.example.org/eu\",\"summary\":\"25 December 2024 is a TARGET2 holiday.\",\"tx\":\"2024-03-15T16:00:00.000000Z\",\"type\":\"boolean\",\"valid\":{\"date\":{\"type\":\"date\",\"value\":\"2024-12-25\"}},\"value\":true}","error":null,"id":"receipt/boolean-namespace-path","level":"signed","sha256":"0c3feb4c797f580d279287dbe11a41eed45cfd00c72c3e983dbd5e7ab69cacbf","sig":"06c269526b73c25ea505a0a1aa8fe2fd812093e0f259819338c0186945dabb0b468e57f3c5a15f4414c5bd26515c96dab41bb0587c6ea36e35bab3fb07bfdc08"}

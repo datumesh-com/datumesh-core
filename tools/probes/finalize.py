@@ -37,8 +37,13 @@ for f in sorted(os.listdir(src)):
                 v.pop("code", None)
     else:
         if r0 == "success" and v["kind"] == "mesh":
-            # Like the specification's mesh vectors, no outputs: the oracle's check compares none.
+            # The outputs (required by the reference tool since 3f79313): bindings, and the
+            # known endpoints of the mesh document.
             v["valid"] = True
+            d = json.loads(v["env"]["mesh"]["https"]["body"])
+            known = {"blob", "cell", "cells", "descriptor", "explain", "find", "jobs", "manifest", "receipt", "slice", "verify"}
+            v["bindings"] = d["bindings"]
+            v["endpoints"] = {n: u for n, u in d["endpoints"].items() if n in known}
         elif r0 == "success" and v["kind"] == "envelope":
             v["valid"] = True
             v["outcome"] = json.loads(v["input"])["outcome"]
