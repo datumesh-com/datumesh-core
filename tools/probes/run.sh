@@ -11,7 +11,7 @@ root="$(cd "$(dirname "$0")/../.." && pwd)"
 w="$1"; [ -n "$w" ] || { echo "usage: $0 <scratch dir>" >&2; exit 2; }
 rm -rf "$w/raw" "$w/final" "$w/oracle"; mkdir -p "$w/raw" "$w/oracle/vectors"
 cp -r "$root/spec/tools" "$root/spec/units.md" "$root/spec/schemas" "$w/oracle/"
-for g in gen1 gen2 gen3; do
+for g in gen1 gen2 gen3 gen4; do
   docker run --rm -v "$root/tools/probes:/p:ro" -v "$w:/w" datumesh-test python -I /p/$g.py /w/raw >/dev/null
 done
 cp -r "$w/raw" "$w/oracle/vectors/p"

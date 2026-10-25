@@ -1,6 +1,6 @@
 //! Oracle probes for spec-0.4.0: 168 vectors written for this crate (`tools/probes/`) where
 //! the text leaves an order of checks or a corner to decide, each with the result of the
-//! reference tool (`canon.py check`, run as a black box) at f3d3e2c: slice objects and
+//! reference tool (`canon.py check`, run as a black box) at the submodule's commit: slice objects and
 //! manifests (range objects, version slices, check order), descriptors with `order` and
 //! `extent` (check order, type orders, integer range ends), receipts citing slices (manifest
 //! parsing, membership with numeric ranges and open arguments, duplicate cells, member

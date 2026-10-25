@@ -36,7 +36,13 @@ for f in sorted(os.listdir(src)):
             else:
                 v.pop("code", None)
     else:
-        if r0 == "success":
+        if r0 == "success" and v["kind"] == "mesh":
+            # Like the specification's mesh vectors, no outputs: the oracle's check compares none.
+            v["valid"] = True
+        elif r0 == "success" and v["kind"] == "envelope":
+            v["valid"] = True
+            v["outcome"] = json.loads(v["input"])["outcome"]
+        elif r0 == "success":
             v["valid"] = True
             obj = json.loads(v["input"])
             c = jcs(obj)
@@ -49,5 +55,5 @@ for f in sorted(os.listdir(src)):
                     v["slice_id"] = v["sha256"]
         else:
             v["valid"] = False; v["error"] = r0.split(" ")[0]
-    v["description"] = f"Probe {name}: result of the reference tool (canon.py check) at f3d3e2c."
+    v["description"] = f"Probe {name}: result of the reference tool (canon.py check) at the submodule's commit."
     json.dump(v, open(os.path.join(out, f), "w", encoding="utf-8"), ensure_ascii=False, indent=1)

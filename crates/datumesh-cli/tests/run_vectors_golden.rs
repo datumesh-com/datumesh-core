@@ -6,8 +6,14 @@
 //! alone (`id`, `error`, and the kind's output members the vector gives, `code` included, as
 //! one JCS line); the same derivation reproduces `run-vectors-0.2.1.jsonl` byte for byte from
 //! the spec-0.2.1 vectors. The lines of the 339 old vectors are unchanged except
-//! `invalid/envelope-wrong-asof`, whose expected result spec-0.3.0 changed. The crosscheck
-//! harness depends on this interface, so any change to it must be deliberate.
+//! `invalid/envelope-wrong-asof`, whose expected result spec-0.3.0 changed. For spec-0.4.0
+//! and spec-0.4.1 the files are derived by `tools/gen_golden.py`: a vector of a kind for
+//! formula evaluators (`formula`, `formula-eval`, `excel`, `decimal`) gives
+//! `{"error":null,"id":…,"skipped":<kind>}`, and a valid `mesh` vector's `bindings` and
+//! `endpoints` are derived from its mesh document, unknown endpoints dropped (the vectors do
+//! not carry them, DEFECTS.md RS-38). Each revision's file keeps the previous one's lines
+//! unchanged. The crosscheck harness depends on this interface, so any change to it must be
+//! deliberate.
 
 use std::io::Write;
 use std::path::Path;
@@ -40,7 +46,7 @@ fn run_vectors_output_is_the_expected_output() {
     let out = child.wait_with_output().unwrap();
     writer.join().unwrap().unwrap();
     assert!(out.status.success());
-    let want = std::fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/run-vectors-0.4.0.jsonl")).unwrap();
+    let want = std::fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/run-vectors-0.4.1.jsonl")).unwrap();
     let got = String::from_utf8(out.stdout).unwrap();
     let want = String::from_utf8(want).unwrap();
     assert_eq!(got.lines().count(), files.len());
