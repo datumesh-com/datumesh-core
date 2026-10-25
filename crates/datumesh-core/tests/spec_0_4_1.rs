@@ -13,8 +13,8 @@ mod common;
 use common::*;
 use datumesh_core::json::Value;
 use datumesh_core::{
-    check_envelope, check_envelope_any, check_envelope_extras, resolve_mesh, AnyEnvelope, ErrorCode, MeshDoc,
-    Outcome, Pending, Request, Retrieval,
+    check_envelope, check_envelope_any, check_envelope_extras, resolve_mesh, AnyEnvelope, ErrorCode, MeshDoc, Outcome,
+    Pending, Request, Retrieval,
 };
 
 fn vector(id: &str) -> Value {
@@ -44,12 +44,10 @@ fn the_new_codes_follow_the_0_3_4_codes() {
     assert_eq!(ErrorCode::from_code("E_JOB_UNKNOWN"), Some(ErrorCode::JobUnknown));
     assert_eq!(ErrorCode::from_code("E_MESH_DOC"), Some(ErrorCode::MeshDoc));
     assert_eq!(ErrorCode::ALL.len(), 46);
-    assert_eq!(&ErrorCode::ALL[42..], [
-        ErrorCode::SliceMember,
-        ErrorCode::InputSuperseded,
-        ErrorCode::JobUnknown,
-        ErrorCode::MeshDoc
-    ]);
+    assert_eq!(
+        &ErrorCode::ALL[42..],
+        [ErrorCode::SliceMember, ErrorCode::InputSuperseded, ErrorCode::JobUnknown, ErrorCode::MeshDoc]
+    );
 }
 
 #[test]

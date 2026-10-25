@@ -72,8 +72,8 @@ pub use envelope::{
     check_envelope, check_envelope_any, check_envelope_extras, AnyEnvelope, Envelope, EnvelopeExtras, Fault,
     InvalidRequest, Outcome, Pending, Quote, Request, Trust,
 };
-pub use mesh::{resolve_mesh, MeshDoc, ResolvedMesh, Retrieval};
 pub use error::{Error, ErrorCode, Result};
+pub use mesh::{resolve_mesh, MeshDoc, ResolvedMesh, Retrieval};
 // The re-export is not a use: only callers see the deprecation (Rust 1.97 warns here otherwise).
 #[cfg(feature = "fetch")]
 #[allow(deprecated)]

@@ -475,6 +475,8 @@ fn is_job(s: &str) -> bool {
 
 /// The answer to a request: a [`Pending`] envelope, or one of the eight outcomes an
 /// [`Envelope`] holds, with its [`EnvelopeExtras`] (see [`check_envelope_any`]).
+// Not boxed: one value per checked response, and matching on it stays plain.
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum AnyEnvelope {
@@ -562,8 +564,9 @@ fn check_job_and_poll(job: &str, poll: &str) -> Result<()> {
     if !is_job(job) {
         return env_err("$.job", "job is 32 to 64 lowercase hex digits");
     }
-    let url_ok = poll.strip_prefix("https://").is_some_and(|r| !r.is_empty() && r.bytes().all(|c| (0x21..=0x7E).contains(&c)))
-        && poll.len() <= limits::LICENCE_URL;
+    let url_ok =
+        poll.strip_prefix("https://").is_some_and(|r| !r.is_empty() && r.bytes().all(|c| (0x21..=0x7E).contains(&c)))
+            && poll.len() <= limits::LICENCE_URL;
     if !url_ok {
         return env_err("$.poll", "poll is an https URL of printable ASCII, at most 512 characters");
     }
@@ -589,8 +592,8 @@ fn check_pending(status: u16, m: &[(String, Value)], request: &Request) -> Resul
         None => None,
         Some(_) => Some(schema::string_or(rm, "asof", "$.request", ErrorCode::Envelope)?),
     };
-    let echoed = Request::new(cell_id, asof)
-        .map_err(|e| Error::new(ErrorCode::Envelope, "$.request", e.to_string()))?;
+    let echoed =
+        Request::new(cell_id, asof).map_err(|e| Error::new(ErrorCode::Envelope, "$.request", e.to_string()))?;
     // 3.
     if status != Pending::STATUS {
         return env_err("$.outcome", format!("status {status} does not match outcome pending"));

@@ -10,8 +10,9 @@ use std::process::ExitCode;
 
 use datumesh_core::json::{self, Value};
 use datumesh_core::{
-    check_envelope_any, format_uri, resolve_mesh, AnyEnvelope, Retrieval, https_url, key_id, parse_uri, resolved_unit_value, sha256_hex, verify, Cell, CellRef,
-    Error, ErrorCode, FunctionDescriptor, Keys, Manifest, MapResolver, Receipt, Request, Scalar, Slice,
+    check_envelope_any, format_uri, https_url, key_id, parse_uri, resolve_mesh, resolved_unit_value, sha256_hex,
+    verify, AnyEnvelope, Cell, CellRef, Error, ErrorCode, FunctionDescriptor, Keys, Manifest, MapResolver, Receipt,
+    Request, Retrieval, Scalar, Slice,
 };
 
 /// The vector kinds for formula evaluators (SPEC 11, `spec-0.4.0`): a verifier library does
