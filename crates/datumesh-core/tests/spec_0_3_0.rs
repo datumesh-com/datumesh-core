@@ -39,7 +39,12 @@ fn envelope_keys(v: &Value) -> Keys {
 
 fn run_envelope(v: &Value) -> datumesh_core::Result<datumesh_core::Envelope> {
     let req = v.get("request").unwrap();
-    let request = Request::new(str_of(req, "cell_id"), req.get("asof").and_then(Value::as_str)).unwrap();
+    let asof = req.get("asof").and_then(Value::as_str);
+    // spec-0.4.1: a request at a job URL names the job.
+    let request = match req.get("job").and_then(Value::as_str) {
+        Some(job) => Request::with_job(str_of(req, "cell_id"), asof, job).unwrap(),
+        None => Request::new(str_of(req, "cell_id"), asof).unwrap(),
+    };
     let status: u16 = v.get("status").and_then(Value::as_number_text).unwrap().parse().unwrap();
     check_envelope(status, str_of(v, "input").as_bytes(), &envelope_keys(v), &request)
 }
@@ -164,6 +169,12 @@ fn every_envelope_vector_checks_as_expected() {
     assert!(all.len() > 30);
     for v in &all {
         let id = str_of(v, "id");
+        // A pending envelope has no Envelope (no outcome variant for it in 0.3.x): check_envelope
+        // refuses it; tests/spec_0_4_1.rs checks it through check_envelope_any.
+        if str_of(v, "outcome") == "pending" {
+            assert_eq!(run_envelope(v).unwrap_err().code(), datumesh_core::ErrorCode::Envelope, "{id}");
+            continue;
+        }
         match (matches!(v.get("valid"), Some(Value::Bool(true))), run_envelope(v)) {
             (true, Ok(env)) => {
                 assert_eq!(env.outcome.as_str(), str_of(v, "outcome"), "{id}");

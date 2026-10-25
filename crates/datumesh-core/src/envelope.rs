@@ -185,6 +185,7 @@ pub struct Quote {
 pub struct Request {
     cell_id: String,
     asof: Option<String>,
+    job: Option<String>,
 }
 
 /// A malformed request description (5.5 step 5): the caller's mistake, not an `E_*` code.
@@ -212,7 +213,26 @@ impl Request {
                 return Err(InvalidRequest(format!("asof must be an instant: {a:?}")));
             }
         }
-        Ok(Request { cell_id: cell_id.into(), asof: asof.map(String::from) })
+        Ok(Request { cell_id: cell_id.into(), asof: asof.map(String::from), job: None })
+    }
+
+    /// The request description for `GET` of a job's `poll` URL (5.5, `spec-0.4.1`): the
+    /// original request (`cell_id`, `asof`) and the job polled, 32 to 64 lowercase hex digits
+    /// (otherwise [`InvalidRequest`]). With it, an envelope may be `bad_request` with
+    /// `E_JOB_UNKNOWN`, and a `pending` one must carry this `job`; any other answer is bound
+    /// to the original request, as a `/cell` answer is.
+    pub fn with_job(cell_id: &str, asof: Option<&str>, job: &str) -> core::result::Result<Request, InvalidRequest> {
+        if !is_job(job) {
+            return Err(InvalidRequest(format!("job must be 32 to 64 lowercase hex digits: {job:?}")));
+        }
+        let mut r = Request::new(cell_id, asof)?;
+        r.job = Some(job.into());
+        Ok(r)
+    }
+
+    /// The job polled, for a request made at a job URL ([`Request::with_job`]).
+    pub fn job(&self) -> Option<&str> {
+        self.job.as_deref()
     }
 
     /// The requested cell id.
@@ -295,6 +315,9 @@ pub fn check_envelope(status: u16, body: &[u8], keys: &Keys, request: &Request) 
 /// [`check_envelope`], also returning the members [`Envelope`] has no field for
 /// ([`EnvelopeExtras`]): the `fault` of a `not_covered` envelope, one of the six formula
 /// evaluation faults of SPEC 5.5 (`E_ENVELOPE` for any other value, or on another outcome).
+///
+/// Its [`Envelope`] has no `pending` outcome, so a `pending` envelope is `E_ENVELOPE` here, as
+/// in 0.3.4; [`check_envelope_any`] accepts it.
 pub fn check_envelope_extras(
     status: u16,
     body: &[u8],
@@ -303,8 +326,28 @@ pub fn check_envelope_extras(
 ) -> Result<(Envelope, EnvelopeExtras)> {
     // 1.
     let v = json::parse(body)?;
+    check_parsed(status, &v, keys, request)
+}
+
+/// Checks a response envelope (5.5) of any of the nine outcomes, `pending` included
+/// (`spec-0.4.1`), in the order of its procedure, and binds it to `request`: a `pending`
+/// envelope's echoed request to the request made (and its `job` to the job polled, when
+/// `request` has one), any other outcome to the original request's cell id and `asof`,
+/// whether it answers the `/cell` request or the job URL. `E_JOB_UNKNOWN` is accepted only in a
+/// `bad_request` answering a job URL (`request` with a job). Never touches the network.
+pub fn check_envelope_any(status: u16, body: &[u8], keys: &Keys, request: &Request) -> Result<AnyEnvelope> {
+    let v = json::parse(body)?;
+    if let Value::Object(m) = &v {
+        if schema::opt(m, "outcome").and_then(Value::as_str) == Some("pending") {
+            return check_pending(status, m, request).map(AnyEnvelope::Pending);
+        }
+    }
+    check_parsed(status, &v, keys, request).map(|(e, x)| AnyEnvelope::Envelope(e, x))
+}
+
+fn check_parsed(status: u16, v: &Value, keys: &Keys, request: &Request) -> Result<(Envelope, EnvelopeExtras)> {
     // 2.
-    let m = match &v {
+    let m = match v {
         Value::Object(m) if matches!(schema::opt(m, "outcome"), Some(Value::String(_))) => m,
         _ => return env_err("$", "an envelope is an object with a string outcome"),
     };
@@ -369,10 +412,12 @@ pub fn check_envelope_extras(
     if let Some(e) = schema::opt(m, "error") {
         let code = e.as_str().and_then(ErrorCode::from_code);
         let ok = match (outcome, code) {
+            // E_JOB_UNKNOWN answers a job URL only (spec-0.4.1).
+            (Outcome::BadRequest, Some(ErrorCode::JobUnknown)) => request.job.is_some(),
             (Outcome::BadRequest, Some(c)) => BAD_REQUEST_CODES.contains(&c),
-            // Any code of 10.2 but the client's E_ENVELOPE; E_EVAL_UNAVAILABLE included since
-            // spec-0.3.0.
-            (_, Some(c)) => c != ErrorCode::Envelope,
+            // Any code of 10.2 but the client's E_ENVELOPE and the job URL's E_JOB_UNKNOWN;
+            // E_EVAL_UNAVAILABLE included since spec-0.3.0.
+            (_, Some(c)) => c != ErrorCode::Envelope && c != ErrorCode::JobUnknown,
             (_, None) => false,
         };
         if !ok {
@@ -421,6 +466,145 @@ pub fn check_envelope_extras(
     }
     env.receipt = Some(r);
     Ok((env, extras))
+}
+
+/// `[0-9a-f]{32,64}`.
+fn is_job(s: &str) -> bool {
+    (32..=64).contains(&s.len()) && s.bytes().all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
+}
+
+/// The answer to a request: a [`Pending`] envelope, or one of the eight outcomes an
+/// [`Envelope`] holds, with its [`EnvelopeExtras`] (see [`check_envelope_any`]).
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum AnyEnvelope {
+    /// `ok`, `stale`, `not_covered`, `unlicensed`, `payment_required`, `rate_limited`,
+    /// `bad_request` or `error`.
+    Envelope(Envelope, EnvelopeExtras),
+    /// `pending` (202): the mesh is still computing; the answer will be at `poll`.
+    Pending(Pending),
+}
+
+impl AnyEnvelope {
+    /// The outcome as written in JSON, `"pending"` included.
+    pub fn outcome_str(&self) -> &'static str {
+        match self {
+            AnyEnvelope::Envelope(e, _) => e.outcome.as_str(),
+            AnyEnvelope::Pending(_) => "pending",
+        }
+    }
+}
+
+/// A `pending` envelope (5.5, `spec-0.4.1`): the job, an estimate, the URL to poll and the
+/// original request echoed. Build one with [`Pending::new`] (a mesh), or get one from
+/// [`check_envelope_any`] (a client).
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub struct Pending {
+    /// The job id: 32 to 64 lowercase hex digits, a capability.
+    pub job: String,
+    /// The mesh's estimate of the seconds until the result is ready; a hint.
+    pub estimate_seconds: u64,
+    /// The job's URL: `https://` and printable ASCII, at most 512 characters, ending
+    /// `/jobs/<job>`.
+    pub poll: String,
+    /// The original request, echoed: its `cell_id` and `asof` (never a job).
+    pub request: Request,
+}
+
+impl Pending {
+    /// The HTTP status of a `pending` envelope.
+    pub const STATUS: u16 = 202;
+
+    /// A `pending` envelope answering `request` (its `cell_id` and `asof` are echoed; a job
+    /// in it is not), checked by the rules of 5.5: `job` 32 to 64 lowercase hex digits,
+    /// `estimate_seconds` at most 2^53 - 1, `poll` an `https://` URL of printable ASCII of at
+    /// most 512 characters ending `/jobs/<job>`. A failure is `E_ENVELOPE`, at the member's
+    /// path.
+    pub fn new(job: &str, estimate_seconds: u64, poll: &str, request: Request) -> Result<Pending> {
+        check_job_and_poll(job, poll)?;
+        if estimate_seconds > limits::BLOB_LENGTH {
+            return env_err("$.estimate_seconds", "estimate_seconds is at most 2^53 - 1");
+        }
+        let request = Request { job: None, ..request };
+        Ok(Pending { job: job.into(), estimate_seconds, poll: poll.into(), request })
+    }
+
+    /// The JSON form of the envelope.
+    pub fn to_value(&self) -> Value {
+        // Value has no public number constructor: the canonical text, parsed.
+        json::parse(&self.to_json()).unwrap_or(Value::Null)
+    }
+
+    /// The envelope's body: its canonical JSON text (JCS), served with [`Pending::STATUS`].
+    pub fn to_json(&self) -> Vec<u8> {
+        let mut out = String::new();
+        out.push_str("{\"estimate_seconds\":");
+        out.push_str(&self.estimate_seconds.to_string());
+        out.push_str(",\"job\":");
+        json::write_string(&self.job, &mut out);
+        out.push_str(",\"outcome\":\"pending\",\"poll\":");
+        json::write_string(&self.poll, &mut out);
+        out.push_str(",\"request\":{");
+        if let Some(a) = &self.request.asof {
+            out.push_str("\"asof\":");
+            json::write_string(a, &mut out);
+            out.push(',');
+        }
+        out.push_str("\"cell_id\":");
+        json::write_string(&self.request.cell_id, &mut out);
+        out.push_str("}}");
+        out.into_bytes()
+    }
+}
+
+fn check_job_and_poll(job: &str, poll: &str) -> Result<()> {
+    if !is_job(job) {
+        return env_err("$.job", "job is 32 to 64 lowercase hex digits");
+    }
+    let url_ok = poll.strip_prefix("https://").is_some_and(|r| !r.is_empty() && r.bytes().all(|c| (0x21..=0x7E).contains(&c)))
+        && poll.len() <= limits::LICENCE_URL;
+    if !url_ok {
+        return env_err("$.poll", "poll is an https URL of printable ASCII, at most 512 characters");
+    }
+    if !poll.ends_with(&format!("/jobs/{job}")) {
+        return env_err("$.poll", "poll ends /jobs/<job>");
+    }
+    Ok(())
+}
+
+/// A `pending` envelope (5.5 steps 2, 3 and 5; it has no receipt, so step 4 and 6 do not
+/// apply).
+fn check_pending(status: u16, m: &[(String, Value)], request: &Request) -> Result<Pending> {
+    // 2.
+    schema::exact(m, &["estimate_seconds", "job", "outcome", "poll", "request"], &[], "$", ErrorCode::Envelope)?;
+    let estimate = integer_member(schema::get(m, "estimate_seconds"), "$.estimate_seconds")?;
+    let Some(job) = schema::get(m, "job").as_str() else { return env_err("$.job", "job must be a string") };
+    let Some(poll) = schema::get(m, "poll").as_str() else { return env_err("$.poll", "poll must be a string") };
+    check_job_and_poll(job, poll)?;
+    let rm = schema::object_or(schema::get(m, "request"), "$.request", ErrorCode::Envelope, "request")?;
+    schema::exact(rm, &["cell_id"], &["asof"], "$.request", ErrorCode::Envelope)?;
+    let cell_id = schema::string_or(rm, "cell_id", "$.request", ErrorCode::Envelope)?;
+    let asof = match schema::opt(rm, "asof") {
+        None => None,
+        Some(_) => Some(schema::string_or(rm, "asof", "$.request", ErrorCode::Envelope)?),
+    };
+    let echoed = Request::new(cell_id, asof)
+        .map_err(|e| Error::new(ErrorCode::Envelope, "$.request", e.to_string()))?;
+    // 3.
+    if status != Pending::STATUS {
+        return env_err("$.outcome", format!("status {status} does not match outcome pending"));
+    }
+    // 5.
+    if echoed.cell_id != request.cell_id || echoed.asof != request.asof {
+        return env_err("$.request", "the echoed request is not the request made");
+    }
+    if let Some(polled) = &request.job {
+        if job != polled {
+            return env_err("$.job", "the envelope is for another job than the one polled");
+        }
+    }
+    Ok(Pending { job: job.into(), estimate_seconds: estimate, poll: poll.into(), request: echoed })
 }
 
 fn quote(q: &Value) -> Result<Quote> {

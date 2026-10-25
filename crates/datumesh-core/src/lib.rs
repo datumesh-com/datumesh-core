@@ -15,7 +15,10 @@
 //! [`Resolver`] for the descriptor, the input receipts, the manifests of slice entries and
 //! the evaluation (with its lineage), lazily ([`MapResolver`] holds them in maps). Since
 //! `spec-0.4.0` a receipt's lineage may cite whole slices of cells ([`Slice`], [`Manifest`]),
-//! and descriptors may carry `signature.order` and argument extents ([`FunctionDescriptor`]). Feature `sign` adds `SigningKey` and
+//! and descriptors may carry `signature.order` and argument extents ([`FunctionDescriptor`]).
+//! Since `spec-0.4.1` a mesh may answer `pending` ([`check_envelope_any`], [`Pending`]), and
+//! cross-mesh resolution reads a host's mesh document ([`resolve_mesh`], [`MeshDoc`]); a
+//! verifier needs neither. Feature `sign` adds `SigningKey` and
 //! `ReceiptBuilder`, which make receipts that verify byte for byte like the specification's.
 //! Feature `fetch` (`fetch_keys`) is deprecated since 0.3.1 and removed at 1.0: fetch key
 //! documents with your own HTTP client and pass the response to [`keys_from_response`].
@@ -46,6 +49,7 @@ mod fetch;
 pub mod json;
 mod keys;
 pub mod lexical;
+mod mesh;
 mod model;
 mod receipt;
 mod schema;
@@ -65,9 +69,10 @@ pub use descriptor::{
     Returns, Signature, Unit,
 };
 pub use envelope::{
-    check_envelope, check_envelope_extras, Envelope, EnvelopeExtras, Fault, InvalidRequest, Outcome, Quote, Request,
-    Trust,
+    check_envelope, check_envelope_any, check_envelope_extras, AnyEnvelope, Envelope, EnvelopeExtras, Fault,
+    InvalidRequest, Outcome, Pending, Quote, Request, Trust,
 };
+pub use mesh::{resolve_mesh, MeshDoc, ResolvedMesh, Retrieval};
 pub use error::{Error, ErrorCode, Result};
 // The re-export is not a use: only callers see the deprecation (Rust 1.97 warns here otherwise).
 #[cfg(feature = "fetch")]

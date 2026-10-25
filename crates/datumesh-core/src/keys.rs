@@ -55,7 +55,7 @@ impl KeyDoc {
     }
 }
 
-fn key_doc(host: &str, v: &Value) -> Result<KeyDoc> {
+pub(crate) fn key_doc(host: &str, v: &Value) -> Result<KeyDoc> {
     let kd = ErrorCode::KeyDoc;
     let m = schema::object_or(v, "$", kd, "a key document")?;
     schema::exact(m, &["host", "keys", "proto"], &[], "$", kd)?;

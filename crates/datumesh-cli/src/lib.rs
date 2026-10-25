@@ -10,7 +10,7 @@ use std::process::ExitCode;
 
 use datumesh_core::json::{self, Value};
 use datumesh_core::{
-    check_envelope, format_uri, https_url, key_id, parse_uri, resolved_unit_value, sha256_hex, verify, Cell, CellRef,
+    check_envelope_any, format_uri, resolve_mesh, AnyEnvelope, Retrieval, https_url, key_id, parse_uri, resolved_unit_value, sha256_hex, verify, Cell, CellRef,
     Error, ErrorCode, FunctionDescriptor, Keys, Manifest, MapResolver, Receipt, Request, Scalar, Slice,
 };
 
@@ -207,12 +207,18 @@ pub fn run(v: &Value) -> Result<Outputs, Error> {
             let status = v.get("status").and_then(Value::as_number_text).map_or(0, |n| n.parse::<u16>().unwrap_or(0));
             let keys = keys_from_env(v.get("keys"));
             let req = v.get("request").ok_or_else(|| vector_error("no request"))?;
-            let request = Request::new(
-                req.get("cell_id").and_then(Value::as_str).unwrap_or(""),
-                req.get("asof").and_then(Value::as_str),
-            )
+            let (cell_id, asof) =
+                (req.get("cell_id").and_then(Value::as_str).unwrap_or(""), req.get("asof").and_then(Value::as_str));
+            // spec-0.4.1: `job` when the body answers GET of that job's poll URL.
+            let request = match req.get("job").and_then(Value::as_str) {
+                Some(job) => Request::with_job(cell_id, asof, job),
+                None => Request::new(cell_id, asof),
+            }
             .map_err(|e| vector_error(&e.to_string()))?;
-            let env = check_envelope(status, &body, &keys, &request)?;
+            let env = match check_envelope_any(status, &body, &keys, &request)? {
+                AnyEnvelope::Envelope(env, _) => env,
+                other => return Ok(vec![("outcome".to_string(), s(other.outcome_str()))]),
+            };
             let mut out = vec![("outcome".to_string(), s(env.outcome.as_str()))];
             if let Some(r) = &env.receipt {
                 out.push(("receipt_hash".into(), s(r.hash())));
@@ -221,6 +227,24 @@ pub fn run(v: &Value) -> Result<Outputs, Error> {
                 }
             }
             Ok(out)
+        }
+        "mesh" => {
+            // spec-0.4.1: the key and mesh documents' envs; an absent one is a failed retrieval.
+            let host = v.get("host").and_then(Value::as_str).unwrap_or("");
+            let env = v.get("env");
+            let retrieval = |name: &str| {
+                let https = env.and_then(|e| e.get(name)).and_then(|e| e.get("https"));
+                match https.and_then(|h| h.get("status")).and_then(Value::as_number_text) {
+                    Some(n) => Retrieval::Response {
+                        status: n.parse::<u16>().unwrap_or(0),
+                        body: https.and_then(|h| h.get("body")).and_then(Value::as_str).map(str::as_bytes),
+                    },
+                    None => Retrieval::Failed,
+                }
+            };
+            let r = resolve_mesh(host, retrieval("keys"), retrieval("mesh"))?;
+            let endpoints = r.mesh.endpoints.iter().map(|(k, u)| (k.clone(), s(u))).collect();
+            Ok(vec![("bindings".into(), s(&r.mesh.bindings)), ("endpoints".into(), Value::Object(endpoints))])
         }
         other => Err(vector_error(&format!("unknown kind {other:?}"))),
     }
@@ -298,6 +322,7 @@ fn expected_outputs(kind: &str) -> &'static [&'static str] {
         "unit" => &["unit"],
         "envelope" => &["outcome", "trust", "receipt_hash"],
         "slice" => &["canonical", "sha256", "slice_id", "members_hash", "entry"],
+        "mesh" => &["bindings", "endpoints"],
         _ => &[],
     }
 }
@@ -314,6 +339,11 @@ pub fn check_vector(v: &Value) -> Vec<String> {
             for f in expected_outputs(kind) {
                 let want = v.get(f);
                 let have = out.get(*f);
+                // The mesh vectors do not carry their outputs (DEFECTS.md RS-38): compared
+                // only when given.
+                if kind == "mesh" && want.is_none() {
+                    continue;
+                }
                 let same = match (want, have) {
                     (None, None) => true,
                     (Some(w), Some(h)) => w.to_jcs() == h.to_jcs(),

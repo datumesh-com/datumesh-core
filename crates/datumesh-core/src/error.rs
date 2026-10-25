@@ -4,7 +4,7 @@ use core::fmt;
 
 macro_rules! codes {
     ($( $(#[$doc:meta])* $variant:ident = $text:literal, )*) => {
-        /// One variant per `E_*` code of SPEC 10.2 (`spec-0.4.0`).
+        /// One variant per `E_*` code of SPEC 10.2 (`spec-0.4.1`).
         /// Non-exhaustive: codes added by later revisions of the specification are additions.
         ///
         /// The variants are declared in the order of 10.2, except the codes added within
@@ -12,7 +12,8 @@ macro_rules! codes {
         /// derived ordering only grow: `EvalUnavailable` (0.3.0; 10.2 lists it between
         /// `E_VALUE_MISMATCH` and `E_BLOB_MISMATCH`), then `SliceMember` and `InputSuperseded`
         /// (0.3.4, `spec-0.4.0`; 10.2 lists them after `E_INPUT_UNDECLARED` and after
-        /// `E_EVAL_UNAVAILABLE`). The formula codes of SPEC 15.11 are not verification codes
+        /// `E_EVAL_UNAVAILABLE`), then `JobUnknown` and `MeshDoc` (0.3.5, `spec-0.4.1`; last in
+        /// 10.2 too, after `E_ENVELOPE`). The formula codes of SPEC 15.11 are not verification codes
         /// and have no variant; the envelope's `fault` is a [`crate::Fault`].
         #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
         #[non_exhaustive]
@@ -136,6 +137,13 @@ codes! {
     /// failure: it is reported with success at level `signed`, at path `$.inputs` (see
     /// [`crate::VerifyResult`]).
     InputSuperseded = "E_INPUT_SUPERSEDED",
+    /// In a `bad_request` envelope at a job URL: the job is unknown or expired (5.5,
+    /// `spec-0.4.1`). A mesh's code, not a client's or a verification result.
+    JobUnknown = "E_JOB_UNKNOWN",
+    /// The mesh document cannot be retrieved, is malformed, breaks a rule of 9.6, or disagrees
+    /// with the key document on `host` or `proto` ([`crate::resolve_mesh`], `spec-0.4.1`).
+    /// Never a verification result.
+    MeshDoc = "E_MESH_DOC",
 }
 
 impl fmt::Display for ErrorCode {
