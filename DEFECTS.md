@@ -13,9 +13,10 @@ wording. The submodule was then pinned at the tag `spec-0.2.1` (`710dabb`, text 
 identical to `58eb0d9`); RS-28, from the 0.3.0 API work, was proposed for the next revision.
 For 0.3.2 the submodule is at `3bac3d4` (`spec-0.3.0`), which resolves RS-28. RS-29 and RS-30,
 found while implementing `spec-0.3.0`, are resolved by `dedd132` (`spec-0.4.0`). RS-31 to
-RS-37, found while implementing `spec-0.4.0` at `dedd132`, are resolved by `18be70f`. The
-submodule is at `f3d3e2c` (the `spec-0.4.0` tag), whose verification text, vectors and schemas
-are those of `18be70f`. No entry is open.
+RS-37, found while implementing `spec-0.4.0` at `dedd132`, are resolved by `18be70f`; 0.3.4
+pinned `f3d3e2c` (the `spec-0.4.0` tag), whose verification text, vectors and schemas are those
+of `18be70f`. For 0.3.5 the submodule is at `0dac072` (`spec-0.4.1`); RS-38 to RS-41, found while
+implementing it, are open.
 
 Disclosure: before the submodule existed I ran oracle probes against a copy of
 `/root/datumesh-spec`, a working tree that turned out to contain uncommitted `spec-0.2.1` edits to
@@ -529,3 +530,63 @@ probe decided something the text leaves open, the entry below says so.
   the text says. The test kit's `check_slices` still reports a resolver whose lineage holds an
   item that is not an entry: a kit policy (a resolver should report only what it read), not
   a verification rule.
+
+## spec-0.4.1 (`0dac072`), implemented in datumesh-core 0.3.5
+
+What the new text settles, checked against this crate: the `pending` outcome and its members,
+the binding of a job's result to the original request, `E_JOB_UNKNOWN` (only in `bad_request`
+at a job URL), the mesh document and cross-mesh resolution with `E_MESH_DOC`. 85 more probes
+(`tools/probes/gen4.py`), 253 in all, agree with the reference tool at `0dac072`.
+
+### RS-38. 11: mesh vectors carry no outputs
+- **Section.** 11 (`mesh` kind: "Outputs when valid: `bindings` (the URL) and `endpoints` (the
+  known endpoint templates; unknown members dropped)").
+- **Problem.** The three valid `mesh` vectors carry neither `bindings` nor `endpoints`, so
+  nothing checks a library's outputs for the kind (`canon.py check` compares none), and
+  "unknown members dropped" is untested; the cross-check can only compare libraries with each
+  other.
+- **Resolution.** The runner outputs both; its conformance check compares them only when a
+  vector gives them. The expected runner output (`run-vectors-0.4.1.jsonl`) derives them from
+  each vector's mesh document (`tools/gen_golden.py`).
+- **Proposed fix.** Add `bindings` and `endpoints` to the valid `mesh` vectors.
+- **Status.** **Open.**
+
+### RS-39. 9.6 steps 1 and 3: a key document response with no body
+- **Section.** 9.6 cross-mesh resolution, steps 1-3.
+- **Problem.** Step 1 retrieves the key document "as in 9.3" (`E_KEY_UNAVAILABLE`), step 2 the
+  mesh document, step 3 parses both. 9.3 makes a 200 without a document `E_KEY_DOC`; whether
+  that happens at step 1 (before a failed mesh retrieval) or step 3 is not said. Oracle: at
+  step 1: a 200 without a key body and a 404 mesh document is `E_KEY_DOC`; a key body that does
+  not parse and a 404 mesh document is `E_MESH_DOC`.
+- **Resolution.** As the oracle.
+- **Proposed wording (step 1).** "Retrieve the key document as in 9.3: anything but the integer
+  200 is `E_KEY_UNAVAILABLE`, and a 200 without a body `E_KEY_DOC`."
+- **Status.** **Open.**
+
+### RS-40. 9.6 step 4: a key document that is not an object, or has no `proto`
+- **Section.** 9.6 step 4 ("the key document's `host`, where it is a string, equals it too, and
+  the two `proto`s are equal and `"datumesh/1"`").
+- **Problem.** What "the two `proto`s are equal" means when the key document is not an object,
+  or has no `proto`. Oracle: a key document that is not an object is not compared (step 5 then
+  gives `E_KEY_DOC`, even when its mesh document is fine); an object without `proto`, or with a
+  non-string one, does not have an equal proto (`E_MESH_DOC`).
+- **Resolution.** As the oracle.
+- **Proposed wording.** "...where the key document is an object: its `host`, where it is a
+  string, equals it too, and its `proto` is `"datumesh/1"`, as the mesh document's must be. A key
+  document that is not an object fails at step 5."
+- **Status.** **Open.**
+
+### RS-41. 9.6: "on this host" and placeholders, for `bindings` and endpoints
+- **Section.** 9.6 (`bindings`; endpoint templates "on this host (its authority is exactly
+  `host`, followed by a path), with exactly the placeholders listed, each once, and no other
+  `{`").
+- **Problem.** (a) Whether "followed by a path" requires a `/` right after the host
+  (`https://<host>` and `https://<host>?q` have no path segment). (b) Whether `bindings`, a URL
+  and not a template, may contain `{`. (c) Whether a lone `}` is allowed. Oracle: (a) yes, both
+  are `E_MESH_DOC`, and `https://<host>/` is accepted; (b) yes (`https://<host>/b/{x}` is
+  accepted); (c) yes.
+- **Resolution.** As the oracle.
+- **Proposed wording.** "...its authority is exactly `host`, and the rest begins with `/`";
+  "`bindings` is a URL by the same rule, not a template: its `{` and `}` are not checked"; "no
+  other `{` (a `}` is not checked)".
+- **Status.** **Open.**

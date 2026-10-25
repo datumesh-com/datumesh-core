@@ -181,6 +181,19 @@ pub fn datumesh_core::testkit::Version::eq(&self, &Self) -> bool
 impl core::fmt::Debug for datumesh_core::testkit::Version
 pub fn datumesh_core::testkit::Version::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::marker::StructuralPartialEq for datumesh_core::testkit::Version
+#[non_exhaustive] pub enum datumesh_core::AnyEnvelope
+pub datumesh_core::AnyEnvelope::Envelope(datumesh_core::Envelope, datumesh_core::EnvelopeExtras)
+pub datumesh_core::AnyEnvelope::Pending(datumesh_core::Pending)
+impl datumesh_core::AnyEnvelope
+pub fn datumesh_core::AnyEnvelope::outcome_str(&self) -> &'static str
+impl core::clone::Clone for datumesh_core::AnyEnvelope
+pub fn datumesh_core::AnyEnvelope::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_core::AnyEnvelope
+impl core::cmp::PartialEq for datumesh_core::AnyEnvelope
+pub fn datumesh_core::AnyEnvelope::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_core::AnyEnvelope
+pub fn datumesh_core::AnyEnvelope::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for datumesh_core::AnyEnvelope
 pub enum datumesh_core::Arg
 pub datumesh_core::Arg::Slice
 pub datumesh_core::Arg::Value(datumesh_core::Scalar)
@@ -230,10 +243,12 @@ pub datumesh_core::ErrorCode::InputInvalid
 pub datumesh_core::ErrorCode::InputSuperseded
 pub datumesh_core::ErrorCode::InputUnavailable
 pub datumesh_core::ErrorCode::InputUndeclared
+pub datumesh_core::ErrorCode::JobUnknown
 pub datumesh_core::ErrorCode::KeyDoc
 pub datumesh_core::ErrorCode::KeyNotValid
 pub datumesh_core::ErrorCode::KeyUnavailable
 pub datumesh_core::ErrorCode::KeyUnknown
+pub datumesh_core::ErrorCode::MeshDoc
 pub datumesh_core::ErrorCode::ParseDuplicateKey
 pub datumesh_core::ErrorCode::ParseJson
 pub datumesh_core::ErrorCode::ParseUri
@@ -367,6 +382,22 @@ pub fn datumesh_core::RateSide::fmt(&self, &mut core::fmt::Formatter<'_>) -> cor
 impl core::hash::Hash for datumesh_core::RateSide
 pub fn datumesh_core::RateSide::hash<__H: core::hash::Hasher>(&self, &mut __H)
 impl core::marker::StructuralPartialEq for datumesh_core::RateSide
+pub enum datumesh_core::Retrieval<'a>
+pub datumesh_core::Retrieval::Failed
+pub datumesh_core::Retrieval::Response
+pub datumesh_core::Retrieval::Response::body: core::option::Option<&'a [u8]>
+pub datumesh_core::Retrieval::Response::status: u16
+impl<'a> core::clone::Clone for datumesh_core::Retrieval<'a>
+pub fn datumesh_core::Retrieval<'a>::clone(&self) -> Self
+impl<'a> core::cmp::Eq for datumesh_core::Retrieval<'a>
+impl<'a> core::cmp::PartialEq for datumesh_core::Retrieval<'a>
+pub fn datumesh_core::Retrieval<'a>::eq(&self, &Self) -> bool
+impl<'a> core::fmt::Debug for datumesh_core::Retrieval<'a>
+pub fn datumesh_core::Retrieval<'a>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<'a> core::hash::Hash for datumesh_core::Retrieval<'a>
+pub fn datumesh_core::Retrieval<'a>::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl<'a> core::marker::Copy for datumesh_core::Retrieval<'a>
+impl<'a> core::marker::StructuralPartialEq for datumesh_core::Retrieval<'a>
 pub enum datumesh_core::Scalar
 pub datumesh_core::Scalar::Blob(alloc::string::String)
 pub datumesh_core::Scalar::Boolean(bool)
@@ -736,6 +767,43 @@ pub fn datumesh_core::MapResolver::evaluate(&self, &datumesh_core::Cell, &str) -
 pub fn datumesh_core::MapResolver::evaluation(&self, &datumesh_core::Cell, &str) -> core::option::Option<datumesh_core::Evaluation>
 pub fn datumesh_core::MapResolver::manifest(&self, &str) -> core::option::Option<alloc::borrow::Cow<'_, [u8]>>
 pub fn datumesh_core::MapResolver::receipt(&self, &str) -> core::option::Option<alloc::borrow::Cow<'_, [u8]>>
+#[non_exhaustive] pub struct datumesh_core::MeshDoc
+pub datumesh_core::MeshDoc::bindings: alloc::string::String
+pub datumesh_core::MeshDoc::endpoints: alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::string::String>
+pub datumesh_core::MeshDoc::host: alloc::string::String
+impl datumesh_core::MeshDoc
+pub fn datumesh_core::MeshDoc::from_json(&str, &[u8]) -> datumesh_core::Result<datumesh_core::MeshDoc>
+pub fn datumesh_core::MeshDoc::url(&self, &str, &[(&str, &str)]) -> core::option::Option<alloc::string::String>
+impl core::clone::Clone for datumesh_core::MeshDoc
+pub fn datumesh_core::MeshDoc::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_core::MeshDoc
+impl core::cmp::PartialEq for datumesh_core::MeshDoc
+pub fn datumesh_core::MeshDoc::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_core::MeshDoc
+pub fn datumesh_core::MeshDoc::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for datumesh_core::MeshDoc
+pub fn datumesh_core::MeshDoc::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for datumesh_core::MeshDoc
+#[non_exhaustive] pub struct datumesh_core::Pending
+pub datumesh_core::Pending::estimate_seconds: u64
+pub datumesh_core::Pending::job: alloc::string::String
+pub datumesh_core::Pending::poll: alloc::string::String
+pub datumesh_core::Pending::request: datumesh_core::Request
+impl datumesh_core::Pending
+pub const datumesh_core::Pending::STATUS: u16
+pub fn datumesh_core::Pending::new(&str, u64, &str, datumesh_core::Request) -> datumesh_core::Result<datumesh_core::Pending>
+pub fn datumesh_core::Pending::to_json(&self) -> alloc::vec::Vec<u8>
+pub fn datumesh_core::Pending::to_value(&self) -> datumesh_core::json::Value
+impl core::clone::Clone for datumesh_core::Pending
+pub fn datumesh_core::Pending::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_core::Pending
+impl core::cmp::PartialEq for datumesh_core::Pending
+pub fn datumesh_core::Pending::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_core::Pending
+pub fn datumesh_core::Pending::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for datumesh_core::Pending
+pub fn datumesh_core::Pending::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for datumesh_core::Pending
 pub struct datumesh_core::Quote
 pub datumesh_core::Quote::amount: alloc::string::String
 pub datumesh_core::Quote::authorise: alloc::string::String
@@ -806,7 +874,9 @@ pub struct datumesh_core::Request
 impl datumesh_core::Request
 pub fn datumesh_core::Request::asof(&self) -> core::option::Option<&str>
 pub fn datumesh_core::Request::cell_id(&self) -> &str
+pub fn datumesh_core::Request::job(&self) -> core::option::Option<&str>
 pub fn datumesh_core::Request::new(&str, core::option::Option<&str>) -> core::result::Result<datumesh_core::Request, datumesh_core::InvalidRequest>
+pub fn datumesh_core::Request::with_job(&str, core::option::Option<&str>, &str) -> core::result::Result<datumesh_core::Request, datumesh_core::InvalidRequest>
 impl core::clone::Clone for datumesh_core::Request
 pub fn datumesh_core::Request::clone(&self) -> Self
 impl core::cmp::Eq for datumesh_core::Request
@@ -817,6 +887,19 @@ pub fn datumesh_core::Request::fmt(&self, &mut core::fmt::Formatter<'_>) -> core
 impl core::hash::Hash for datumesh_core::Request
 pub fn datumesh_core::Request::hash<__H: core::hash::Hasher>(&self, &mut __H)
 impl core::marker::StructuralPartialEq for datumesh_core::Request
+#[non_exhaustive] pub struct datumesh_core::ResolvedMesh
+pub datumesh_core::ResolvedMesh::keys: datumesh_core::KeyDoc
+pub datumesh_core::ResolvedMesh::mesh: datumesh_core::MeshDoc
+impl core::clone::Clone for datumesh_core::ResolvedMesh
+pub fn datumesh_core::ResolvedMesh::clone(&self) -> Self
+impl core::cmp::Eq for datumesh_core::ResolvedMesh
+impl core::cmp::PartialEq for datumesh_core::ResolvedMesh
+pub fn datumesh_core::ResolvedMesh::eq(&self, &Self) -> bool
+impl core::fmt::Debug for datumesh_core::ResolvedMesh
+pub fn datumesh_core::ResolvedMesh::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for datumesh_core::ResolvedMesh
+pub fn datumesh_core::ResolvedMesh::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for datumesh_core::ResolvedMesh
 pub struct datumesh_core::Returns
 pub datumesh_core::Returns::ty: datumesh_core::Type
 pub datumesh_core::Returns::unit: core::option::Option<datumesh_core::Unit>
@@ -921,6 +1004,7 @@ pub fn datumesh_core::canonicalize_slice(&[u8]) -> datumesh_core::Result<alloc::
 pub fn datumesh_core::cell_hash(&[u8]) -> datumesh_core::Result<alloc::string::String>
 pub fn datumesh_core::cell_uri_from_https(&str, &str) -> core::option::Option<alloc::string::String>
 pub fn datumesh_core::check_envelope(u16, &[u8], &datumesh_core::Keys, &datumesh_core::Request) -> datumesh_core::Result<datumesh_core::Envelope>
+pub fn datumesh_core::check_envelope_any(u16, &[u8], &datumesh_core::Keys, &datumesh_core::Request) -> datumesh_core::Result<datumesh_core::AnyEnvelope>
 pub fn datumesh_core::check_envelope_extras(u16, &[u8], &datumesh_core::Keys, &datumesh_core::Request) -> datumesh_core::Result<(datumesh_core::Envelope, datumesh_core::EnvelopeExtras)>
 pub fn datumesh_core::fetch_keys(&str) -> datumesh_core::Result<datumesh_core::KeyDoc>
 pub fn datumesh_core::format_uri(&datumesh_core::CellRef) -> alloc::string::String
@@ -931,6 +1015,7 @@ pub fn datumesh_core::keys_from_response(&str, u16, core::option::Option<&[u8]>)
 pub fn datumesh_core::parse_uri(&str, &datumesh_core::json::Value) -> datumesh_core::Result<datumesh_core::CellRef>
 pub fn datumesh_core::receipt_hash(&[u8]) -> datumesh_core::Result<alloc::string::String>
 pub fn datumesh_core::receipt_payload(&[u8]) -> datumesh_core::Result<alloc::vec::Vec<u8>>
+pub fn datumesh_core::resolve_mesh(&str, datumesh_core::Retrieval<'_>, datumesh_core::Retrieval<'_>) -> datumesh_core::Result<datumesh_core::ResolvedMesh>
 pub fn datumesh_core::resolve_with(&datumesh_core::Descriptor, &datumesh_core::Cell) -> datumesh_core::Result<core::option::Option<alloc::string::String>>
 pub fn datumesh_core::resolved_unit(&[u8], &[u8]) -> datumesh_core::Result<core::option::Option<alloc::string::String>>
 pub fn datumesh_core::resolved_unit_value(&datumesh_core::json::Value, &datumesh_core::json::Value) -> datumesh_core::Result<core::option::Option<alloc::string::String>>

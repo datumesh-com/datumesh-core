@@ -3,7 +3,31 @@
 All notable changes to `datumesh-core`. The crate follows the specification revision named in
 each entry; the public API is frozen from 0.3.0 until 1.0 except for additions.
 
-## 0.3.4 (unreleased)
+## 0.3.5 (unreleased)
+
+Specification: `spec-0.4.1` (`0dac072`); all 478 vectors for verifier libraries pass (546 for
+formula evaluators skipped; 1024 in all). Additions only (`API-CHANGES-0.3.5.md` has the
+`cargo public-api diff` against 0.3.4).
+
+### Added
+- `ErrorCode::JobUnknown` (`E_JOB_UNKNOWN`) and `ErrorCode::MeshDoc` (`E_MESH_DOC`), after
+  `InputSuperseded`.
+- `check_envelope_any` and `AnyEnvelope` (`#[non_exhaustive]`): every outcome, `pending`
+  included. `Pending` (`#[non_exhaustive]`; `Pending::new`, `to_json`, `to_value`, `STATUS`):
+  check and build `pending` envelopes. `Request::with_job`, `Request::job`: a request at a
+  job URL.
+- `resolve_mesh`, `Retrieval`, `ResolvedMesh`, `MeshDoc` (`from_json`, `url`): mesh
+  documents and cross-mesh resolution (SPEC 9.6), without a resolver.
+
+### Changed (behaviour, following the specification)
+- Envelope checks: `E_JOB_UNKNOWN` only in `bad_request` and only for a request with a job;
+  never in `error`. `check_envelope` and `check_envelope_extras` cannot return a `pending`
+  envelope (`Outcome` and `Envelope` are frozen) and refuse it with `E_ENVELOPE`, as 0.3.4
+  did; `check_envelope_any` accepts it.
+- `datumesh-cli`: the `mesh` kind (outputs `bindings`, `endpoints`), `request.job` for
+  envelope vectors.
+
+## 0.3.4
 
 Specification: `spec-0.4.0` (`f3d3e2c`, the tagged revision; the verification text is that of `18be70f`, which settled the libraries' findings on `dedd132`); all 432 vectors for verifier libraries pass (the
 546 `formula`, `formula-eval`, `excel` and `decimal` vectors are for formula evaluators and
