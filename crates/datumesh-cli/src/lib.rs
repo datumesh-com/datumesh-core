@@ -10,15 +10,15 @@ use std::process::ExitCode;
 
 use datumesh_core::json::{self, Value};
 use datumesh_core::{
-    check_envelope_any, format_uri, https_url, key_id, parse_uri, resolve_mesh, resolved_unit_value, sha256_hex,
-    verify, AnyEnvelope, Cell, CellRef, Error, ErrorCode, FunctionDescriptor, Keys, Manifest, MapResolver, Receipt,
-    Request, Retrieval, Scalar, Slice,
+    check_answer, check_batch, check_slice_answer, format_reference, https_url, key_id, parse_reference, resolve_mesh,
+    resolved_unit_value, sha256_hex, verify, Answer, Batch, Cell, Error, ErrorCode, FunctionDescriptor, Keys, Manifest,
+    MapResolver, Receipt, Reference, Request, Retrieval, Scalar, Slice, SliceRequest,
 };
 
-/// The vector kinds for formula evaluators (SPEC 11, `spec-0.4.0`): a verifier library does
-/// not run them. `run-vectors` answers each with `{"error": null, "id": …, "skipped": <kind>}`
+/// The vector kinds for formula evaluators (SPEC 11, `spec-0.4.0`; `call` since `spec-0.4.2`):
+/// a verifier library does not run them. `run-vectors` answers each with `{"error": null, "id": …, "skipped": <kind>}`
 /// and `check` counts them as skipped.
-pub const SKIPPED_KINDS: [&str; 4] = ["formula", "formula-eval", "excel", "decimal"];
+pub const SKIPPED_KINDS: [&str; 5] = ["formula", "formula-eval", "excel", "decimal", "call"];
 
 /// Whether a vector is of a kind this runner skips ([`SKIPPED_KINDS`]).
 pub fn skipped(v: &Value) -> bool {
@@ -138,7 +138,8 @@ pub fn run(v: &Value) -> Result<Outputs, Error> {
         "jcs" => Ok(canon_outputs(json::parse(&input_bytes(v)?)?.to_jcs())),
         "scalar" => Ok(canon_outputs(Scalar::from_json(&input_bytes(v)?)?.canonical())),
         "cell" => Ok(canon_outputs(Cell::from_json(&input_bytes(v)?)?.canonical())),
-        "ref" => Ok(canon_outputs(CellRef::from_json(&input_bytes(v)?)?.canonical())),
+        // spec-0.4.2: a reference may be pinned.
+        "ref" => Ok(canon_outputs(Reference::from_json(&input_bytes(v)?)?.canonical())),
         "function" => Ok(canon_outputs(FunctionDescriptor::from_json(&input_bytes(v)?)?.canonical())),
         "slice" => {
             // SPEC 11: a slice object or a manifest; an object with `members` is a manifest.
@@ -161,8 +162,8 @@ pub fn run(v: &Value) -> Result<Outputs, Error> {
         "uri" => {
             let uri = v.get("input").and_then(Value::as_str).ok_or_else(|| vector_error("no input"))?;
             let sig = v.get("signature").cloned().unwrap_or(Value::Null);
-            let r = parse_uri(uri, &sig)?;
-            let formatted = format_uri(&r);
+            let r = parse_reference(uri, &sig)?;
+            let formatted = format_reference(&r);
             let mut out = vec![("object".to_string(), r.to_value())];
             out.extend(canon_outputs(r.canonical()));
             out.push(("https".into(), s(&https_url(MESH, &formatted)?)));
@@ -205,29 +206,38 @@ pub fn run(v: &Value) -> Result<Outputs, Error> {
         }
         "envelope" => {
             let body = input_bytes(v)?;
-            let status = v.get("status").and_then(Value::as_number_text).map_or(0, |n| n.parse::<u16>().unwrap_or(0));
+            let status = status_of(v);
             let keys = keys_from_env(v.get("keys"));
             let req = v.get("request").ok_or_else(|| vector_error("no request"))?;
-            let (cell_id, asof) =
-                (req.get("cell_id").and_then(Value::as_str).unwrap_or(""), req.get("asof").and_then(Value::as_str));
-            // spec-0.4.1: `job` when the body answers GET of that job's poll URL.
-            let request = match req.get("job").and_then(Value::as_str) {
-                Some(job) => Request::with_job(cell_id, asof, job),
-                None => Request::new(cell_id, asof),
+            // spec-0.4.2: a request for the slice endpoint names a slice id.
+            if req.get("slice_id").is_some() {
+                let a = check_slice_answer(status, &body, &keys, &slice_request(req)?)?;
+                return Ok(answer_outputs(&a));
             }
-            .map_err(|e| vector_error(&e.to_string()))?;
-            let env = match check_envelope_any(status, &body, &keys, &request)? {
-                AnyEnvelope::Envelope(env, _) => env,
-                other => return Ok(vec![("outcome".to_string(), s(other.outcome_str()))]),
+            let a = check_answer(status, &body, &keys, &request_of(req)?)?;
+            Ok(answer_outputs(&a))
+        }
+        "batch" => {
+            let body = input_bytes(v)?;
+            let keys = keys_from_env(v.get("keys"));
+            let reqs = match v.get("requests") {
+                Some(Value::Array(a)) => a.iter().map(request_of).collect::<Result<Vec<_>, Error>>()?,
+                _ => return Err(vector_error("no requests")),
             };
-            let mut out = vec![("outcome".to_string(), s(env.outcome.as_str()))];
-            if let Some(r) = &env.receipt {
-                out.push(("receipt_hash".into(), s(r.hash())));
-                if let Some(t) = env.trust {
-                    out.push(("trust".into(), s(t.as_str())));
+            match check_batch(status_of(v), &body, &keys, &reqs)? {
+                Batch::Items(items) => {
+                    let results = items
+                        .iter()
+                        .map(|r| match r {
+                            Ok(a) => Value::Object(answer_outputs(a)),
+                            Err(e) => Value::Object(vec![("error".into(), s(e.code_str()))]),
+                        })
+                        .collect();
+                    Ok(vec![("results".into(), Value::Array(results))])
                 }
+                Batch::Refused(a) => Ok(vec![("outcome".into(), s(a.outcome.as_str()))]),
+                _ => Err(vector_error("unknown batch answer")),
             }
-            Ok(out)
         }
         "mesh" => {
             // spec-0.4.1: the key and mesh documents' envs; an absent one is a failed retrieval.
@@ -249,6 +259,67 @@ pub fn run(v: &Value) -> Result<Outputs, Error> {
         }
         other => Err(vector_error(&format!("unknown kind {other:?}"))),
     }
+}
+
+fn status_of(v: &Value) -> u16 {
+    v.get("status").and_then(Value::as_number_text).map_or(0, |n| n.parse::<u16>().unwrap_or(0))
+}
+
+/// A request description of SPEC 11: `cell_id`, `asof`, `job` (spec-0.4.1), `fn_hash` and
+/// `mesh` (spec-0.4.2).
+fn request_of(req: &Value) -> Result<Request, Error> {
+    let str_of = |k: &str| req.get(k).and_then(Value::as_str);
+    let bad = |e: datumesh_core::InvalidRequest| vector_error(&e.to_string());
+    let mut r = match str_of("job") {
+        Some(job) => Request::with_job(str_of("cell_id").unwrap_or(""), str_of("asof"), job),
+        None => Request::new(str_of("cell_id").unwrap_or(""), str_of("asof")),
+    }
+    .map_err(bad)?;
+    if let Some(p) = str_of("fn_hash") {
+        r = r.with_pin(p).map_err(bad)?;
+    }
+    if let Some(m) = str_of("mesh") {
+        r = r.with_mesh(m).map_err(bad)?;
+    }
+    Ok(r)
+}
+
+/// A slice request of SPEC 11: `slice_id`, `asof`, `fn_hash`, `mesh`, `after`.
+fn slice_request(req: &Value) -> Result<SliceRequest, Error> {
+    let str_of = |k: &str| req.get(k).and_then(Value::as_str);
+    let bad = |e: datumesh_core::InvalidRequest| vector_error(&e.to_string());
+    let mut r = SliceRequest::new(str_of("slice_id").unwrap_or(""), str_of("asof")).map_err(bad)?;
+    if let Some(p) = str_of("fn_hash") {
+        r = r.with_pin(p).map_err(bad)?;
+    }
+    if let Some(m) = str_of("mesh") {
+        r = r.with_mesh(m).map_err(bad)?;
+    }
+    if let Some(Value::Object(after)) = req.get("after") {
+        let mut a = std::collections::BTreeMap::new();
+        for (k, x) in after {
+            a.insert(k.clone(), Scalar::from_json(&x.to_jcs()).map_err(|e| vector_error(&e.to_string()))?);
+        }
+        r = r.with_after(a);
+    }
+    Ok(r)
+}
+
+/// An envelope's outputs (SPEC 11): `outcome`, and with a receipt `receipt_hash` and `trust`;
+/// for a slice page, `results`: each member's `{outcome, receipt_hash, trust}`.
+fn answer_outputs(a: &Answer) -> Outputs {
+    let mut out = vec![("outcome".to_string(), s(a.outcome.as_str()))];
+    if let Some(r) = &a.receipt {
+        out.push(("receipt_hash".into(), s(r.hash())));
+        if let Some(t) = a.trust {
+            out.push(("trust".into(), s(t.as_str())));
+        }
+    }
+    if let Some(p) = &a.page {
+        let results = p.members.iter().map(|m| Value::Object(answer_outputs(m))).collect();
+        out.push(("results".into(), Value::Array(results)));
+    }
+    out
 }
 
 fn run_receipt(v: &Value) -> Result<Outputs, Error> {
@@ -321,7 +392,8 @@ fn expected_outputs(kind: &str) -> &'static [&'static str] {
         "keys" => &["key_ids"],
         "receipt" => &["canonical", "sha256", "sig", "level", "blob_checked", "code"],
         "unit" => &["unit"],
-        "envelope" => &["outcome", "trust", "receipt_hash"],
+        "envelope" => &["outcome", "trust", "receipt_hash", "results"],
+        "batch" => &["results", "outcome"],
         "slice" => &["canonical", "sha256", "slice_id", "members_hash", "entry"],
         "mesh" => &["bindings", "endpoints"],
         _ => &[],

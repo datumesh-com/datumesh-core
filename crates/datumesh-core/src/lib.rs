@@ -18,7 +18,10 @@
 //! and descriptors may carry `signature.order` and argument extents ([`FunctionDescriptor`]).
 //! Since `spec-0.4.1` a mesh may answer `pending` ([`check_envelope_any`], [`Pending`]), and
 //! cross-mesh resolution reads a host's mesh document ([`resolve_mesh`], [`MeshDoc`]); a
-//! verifier needs neither. Feature `sign` adds `SigningKey` and
+//! verifier needs neither. Since `spec-0.4.2` a reference may be pinned to a function hash
+//! ([`Reference`], [`parse_reference`]), and [`Answer`] checks ([`check_answer`],
+//! [`check_slice_answer`], [`check_batch`]) and builds every envelope, trust `computed`, slice
+//! pages and batches included. Feature `sign` adds `SigningKey` and
 //! `ReceiptBuilder`, which make receipts that verify byte for byte like the specification's.
 //! Feature `fetch` (`fetch_keys`) is deprecated since 0.3.1 and removed at 1.0: fetch key
 //! documents with your own HTTP client and pass the response to [`keys_from_response`].
@@ -40,6 +43,7 @@
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
+mod answer;
 mod crypto;
 mod descriptor;
 mod envelope;
@@ -63,6 +67,10 @@ pub mod testkit;
 mod uri;
 mod verify;
 
+pub use answer::{
+    batch_body, check_answer, check_batch, check_slice_answer, Answer, AnswerOutcome, Batch, SlicePage, SliceRequest,
+    TrustLabel,
+};
 pub use crypto::{key_id, sha256, sha256_hex, verify_ed25519};
 pub use descriptor::{
     resolve_with, resolved_unit, resolved_unit_value, ArgDecl, Descriptor, Extent, FunctionDescriptor, RateSide,
@@ -79,12 +87,12 @@ pub use mesh::{resolve_mesh, MeshDoc, ResolvedMesh, Retrieval};
 #[allow(deprecated)]
 pub use fetch::fetch_keys;
 pub use keys::{keys_from_response, Key, KeyDoc, Keys};
-pub use model::{Arg, Args, Cell, CellRef, Scalar, Type};
+pub use model::{Arg, Args, Cell, CellRef, Reference, Scalar, Type};
 pub use receipt::{receipt_hash, receipt_payload, Receipt};
 #[cfg(feature = "sign")]
 pub use sign::{ReceiptBuilder, SigningKey};
 pub use slice::{Manifest, Slice};
-pub use uri::{cell_uri_from_https, format_uri, https_url, parse_uri};
+pub use uri::{cell_uri_from_https, format_reference, format_uri, https_url, parse_reference, parse_uri};
 pub use verify::{verify, Evaluation, Level, MapResolver, Resolver, VerifyResult};
 
 /// Canonical bytes of a typed scalar given as JSON text (4.1, 6.2).

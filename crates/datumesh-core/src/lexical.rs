@@ -80,7 +80,8 @@ pub fn check_name(s: &str, path: &str) -> Result<()> {
     Ok(())
 }
 
-/// An argument name (2.4): grammar (`E_CANON_ARG_NAME`), length (`E_CANON_LIMIT`), then reserved names.
+/// An argument name (2.4): grammar (`E_CANON_ARG_NAME`), length (`E_CANON_LIMIT`), then reserved
+/// names (`asof`, `fn_hash` since `spec-0.4.2`, and `dm_…`).
 pub fn check_arg_name(s: &str, path: &str) -> Result<()> {
     if !is_name_grammar(s) {
         return err(ErrorCode::CanonArgName, path, format!("not a lowercase snake_case name: {s:?}"));
@@ -88,7 +89,8 @@ pub fn check_arg_name(s: &str, path: &str) -> Result<()> {
     if s.len() > limits::NAME {
         return err(ErrorCode::CanonLimit, path, "name longer than 64 characters");
     }
-    if s == "asof" || s.starts_with("dm_") {
+    // `fn_hash` reserved since spec-0.4.2: the cell URI's pin (5.1).
+    if s == "asof" || s == "fn_hash" || s.starts_with("dm_") {
         return err(ErrorCode::CanonArgName, path, format!("reserved argument name {s:?}"));
     }
     Ok(())

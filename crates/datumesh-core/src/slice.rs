@@ -99,6 +99,20 @@ impl Slice {
         }
     }
 
+    /// The names of the open and ranged arguments, ascending: the dimensions of a member's key
+    /// (15.13); none for a version slice.
+    pub(crate) fn key_names(&self) -> Vec<String> {
+        match &self.kind {
+            Kind::Cells { args, .. } => {
+                let mut v: Vec<String> =
+                    args.iter().filter(|(_, a)| !matches!(a, SliceArg::Value(_))).map(|(k, _)| k.clone()).collect();
+                v.sort();
+                v
+            }
+            Kind::Versions { .. } => Vec::new(),
+        }
+    }
+
     /// Whether this is a version slice (`{"cell", "from", "to"}`).
     pub fn is_version_slice(&self) -> bool {
         matches!(self.kind, Kind::Versions { .. })

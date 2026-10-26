@@ -341,6 +341,10 @@ pub(crate) fn cell_canonical(v: &Value, path: &str) -> Result<Cell> {
 }
 
 /// A cell reference (4.3): what a cell URI denotes before the function name is resolved.
+///
+/// It has no place for the pin of `spec-0.4.2` (`fn_hash`): [`CellRef::from_json`] refuses a
+/// reference with one (`E_SCHEMA`, as in 0.3.5) and [`crate::parse_uri`] a pinned URI. Use
+/// [`Reference`], which has it.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct CellRef {
     /// The namespace.
@@ -406,5 +410,129 @@ impl CellRef {
             fn_hash: fn_hash.into(),
             args: self.args.clone(),
         })
+    }
+}
+
+/// A cell reference (4.3) with the optional pin of `spec-0.4.2`: `fn_hash`, the function the
+/// reference is pinned to, whatever its name is bound to (5.1, 5.8). Unpinned, it is the
+/// [`CellRef`] of `spec-0.4.1` ([`From<CellRef>`], [`Reference::to_cell_ref`]).
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub struct Reference {
+    /// The namespace.
+    pub ns: String,
+    /// The function name within the namespace.
+    pub fn_name: String,
+    /// The arguments, typed by the function's signature.
+    pub args: Args,
+    /// The pin: the function hash the reference is pinned to, or `None`.
+    pub fn_hash: Option<String>,
+    /// The transaction time asked for; `None` means now.
+    pub asof: Option<String>,
+}
+
+impl Reference {
+    /// Parses a reference from JSON text: strict JSON, structure (`fn_hash` a string,
+    /// `E_SCHEMA`), canonical form in JCS order (`args`, `asof`, `fn`, `fn_hash` as 64
+    /// lowercase hex digits (`E_CANON_HEX`), `ns`), then the 512-character function name.
+    pub fn from_json(bytes: &[u8]) -> Result<Reference> {
+        let v = json::parse(bytes)?;
+        json::check_value_depth(&v)?;
+        let m = schema::object(&v, "$")?;
+        schema::exact(m, &["args", "fn", "ns"], &["asof", "fn_hash"], "$", ErrorCode::Schema)?;
+        args_structure(schema::get(m, "args"), "$.args")?;
+        schema::string(m, "fn", "$")?;
+        schema::string(m, "ns", "$")?;
+        for o in ["asof", "fn_hash"] {
+            if schema::opt(m, o).is_some() {
+                schema::string(m, o, "$")?;
+            }
+        }
+        let args = args_canonical(schema::get(m, "args"), "$.args")?;
+        let asof = match schema::opt(m, "asof") {
+            Some(Value::String(s)) => {
+                lexical::check_instant(s, "$.asof")?;
+                Some(s.clone())
+            }
+            _ => None,
+        };
+        let f = schema::string(m, "fn", "$")?;
+        lexical::check_name(f, "$.fn")?;
+        let fn_hash = match schema::opt(m, "fn_hash") {
+            Some(Value::String(h)) => {
+                lexical::check_hex(h, 64, "$.fn_hash")?;
+                Some(h.clone())
+            }
+            _ => None,
+        };
+        let ns = schema::string(m, "ns", "$")?;
+        lexical::check_namespace(ns, "$.ns")?;
+        check_fn_length(ns, f)?;
+        Ok(Reference { ns: ns.into(), fn_name: f.into(), args, fn_hash, asof })
+    }
+
+    /// A reference to `ns/fn_name` with these arguments, unpinned and as of now; set
+    /// [`fn_hash`](Self::fn_hash) and [`asof`](Self::asof) to pin it or ask as of a time. Not
+    /// checked: [`crate::format_reference`] writes what it is given.
+    pub fn new(ns: impl Into<String>, fn_name: impl Into<String>, args: Args) -> Reference {
+        Reference { ns: ns.into(), fn_name: fn_name.into(), args, fn_hash: None, asof: None }
+    }
+
+    /// The JSON form.
+    pub fn to_value(&self) -> Value {
+        let mut m = vec![("args".to_string(), args_to_value(&self.args))];
+        if let Some(a) = &self.asof {
+            m.push(("asof".into(), Value::String(a.clone())));
+        }
+        m.push(("fn".into(), Value::String(self.fn_name.clone())));
+        if let Some(h) = &self.fn_hash {
+            m.push(("fn_hash".into(), Value::String(h.clone())));
+        }
+        m.push(("ns".into(), Value::String(self.ns.clone())));
+        Value::Object(m)
+    }
+
+    /// The canonical bytes (6.2). A pinned reference without `asof` has the canonical bytes,
+    /// and so the id, of the cell it denotes.
+    pub fn canonical(&self) -> Vec<u8> {
+        self.to_value().to_jcs()
+    }
+
+    /// The cell a pinned reference denotes; `None` when it is not pinned (resolve its name
+    /// with [`Reference::resolve`]).
+    pub fn cell(&self) -> Option<Cell> {
+        let h = self.fn_hash.as_ref()?;
+        Some(Cell { ns: self.ns.clone(), fn_name: self.fn_name.clone(), fn_hash: h.clone(), args: self.args.clone() })
+    }
+
+    /// The cell this reference denotes once its name has resolved to `fn_hash`. A pinned
+    /// reference denotes its pin's cell only: another hash is `E_FN_HASH_MISMATCH`.
+    pub fn resolve(&self, fn_hash: &str) -> Result<Cell> {
+        lexical::check_hex(fn_hash, 64, "$.fn_hash")?;
+        if self.fn_hash.as_deref().is_some_and(|p| p != fn_hash) {
+            return err(ErrorCode::FnHashMismatch, "$.fn_hash", "the reference is pinned to another function");
+        }
+        Ok(Cell {
+            ns: self.ns.clone(),
+            fn_name: self.fn_name.clone(),
+            fn_hash: fn_hash.into(),
+            args: self.args.clone(),
+        })
+    }
+
+    /// The `spec-0.4.1` form, when the reference is not pinned.
+    pub fn to_cell_ref(&self) -> Option<CellRef> {
+        self.fn_hash.is_none().then(|| CellRef {
+            ns: self.ns.clone(),
+            fn_name: self.fn_name.clone(),
+            args: self.args.clone(),
+            asof: self.asof.clone(),
+        })
+    }
+}
+
+impl From<CellRef> for Reference {
+    fn from(r: CellRef) -> Reference {
+        Reference { ns: r.ns, fn_name: r.fn_name, args: r.args, fn_hash: None, asof: r.asof }
     }
 }

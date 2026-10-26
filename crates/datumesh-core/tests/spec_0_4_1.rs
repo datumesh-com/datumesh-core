@@ -43,9 +43,9 @@ fn any(v: &Value) -> datumesh_core::Result<AnyEnvelope> {
 fn the_new_codes_follow_the_0_3_4_codes() {
     assert_eq!(ErrorCode::from_code("E_JOB_UNKNOWN"), Some(ErrorCode::JobUnknown));
     assert_eq!(ErrorCode::from_code("E_MESH_DOC"), Some(ErrorCode::MeshDoc));
-    assert_eq!(ErrorCode::ALL.len(), 46);
+    assert!(ErrorCode::ALL.len() >= 46);
     assert_eq!(
-        &ErrorCode::ALL[42..],
+        &ErrorCode::ALL[42..46],
         [ErrorCode::SliceMember, ErrorCode::InputSuperseded, ErrorCode::JobUnknown, ErrorCode::MeshDoc]
     );
 }
@@ -68,6 +68,14 @@ fn every_envelope_vector_through_check_envelope_any() {
     let mut pending = 0;
     for v in groups {
         let id = str_of(&v, "id");
+        // spec-0.4.2's envelopes (computed, pins, the mesh asked, slice pages): spec_0_4_2.rs.
+        let req = v.get("request").unwrap();
+        let input = str_of(&v, "input");
+        if ["fn_hash", "mesh", "slice_id"].iter().any(|k| req.get(k).is_some())
+            || ["\"computed\"", "\"fn_hash\"", "E_NAME_UNBOUND", "E_SLICE_AT_CELL"].iter().any(|t| input.contains(t))
+        {
+            continue;
+        }
         match (v.get("valid"), any(&v)) {
             (Some(Value::Bool(true)), Ok(AnyEnvelope::Pending(p))) => {
                 pending += 1;
@@ -162,7 +170,7 @@ fn retrieval(env: Option<&Value>) -> Retrieval<'_> {
 fn mesh_vectors_through_resolve_mesh() {
     let mut groups = vectors("mesh");
     groups.extend(vectors("invalid").into_iter().filter(|v| str_of(v, "kind") == "mesh"));
-    assert_eq!(groups.len(), 30);
+    assert!(groups.len() >= 30);
     for v in groups {
         let id = str_of(&v, "id");
         let env = v.get("env").unwrap();

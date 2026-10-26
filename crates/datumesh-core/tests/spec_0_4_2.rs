@@ -66,7 +66,10 @@ fn pinned_references_and_uris() {
     assert_eq!(r.cell().unwrap().id(), str_of(&v, "sha256"));
     assert_eq!(r.to_cell_ref(), None);
     // parse_uri's CellRef has no pin: it refuses a pinned URI.
-    assert_eq!(parse_uri(str_of(&v, "input"), v.get("signature").unwrap()).unwrap_err().code(), ErrorCode::CanonArgName);
+    assert_eq!(
+        parse_uri(str_of(&v, "input"), v.get("signature").unwrap()).unwrap_err().code(),
+        ErrorCode::CanonArgName
+    );
     // Unpinned URIs read the same both ways.
     let u = vector("uri/fx-rate-asof");
     let a = parse_reference(str_of(&u, "input"), u.get("signature").unwrap()).unwrap();

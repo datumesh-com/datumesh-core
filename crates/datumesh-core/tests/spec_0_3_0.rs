@@ -169,6 +169,11 @@ fn every_envelope_vector_checks_as_expected() {
     assert!(all.len() > 30);
     for v in &all {
         let id = str_of(v, "id");
+        // The 0.3.x API reads the spec-0.4.1 envelope; spec-0.4.2's (computed, pins, the mesh
+        // asked, slice pages) is tests/spec_0_4_2.rs's, through check_answer.
+        if since_0_4_2(v) {
+            continue;
+        }
         // A pending envelope has no Envelope (no outcome variant for it in 0.3.x): check_envelope
         // refuses it; tests/spec_0_4_1.rs checks it through check_envelope_any.
         if str_of(v, "outcome") == "pending" {
@@ -186,4 +191,14 @@ fn every_envelope_vector_checks_as_expected() {
             (false, Err(e)) => assert_eq!(e.code_str(), str_of(v, "error"), "{id}"),
         }
     }
+}
+
+/// An envelope vector of spec-0.4.2: trust computed, a pin, the mesh asked or a slice request.
+fn since_0_4_2(v: &Value) -> bool {
+    let req = v.get("request").unwrap();
+    ["fn_hash", "mesh", "slice_id"].iter().any(|k| req.get(k).is_some())
+        || str_of(v, "input").contains("\"computed\"")
+        || str_of(v, "input").contains("\"fn_hash\"")
+        || str_of(v, "input").contains("E_NAME_UNBOUND")
+        || str_of(v, "input").contains("E_SLICE_AT_CELL")
 }

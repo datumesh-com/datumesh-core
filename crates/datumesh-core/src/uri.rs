@@ -3,7 +3,7 @@
 use crate::error::{err, ErrorCode, Result};
 use crate::json::{jcs_sorted, Value};
 use crate::lexical::{self, limits};
-use crate::model::{check_lexical, unchecked, Arg, Args, CellRef, Type};
+use crate::model::{check_lexical, unchecked, Arg, Args, CellRef, Reference, Type};
 use crate::schema;
 
 fn is_literal(c: u8) -> bool {
@@ -71,7 +71,22 @@ fn percent_encode(s: &str, out: &mut String) {
 /// `signature` is the descriptor's `signature` member as JSON. It is taken as given (a
 /// descriptor checked under 7), except that it must be readable: an object with an `args`
 /// object whose members are objects with a string `type` (`E_SCHEMA` otherwise).
+///
+/// Its [`CellRef`] has no pin: a pinned URI (`fn_hash=`, `spec-0.4.2`) is refused with
+/// `E_CANON_ARG_NAME` (`fn_hash` is a reserved argument name). [`parse_reference`] reads it.
 pub fn parse_uri(uri: &str, signature: &Value) -> Result<CellRef> {
+    let r = parse_reference(uri, signature)?;
+    if r.fn_hash.is_some() {
+        return err(ErrorCode::CanonArgName, &qpath("fn_hash"), "a pinned URI: read it with parse_reference");
+    }
+    Ok(CellRef { ns: r.ns, fn_name: r.fn_name, args: r.args, asof: r.asof })
+}
+
+/// Parses a cell URI, pinned or not, against a function signature (5.4, `spec-0.4.2`),
+/// reporting the first failure in the order 5.4 defines: the pin `fn_hash=<64 hex>` comes after
+/// the arguments and before `asof`, and is checked (`E_CANON_HEX`) after the arguments' values
+/// and before `asof`. For a pinned URI, `signature` is that of the pinned descriptor.
+pub fn parse_reference(uri: &str, signature: &Value) -> Result<Reference> {
     // 1. Outer grammar.
     let bad = |d: &str| err(ErrorCode::ParseUri, "$", d.to_string());
     let Some(rest) = uri.strip_prefix("cell://") else {
@@ -111,9 +126,16 @@ pub fn parse_uri(uri: &str, signature: &Value) -> Result<CellRef> {
         return err(ErrorCode::CanonLimit, "uri.path", "function name longer than 512 characters");
     }
 
-    // 3. Parameter names.
+    // 3. Parameter names: asof last, then the pin last of the rest.
     let asof_raw = match params.last() {
         Some(&("asof", v)) => {
+            params.pop();
+            Some(v)
+        }
+        _ => None,
+    };
+    let pin_raw = match params.last() {
+        Some(&("fn_hash", v)) => {
             params.pop();
             Some(v)
         }
@@ -125,6 +147,10 @@ pub fn parse_uri(uri: &str, signature: &Value) -> Result<CellRef> {
         if name == "asof" {
             let code = if asof_raw.is_some() { ErrorCode::CanonArgDuplicate } else { ErrorCode::CanonArgOrder };
             return err(code, &p, "asof is the last parameter, at most once");
+        }
+        if name == "fn_hash" {
+            let code = if pin_raw.is_some() { ErrorCode::CanonArgDuplicate } else { ErrorCode::CanonArgOrder };
+            return err(code, &p, "the pin fn_hash comes after the arguments, before asof, at most once");
         }
         lexical::check_arg_name(name, &p)?;
         if let Some(pr) = prev {
@@ -187,7 +213,16 @@ pub fn parse_uri(uri: &str, signature: &Value) -> Result<CellRef> {
         args.insert(name.into(), Arg::Value(unchecked(ty, &text)));
     }
 
-    // 7. asof.
+    // 7. The pin: 64 lowercase hex digits, as written.
+    let fn_hash = match pin_raw {
+        None => None,
+        Some(raw) => {
+            lexical::check_hex(raw, 64, &qpath("fn_hash"))?;
+            Some(raw.to_string())
+        }
+    };
+
+    // 8. asof.
     let asof = match asof_raw {
         None => None,
         Some(raw) => {
@@ -196,19 +231,29 @@ pub fn parse_uri(uri: &str, signature: &Value) -> Result<CellRef> {
             Some(text)
         }
     };
-    Ok(CellRef { ns: ns.into(), fn_name: f.into(), args, asof })
+    Ok(Reference { ns: ns.into(), fn_name: f.into(), args, fn_hash, asof })
 }
 
 /// Writes the one URI of a cell reference (5.2). `format_uri(&parse_uri(u, s)?) == u` for
 /// every accepted `u`.
 pub fn format_uri(r: &CellRef) -> String {
-    let mut out = format!("cell://{}/{}", r.ns, r.fn_name);
+    format_parts(&r.ns, &r.fn_name, &r.args, None, r.asof.as_deref())
+}
+
+/// Writes the one URI of a reference (5.2), its pin as `&fn_hash=` before `&asof=`.
+/// `format_reference(&parse_reference(u, s)?) == u` for every accepted `u`.
+pub fn format_reference(r: &Reference) -> String {
+    format_parts(&r.ns, &r.fn_name, &r.args, r.fn_hash.as_deref(), r.asof.as_deref())
+}
+
+fn format_parts(ns: &str, f: &str, args: &Args, pin: Option<&str>, asof: Option<&str>) -> String {
+    let mut out = format!("cell://{ns}/{f}");
     let mut first = true;
     let mut sep = |out: &mut String| {
         out.push(if first { '?' } else { '&' });
         first = false;
     };
-    for (name, arg) in &r.args {
+    for (name, arg) in args {
         sep(&mut out);
         out.push_str(name);
         out.push('=');
@@ -217,7 +262,12 @@ pub fn format_uri(r: &CellRef) -> String {
             Arg::Value(s) => percent_encode(s.lexical(), &mut out),
         }
     }
-    if let Some(a) = &r.asof {
+    if let Some(h) = pin {
+        sep(&mut out);
+        out.push_str("fn_hash=");
+        out.push_str(h);
+    }
+    if let Some(a) = asof {
         sep(&mut out);
         out.push_str("asof=");
         percent_encode(a, &mut out);

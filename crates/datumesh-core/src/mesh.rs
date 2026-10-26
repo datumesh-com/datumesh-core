@@ -9,7 +9,7 @@ use crate::lexical::limits;
 use crate::schema;
 
 /// The endpoints of 9.6: name, placeholders, whether required.
-const ENDPOINTS: [(&str, &[&str], bool); 11] = [
+const ENDPOINTS: [(&str, &[&str], bool); 12] = [
     ("blob", &["sha256"], false),
     ("cell", &["cell"], true),
     ("cells", &[], false),
@@ -21,6 +21,7 @@ const ENDPOINTS: [(&str, &[&str], bool); 11] = [
     ("receipt", &["hash"], true),
     ("slice", &["cell"], false),
     ("verify", &[], false),
+    ("versions", &["cell"], false),
 ];
 
 /// What one HTTPS `GET` of a document gave, as the caller's HTTP client saw it.

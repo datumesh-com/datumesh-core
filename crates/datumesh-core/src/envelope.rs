@@ -1,6 +1,6 @@
 //! Response envelopes (5.5): the mesh's unsigned statement around a receipt.
 
-use crate::error::{err, Error, ErrorCode, Result};
+use crate::error::{err, ErrorCode, Result};
 use crate::json::{self, Value};
 use crate::keys::Keys;
 use crate::lexical::{self, limits};
@@ -44,45 +44,6 @@ impl Outcome {
             Outcome::RateLimited => "rate_limited",
             Outcome::BadRequest => "bad_request",
             Outcome::Error => "error",
-        }
-    }
-
-    fn from_name(s: &str) -> Option<Outcome> {
-        Some(match s {
-            "ok" => Outcome::Ok,
-            "stale" => Outcome::Stale,
-            "not_covered" => Outcome::NotCovered,
-            "unlicensed" => Outcome::Unlicensed,
-            "payment_required" => Outcome::PaymentRequired,
-            "rate_limited" => Outcome::RateLimited,
-            "bad_request" => Outcome::BadRequest,
-            "error" => Outcome::Error,
-            _ => return None,
-        })
-    }
-
-    /// Required and optional members besides `outcome`.
-    fn members(self) -> (&'static [&'static str], &'static [&'static str]) {
-        match self {
-            Outcome::Ok => (&["receipt", "trust"], &["superseded_by", "reason"]),
-            Outcome::Stale => (&["receipt", "trust", "age_seconds"], &["superseded_by", "reason"]),
-            Outcome::NotCovered => (&[], &["fault"]),
-            Outcome::Unlicensed => (&[], &[]),
-            Outcome::PaymentRequired => (&["quote"], &[]),
-            Outcome::RateLimited => (&["retry_after_seconds"], &[]),
-            Outcome::BadRequest | Outcome::Error => (&["error"], &[]),
-        }
-    }
-
-    fn status_ok(self, status: u16) -> bool {
-        match self {
-            Outcome::Ok | Outcome::Stale => status == 200,
-            Outcome::NotCovered => status == 404,
-            Outcome::Unlicensed => status == 403,
-            Outcome::PaymentRequired => status == 402,
-            Outcome::RateLimited => status == 429,
-            Outcome::BadRequest => status == 400,
-            Outcome::Error => (500..=599).contains(&status),
         }
     }
 }
@@ -167,6 +128,9 @@ impl core::fmt::Display for Fault {
 pub struct EnvelopeExtras {
     /// The formula evaluation fault of a `not_covered` envelope (`spec-0.4.0`).
     pub fault: Option<Fault>,
+    /// The function the answer is of: the echo of a pin, or the hash the name resolved to
+    /// (`spec-0.4.2`).
+    pub fn_hash: Option<String>,
 }
 
 /// A price quote (`payment_required`).
@@ -183,9 +147,11 @@ pub struct Quote {
 /// What the client asked for, for the binding of 5.5 step 5.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Request {
-    cell_id: String,
-    asof: Option<String>,
-    job: Option<String>,
+    pub(crate) cell_id: String,
+    pub(crate) asof: Option<String>,
+    pub(crate) job: Option<String>,
+    pub(crate) pin: Option<String>,
+    pub(crate) mesh: Option<String>,
 }
 
 /// A malformed request description (5.5 step 5): the caller's mistake, not an `E_*` code.
@@ -213,7 +179,7 @@ impl Request {
                 return Err(InvalidRequest(format!("asof must be an instant: {a:?}")));
             }
         }
-        Ok(Request { cell_id: cell_id.into(), asof: asof.map(String::from), job: None })
+        Ok(Request { cell_id: cell_id.into(), asof: asof.map(String::from), job: None, pin: None, mesh: None })
     }
 
     /// The request description for `GET` of a job's `poll` URL (5.5, `spec-0.4.1`): the
@@ -228,6 +194,36 @@ impl Request {
         let mut r = Request::new(cell_id, asof)?;
         r.job = Some(job.into());
         Ok(r)
+    }
+
+    /// The same request, pinned to the function `fn_hash` (64 lowercase hex digits; otherwise
+    /// [`InvalidRequest`]): the answer must echo it (5.5, `spec-0.4.2`). `cell_id` is then the
+    /// id of the cell of that function.
+    pub fn with_pin(self, fn_hash: &str) -> core::result::Result<Request, InvalidRequest> {
+        if lexical::check_hex(fn_hash, 64, "").is_err() {
+            return Err(InvalidRequest(format!("fn_hash must be 64 lowercase hex digits: {fn_hash:?}")));
+        }
+        Ok(Request { pin: Some(fn_hash.into()), ..self })
+    }
+
+    /// The same request, naming the host it was sent to (a DNS name; otherwise
+    /// [`InvalidRequest`]): `computed` is then checked against the receipt's signer, and
+    /// `poll` against the host (5.5, `spec-0.4.2`). Without it those checks are the caller's.
+    pub fn with_mesh(self, host: &str) -> core::result::Result<Request, InvalidRequest> {
+        if lexical::check_dns_name(host, "").is_err() {
+            return Err(InvalidRequest(format!("mesh must be a DNS name: {host:?}")));
+        }
+        Ok(Request { mesh: Some(host.into()), ..self })
+    }
+
+    /// The pin, for a pinned request ([`Request::with_pin`]).
+    pub fn fn_hash(&self) -> Option<&str> {
+        self.pin.as_deref()
+    }
+
+    /// The host the request was sent to, when given ([`Request::with_mesh`]).
+    pub fn mesh(&self) -> Option<&str> {
+        self.mesh.as_deref()
     }
 
     /// The job polled, for a request made at a job URL ([`Request::with_job`]).
@@ -269,7 +265,7 @@ pub struct Envelope {
     pub error: Option<ErrorCode>,
 }
 
-const BAD_REQUEST_CODES: [ErrorCode; 15] = [
+pub(crate) const BAD_REQUEST_CODES: [ErrorCode; 15] = [
     ErrorCode::ParseUri,
     ErrorCode::CanonName,
     ErrorCode::CanonArgName,
@@ -287,12 +283,12 @@ const BAD_REQUEST_CODES: [ErrorCode; 15] = [
     ErrorCode::ArgMissing,
 ];
 
-fn env_err<T>(path: &str, detail: impl Into<String>) -> Result<T> {
+pub(crate) fn env_err<T>(path: &str, detail: impl Into<String>) -> Result<T> {
     err(ErrorCode::Envelope, path, detail)
 }
 
 /// `0` or `[1-9][0-9]*`, at most 2^53 - 1, judged on the number's text.
-fn integer_member(v: &Value, path: &str) -> Result<u64> {
+pub(crate) fn integer_member(v: &Value, path: &str) -> Result<u64> {
     let Some(t) = v.as_number_text() else {
         return env_err(path, "must be a non-negative integer");
     };
@@ -317,16 +313,17 @@ pub fn check_envelope(status: u16, body: &[u8], keys: &Keys, request: &Request) 
 /// evaluation faults of SPEC 5.5 (`E_ENVELOPE` for any other value, or on another outcome).
 ///
 /// Its [`Envelope`] has no `pending` outcome, so a `pending` envelope is `E_ENVELOPE` here, as
-/// in 0.3.4; [`check_envelope_any`] accepts it.
+/// in 0.3.4; [`check_envelope_any`] accepts it. Nor has its [`Trust`] `computed` (`spec-0.4.2`):
+/// an envelope with it is `E_ENVELOPE` here and in [`check_envelope_any`], as in 0.3.5;
+/// [`crate::check_answer`] accepts it. Everything else of `spec-0.4.2` (the `fn_hash` echo, in
+/// [`EnvelopeExtras`]; `not_covered`'s `error`; the new codes) is checked as there.
 pub fn check_envelope_extras(
     status: u16,
     body: &[u8],
     keys: &Keys,
     request: &Request,
 ) -> Result<(Envelope, EnvelopeExtras)> {
-    // 1.
-    let v = json::parse(body)?;
-    check_parsed(status, &v, keys, request)
+    crate::answer::check_answer(status, body, keys, request)?.into_envelope()
 }
 
 /// Checks a response envelope (5.5) of any of the nine outcomes, `pending` included
@@ -336,140 +333,15 @@ pub fn check_envelope_extras(
 /// whether it answers the `/cell` request or the job URL. `E_JOB_UNKNOWN` is accepted only in a
 /// `bad_request` answering a job URL (`request` with a job). Never touches the network.
 pub fn check_envelope_any(status: u16, body: &[u8], keys: &Keys, request: &Request) -> Result<AnyEnvelope> {
-    let v = json::parse(body)?;
-    if let Value::Object(m) = &v {
-        if schema::opt(m, "outcome").and_then(Value::as_str) == Some("pending") {
-            return check_pending(status, m, request).map(AnyEnvelope::Pending);
-        }
+    let a = crate::answer::check_answer(status, body, keys, request)?;
+    if let Some(p) = a.pending {
+        return Ok(AnyEnvelope::Pending(p));
     }
-    check_parsed(status, &v, keys, request).map(|(e, x)| AnyEnvelope::Envelope(e, x))
-}
-
-fn check_parsed(status: u16, v: &Value, keys: &Keys, request: &Request) -> Result<(Envelope, EnvelopeExtras)> {
-    // 2.
-    let m = match v {
-        Value::Object(m) if matches!(schema::opt(m, "outcome"), Some(Value::String(_))) => m,
-        _ => return env_err("$", "an envelope is an object with a string outcome"),
-    };
-    let oname = schema::get(m, "outcome").as_str().unwrap_or("");
-    let Some(outcome) = Outcome::from_name(oname) else {
-        return env_err("$.outcome", format!("unknown outcome {oname:?}"));
-    };
-    let (req, optional) = outcome.members();
-    let mut allowed: Vec<&str> = vec!["outcome"];
-    allowed.extend_from_slice(req);
-    schema::exact(m, &allowed, optional, "$", ErrorCode::Envelope)?;
-    let mut env = Envelope {
-        outcome,
-        receipt: None,
-        trust: None,
-        age_seconds: None,
-        superseded_by: None,
-        reason: None,
-        quote: None,
-        retry_after_seconds: None,
-        error: None,
-    };
-    let receipt_v = schema::opt(m, "receipt");
-    if let Some(r) = receipt_v {
-        if !matches!(r, Value::Object(_)) {
-            return env_err("$.receipt", "receipt is a receipt object");
-        }
-    }
-    if let Some(t) = schema::opt(m, "trust") {
-        env.trust = Some(match t.as_str() {
-            Some("primary") => Trust::Primary,
-            Some("verified") => Trust::Verified,
-            Some("unverified") => Trust::Unverified,
-            _ => return env_err("$.trust", "trust is primary, verified or unverified"),
-        });
-    }
-    if let Some(a) = schema::opt(m, "age_seconds") {
-        env.age_seconds = Some(integer_member(a, "$.age_seconds")?);
-    }
-    if let Some(a) = schema::opt(m, "retry_after_seconds") {
-        env.retry_after_seconds = Some(integer_member(a, "$.retry_after_seconds")?);
-    }
-    if let Some(s) = schema::opt(m, "superseded_by") {
-        let s = s.as_str().unwrap_or("");
-        lexical::check_hex(s, 64, "$.superseded_by").map_err(|e| e.recode(ErrorCode::Envelope))?;
-        env.superseded_by = Some(s.into());
-    }
-    if let Some(r) = schema::opt(m, "reason") {
-        let Some(r) = r.as_str() else { return env_err("$.reason", "reason must be a string") };
-        if schema::opt(m, "superseded_by").is_none() {
-            return env_err("$.reason", "reason is only present with superseded_by");
-        }
-        lexical::check_text(r, limits::SUMMARY, false, "$.reason").map_err(|e| e.recode(ErrorCode::Envelope))?;
-        if r.is_empty() {
-            return env_err("$.reason", "reason must not be empty");
-        }
-        env.reason = Some(r.into());
-    }
-    if let Some(q) = schema::opt(m, "quote") {
-        env.quote = Some(quote(q)?);
-    }
-    if let Some(e) = schema::opt(m, "error") {
-        let code = e.as_str().and_then(ErrorCode::from_code);
-        let ok = match (outcome, code) {
-            // E_JOB_UNKNOWN answers a job URL only (spec-0.4.1).
-            (Outcome::BadRequest, Some(ErrorCode::JobUnknown)) => request.job.is_some(),
-            (Outcome::BadRequest, Some(c)) => BAD_REQUEST_CODES.contains(&c),
-            // Any code of 10.2 but the client's E_ENVELOPE and the job URL's E_JOB_UNKNOWN;
-            // E_EVAL_UNAVAILABLE included since spec-0.3.0.
-            (_, Some(c)) => c != ErrorCode::Envelope && c != ErrorCode::JobUnknown,
-            (_, None) => false,
-        };
-        if !ok {
-            return env_err("$.error", format!("{e:?} is not a code this outcome can carry"));
-        }
-        env.error = code;
-    }
-    let mut extras = EnvelopeExtras::default();
-    if let Some(f) = schema::opt(m, "fault") {
-        let Some(fault) = f.as_str().and_then(Fault::from_code) else {
-            return env_err("$.fault", format!("{f:?} is not a formula evaluation fault"));
-        };
-        extras.fault = Some(fault);
-    }
-    // 3.
-    if !outcome.status_ok(status) {
-        return env_err("$.outcome", format!("status {status} does not match outcome {}", outcome.as_str()));
-    }
-    let Some(rv) = receipt_v else { return Ok((env, extras)) };
-    // 4.
-    let r = crate::verify::signature_valid_value(rv, keys).map_err(|(e, _)| {
-        let inner = e.path().strip_prefix('$').unwrap_or(e.path());
-        Error::new(e.code(), format!("$.receipt{inner}"), e.detail())
-    })?;
-    // 5.
-    if r.cell().id() != request.cell_id {
-        return env_err("$.receipt.cell", "the receipt is for another cell than the one requested");
-    }
-    if let Some(asked) = &request.asof {
-        // D31 (revised in spec-0.3.0): at or before the requested asof, for ok and stale
-        // alike; instants are canonical, so text order is time order.
-        if r.asof() > asked.as_str() {
-            return env_err("$.receipt.asof", "the receipt's asof is after the requested asof");
-        }
-    }
-    // 6.
-    let primary = r.signer_host() == lexical::host_of(&r.cell().ns) && r.inputs().is_empty();
-    if (env.trust == Some(Trust::Primary)) != primary {
-        return env_err(
-            "$.trust",
-            if primary { "a primary receipt is labelled primary" } else { "the receipt is not primary" },
-        );
-    }
-    if env.superseded_by.as_deref() == Some(r.hash()) {
-        return env_err("$.superseded_by", "a receipt cannot supersede itself");
-    }
-    env.receipt = Some(r);
-    Ok((env, extras))
+    a.into_envelope().map(|(e, x)| AnyEnvelope::Envelope(e, x))
 }
 
 /// `[0-9a-f]{32,64}`.
-fn is_job(s: &str) -> bool {
+pub(crate) fn is_job(s: &str) -> bool {
     (32..=64).contains(&s.len()) && s.bytes().all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
 }
 
@@ -510,7 +382,7 @@ pub struct Pending {
     /// The job's URL: `https://` and printable ASCII, at most 512 characters, ending
     /// `/jobs/<job>`.
     pub poll: String,
-    /// The original request, echoed: its `cell_id` and `asof` (never a job).
+    /// The original request, echoed: its `cell_id`, `asof` and pin (never a job or a mesh).
     pub request: Request,
 }
 
@@ -518,18 +390,18 @@ impl Pending {
     /// The HTTP status of a `pending` envelope.
     pub const STATUS: u16 = 202;
 
-    /// A `pending` envelope answering `request` (its `cell_id` and `asof` are echoed; a job
-    /// in it is not), checked by the rules of 5.5: `job` 32 to 64 lowercase hex digits,
+    /// A `pending` envelope answering `request` (its `cell_id`, `asof` and pin are echoed; a
+    /// job or mesh in it is not), checked by the rules of 5.5: `job` 32 to 64 lowercase hex digits,
     /// `estimate_seconds` at most 2^53 - 1, `poll` an `https://` URL of printable ASCII of at
     /// most 512 characters whose host (up to the first `/`) is a DNS name (2.1), ending
-    /// `/jobs/<job>`. That `poll` names the mesh's own host is the caller's to ensure. A failure is `E_ENVELOPE`, at the member's
-    /// path.
+    /// `/jobs/<job>`. That `poll` names the mesh's own host is the caller's to ensure. A failure
+    /// is `E_ENVELOPE`, at the member's path.
     pub fn new(job: &str, estimate_seconds: u64, poll: &str, request: Request) -> Result<Pending> {
         check_job_and_poll(job, poll)?;
         if estimate_seconds > limits::BLOB_LENGTH {
             return env_err("$.estimate_seconds", "estimate_seconds is at most 2^53 - 1");
         }
-        let request = Request { job: None, ..request };
+        let request = Request { job: None, mesh: None, ..request };
         Ok(Pending { job: job.into(), estimate_seconds, poll: poll.into(), request })
     }
 
@@ -556,12 +428,16 @@ impl Pending {
         }
         out.push_str("\"cell_id\":");
         json::write_string(&self.request.cell_id, &mut out);
+        if let Some(p) = &self.request.pin {
+            out.push_str(",\"fn_hash\":");
+            json::write_string(p, &mut out);
+        }
         out.push_str("}}");
         out.into_bytes()
     }
 }
 
-fn check_job_and_poll(job: &str, poll: &str) -> Result<()> {
+pub(crate) fn check_job_and_poll(job: &str, poll: &str) -> Result<()> {
     if !is_job(job) {
         return env_err("$.job", "job is 32 to 64 lowercase hex digits");
     }
@@ -582,41 +458,7 @@ fn check_job_and_poll(job: &str, poll: &str) -> Result<()> {
     Ok(())
 }
 
-/// A `pending` envelope (5.5 steps 2, 3 and 5; it has no receipt, so step 4 and 6 do not
-/// apply).
-fn check_pending(status: u16, m: &[(String, Value)], request: &Request) -> Result<Pending> {
-    // 2.
-    schema::exact(m, &["estimate_seconds", "job", "outcome", "poll", "request"], &[], "$", ErrorCode::Envelope)?;
-    let estimate = integer_member(schema::get(m, "estimate_seconds"), "$.estimate_seconds")?;
-    let Some(job) = schema::get(m, "job").as_str() else { return env_err("$.job", "job must be a string") };
-    let Some(poll) = schema::get(m, "poll").as_str() else { return env_err("$.poll", "poll must be a string") };
-    check_job_and_poll(job, poll)?;
-    let rm = schema::object_or(schema::get(m, "request"), "$.request", ErrorCode::Envelope, "request")?;
-    schema::exact(rm, &["cell_id"], &["asof"], "$.request", ErrorCode::Envelope)?;
-    let cell_id = schema::string_or(rm, "cell_id", "$.request", ErrorCode::Envelope)?;
-    let asof = match schema::opt(rm, "asof") {
-        None => None,
-        Some(_) => Some(schema::string_or(rm, "asof", "$.request", ErrorCode::Envelope)?),
-    };
-    let echoed =
-        Request::new(cell_id, asof).map_err(|e| Error::new(ErrorCode::Envelope, "$.request", e.to_string()))?;
-    // 3.
-    if status != Pending::STATUS {
-        return env_err("$.outcome", format!("status {status} does not match outcome pending"));
-    }
-    // 5.
-    if echoed.cell_id != request.cell_id || echoed.asof != request.asof {
-        return env_err("$.request", "the echoed request is not the request made");
-    }
-    if let Some(polled) = &request.job {
-        if job != polled {
-            return env_err("$.job", "the envelope is for another job than the one polled");
-        }
-    }
-    Ok(Pending { job: job.into(), estimate_seconds: estimate, poll: poll.into(), request: echoed })
-}
-
-fn quote(q: &Value) -> Result<Quote> {
+pub(crate) fn quote(q: &Value) -> Result<Quote> {
     let m = schema::object_or(q, "$.quote", ErrorCode::Envelope, "quote")?;
     schema::exact(m, &["amount", "authorise", "currency"], &[], "$.quote", ErrorCode::Envelope)?;
     let amount = schema::string_or(m, "amount", "$.quote", ErrorCode::Envelope)?;
