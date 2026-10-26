@@ -46,7 +46,7 @@ fn run_vectors_output_is_the_expected_output() {
     let out = child.wait_with_output().unwrap();
     writer.join().unwrap().unwrap();
     assert!(out.status.success());
-    let want = std::fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/run-vectors-0.4.1.jsonl")).unwrap();
+    let want = std::fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/run-vectors-0.4.2.jsonl")).unwrap();
     let got = String::from_utf8(out.stdout).unwrap();
     let want = String::from_utf8(want).unwrap();
     assert_eq!(got.lines().count(), files.len());

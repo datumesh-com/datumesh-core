@@ -11,13 +11,18 @@ root="$(cd "$(dirname "$0")/../.." && pwd)"
 w="$1"; [ -n "$w" ] || { echo "usage: $0 <scratch dir>" >&2; exit 2; }
 rm -rf "$w/raw" "$w/final" "$w/oracle"; mkdir -p "$w/raw" "$w/oracle/vectors"
 cp -r "$root/spec/tools" "$root/spec/units.md" "$root/spec/schemas" "$w/oracle/"
-for g in gen1 gen2 gen3 gen4; do
+for g in gen1 gen2 gen3 gen4 gen5; do
   docker run --rm -v "$root/tools/probes:/p:ro" -v "$w:/w" datumesh-test python -I /p/$g.py /w/raw >/dev/null
 done
 cp -r "$w/raw" "$w/oracle/vectors/p"
 docker run --rm -v "$w/oracle:/o" -w /o datumesh-test python tools/canon.py check 2>&1 |
   awk '/^FAIL/{n=$2; sub(".*/","",n); sub(/\.json$/,"",n); next} /^ /{sub(/^ +/,""); sub("expected PROBE, got ",""); print n": "$0}' > "$w/results.txt"
 python3 -I "$root/tools/probes/finalize.py" "$w/raw" "$w/results.txt" "$w/final"
+rm -rf "$w/oracle/vectors/p"; cp -r "$w/final" "$w/oracle/vectors/p"
+# Second run: the outputs of valid envelope and batch probes (fill.py).
+docker run --rm -v "$w/oracle:/o" -w /o datumesh-test python tools/canon.py check 2>&1 |
+  awk '/^FAIL/{n=$2; sub(".*/","",n); sub(/\.json$/,"",n); next} /^ /{sub(/^ +/,""); print n": "$0}' > "$w/results2.txt"
+python3 -I "$root/tools/probes/fill.py" "$w/final" "$w/results2.txt"
 rm -rf "$w/oracle/vectors/p"; cp -r "$w/final" "$w/oracle/vectors/p"
 docker run --rm -v "$w/oracle:/o" -w /o datumesh-test python tools/canon.py check 2>&1 | tail -1
 python3 -I - "$w/final" "$root/crates/datumesh-cli/tests/probes-0.4.0.jsonl" <<'PY'

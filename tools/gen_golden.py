@@ -8,11 +8,13 @@ OUT = {"jcs": ["canonical", "sha256"], "scalar": ["canonical", "sha256"], "cell"
        "ref": ["canonical", "sha256"], "function": ["canonical", "sha256"],
        "uri": ["object", "canonical", "sha256", "https"], "keyid": ["key_id"], "keys": ["key_ids"],
        "receipt": ["canonical", "sha256", "sig", "level", "blob_checked", "code"], "unit": ["unit"],
-       "envelope": ["outcome", "trust", "receipt_hash"],
+       "envelope": ["outcome", "trust", "receipt_hash", "results"],
+       "batch": ["results", "outcome"],
        "slice": ["canonical", "sha256", "slice_id", "members_hash", "entry"],
        "mesh": ["bindings", "endpoints"]}
-KNOWN = {"blob", "cell", "cells", "descriptor", "explain", "find", "jobs", "manifest", "receipt", "slice", "verify"}
-SKIP = {"formula", "formula-eval", "excel", "decimal"}
+KNOWN = {"blob", "cell", "cells", "descriptor", "explain", "find", "jobs", "manifest", "receipt", "slice", "verify",
+         "versions"}
+SKIP = {"formula", "formula-eval", "excel", "decimal", "call"}
 root = sys.argv[1]
 files = []
 for d, _, fs in os.walk(root):

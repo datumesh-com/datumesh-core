@@ -44,9 +44,12 @@ for f in sorted(os.listdir(src)):
             known = {"blob", "cell", "cells", "descriptor", "explain", "find", "jobs", "manifest", "receipt", "slice", "verify"}
             v["bindings"] = d["bindings"]
             v["endpoints"] = {n: u for n, u in d["endpoints"].items() if n in known}
-        elif r0 == "success" and v["kind"] == "envelope":
+        elif r0 == "success" and v["kind"] in ("envelope", "batch", "uri"):
+            # Outputs filled from a second run of the reference tool (fill.py).
             v["valid"] = True
-            v["outcome"] = json.loads(v["input"])["outcome"]
+            fields = ("object", "canonical", "sha256", "https") if v["kind"] == "uri" else ("outcome", "trust", "receipt_hash", "results")
+            for k in fields:
+                v[k] = "PROBE"
         elif r0 == "success":
             v["valid"] = True
             obj = json.loads(v["input"])
