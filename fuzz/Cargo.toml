@@ -59,3 +59,17 @@ path = "fuzz_targets/mesh.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "batch"
+path = "fuzz_targets/batch.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "slice_page"
+path = "fuzz_targets/slice_page.rs"
+test = false
+doc = false
+bench = false

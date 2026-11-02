@@ -432,10 +432,7 @@ impl Answer {
             retry_after_seconds: self.retry_after_seconds,
             error: self.error,
         };
-        let mut extras = EnvelopeExtras::default();
-        extras.fault = self.fault;
-        extras.fn_hash = self.fn_hash;
-        Ok((env, extras))
+        Ok((env, EnvelopeExtras { fault: self.fault, fn_hash: self.fn_hash }))
     }
 }
 
@@ -566,7 +563,7 @@ pub enum Batch {
     Items(Vec<Result<Answer>>),
     /// The whole batch refused: one envelope (`unlicensed`, `payment_required`, `rate_limited`,
     /// `bad_request` or `error`).
-    Refused(Answer),
+    Refused(Box<Answer>),
 }
 
 /// Checks the answer to a batch (5.7) of `requests`: for 200, an array with one
@@ -594,7 +591,7 @@ pub fn check_batch(status: u16, body: &[u8], keys: &Keys, requests: &[Request]) 
                 "a batch is refused with unlicensed, payment_required, rate_limited, bad_request or error",
             );
         }
-        return Ok(Batch::Refused(a));
+        return Ok(Batch::Refused(Box::new(a)));
     }
     let Value::Array(items) = &v else { return env_err("$", "a batch answer is an array") };
     if items.len() != requests.len() {

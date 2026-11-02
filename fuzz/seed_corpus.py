@@ -30,6 +30,10 @@ for path in sorted(glob.glob(os.path.join(root, "spec", "vectors", "*", "*.json"
         for mode in range(8): put("slice", f"{name}_{mode}", bytes([mode]) + raw)
     elif v["kind"] == "uri":
         put("uri", name, raw); put("uri", name + "_sig", raw + b"\n" + json.dumps(v["signature"]).encode())
+    elif v["kind"] == "batch":
+        for mode in range(8): put("batch", f"{name}_{mode}", bytes([mode]) + raw)
+    elif v["kind"] == "envelope" and "slice_id" in v.get("request", {}):
+        for mode in range(16): put("slice_page", f"{name}_{mode}", bytes([mode]) + raw)
     elif v["kind"] == "mesh":
         body = v["env"].get("mesh", {}).get("https", {}).get("body")
         if body:
