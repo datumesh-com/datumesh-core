@@ -5,8 +5,8 @@ each entry; the public API is frozen from 0.3.0 until 1.0 except for additions.
 
 ## 0.3.6 (unreleased)
 
-Specification: `spec-0.4.2` (`810761d`); all 555 vectors for verifier libraries pass (574 for
-formula evaluators skipped, `call` included; 1129 in all). Additions only
+Specification: `spec-0.4.2` (`fc870ab`); all 561 vectors for verifier libraries pass (585 for
+formula evaluators skipped, `call` included; 1146 in all). Additions only
 (`API-CHANGES-0.3.6.md` has the `cargo public-api diff` against 0.3.5).
 
 ### Added

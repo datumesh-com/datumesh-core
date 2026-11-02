@@ -515,7 +515,9 @@ impl SliceRequest {
     }
 
     /// For a following page: the key of the last member received, from each open argument's
-    /// name to its value.
+    /// name to its value. Other names are ignored; a cursor lacking an open argument, or whose
+    /// value has another type than the members' key, cannot be ordered against (`E_ENVELOPE`
+    /// from [`check_slice_answer`]).
     pub fn with_after(self, after: BTreeMap<String, Scalar>) -> SliceRequest {
         SliceRequest { after: Some(after), ..self }
     }
@@ -676,6 +678,9 @@ fn check_inner(status: u16, v: &Value, keys: &Keys, ctx: &Ctx<'_>) -> Result<Ans
         return env_err("$.outcome", format!("status {status} does not match outcome {oname}"));
     }
     a.status = status;
+    // 3a. What the request decides without the receipt: the pin echo (E_JOB_UNKNOWN only at
+    // a job URL was checked with the members; pending is checked apart).
+    pin_echo(&a, ctx.pin(), "$.fn_hash")?;
     if is_page {
         let Ctx::Slice(req) = ctx else { return env_err("$", "a page answers a slice request") };
         return check_page(m, a, keys, req);
@@ -684,12 +689,11 @@ fn check_inner(status: u16, v: &Value, keys: &Keys, ctx: &Ctx<'_>) -> Result<Ans
     if let Some(rv) = schema::opt(m, "receipt") {
         a.receipt = Some(member_receipt(rv, keys, "$.receipt")?);
     }
-    // 5. and 6.
-    match ctx {
-        Ctx::Cell(req) => bind_cell(&a, req)?,
-        Ctx::Slice(_) | Ctx::None => {}
+    // 5.
+    if let Ctx::Cell(req) = ctx {
+        bind_cell(&a, req)?;
     }
-    echo(&a, ctx.pin(), "$.fn_hash")?;
+    // 6.
     if let Some(r) = &a.receipt {
         trust_check(&a, r, ctx.mesh(), "$")?;
     }
@@ -790,9 +794,9 @@ fn bind_cell(a: &Answer, req: &Request) -> Result<()> {
     Ok(())
 }
 
-/// The `fn_hash` echo (5.5): with a pin, required (but on `rate_limited` and `bad_request`) and
-/// equal to it; with a receipt, equal to its `cell.fn_hash`.
-fn echo(a: &Answer, pin: Option<&str>, path: &str) -> Result<()> {
+/// The pin echo (5.5 step 3a): with a pin, `fn_hash` required (but on `rate_limited` and
+/// `bad_request`) and equal to it.
+fn pin_echo(a: &Answer, pin: Option<&str>, path: &str) -> Result<()> {
     if let Some(p) = pin {
         match &a.fn_hash {
             Some(h) if h != p => return env_err(path, "the fn_hash echo is not the pin"),
@@ -802,15 +806,11 @@ fn echo(a: &Answer, pin: Option<&str>, path: &str) -> Result<()> {
             _ => {}
         }
     }
-    if let (Some(h), Some(r)) = (&a.fn_hash, &a.receipt) {
-        if *h != r.cell().fn_hash {
-            return env_err(path, "fn_hash differs from the receipt's cell.fn_hash");
-        }
-    }
     Ok(())
 }
 
-/// 5.5 step 6: trust against the receipt (and the host asked, when known), `superseded_by`.
+/// 5.5 step 6: trust against the receipt (and the host asked, when known), then `fn_hash`
+/// against the receipt's `cell.fn_hash`, then `superseded_by`.
 fn trust_check(a: &Answer, r: &Receipt, mesh: Option<&str>, at: &str) -> Result<()> {
     let p = |m: &str| format!("{at}.{m}");
     let primary = r.signer_host() == lexical::host_of(&r.cell().ns) && r.inputs().is_empty();
@@ -831,6 +831,9 @@ fn trust_check(a: &Answer, r: &Receipt, mesh: Option<&str>, at: &str) -> Result<
             }
             _ => {}
         }
+    }
+    if a.fn_hash.as_deref().is_some_and(|h| h != r.cell().fn_hash) {
+        return env_err(&p("fn_hash"), "fn_hash differs from the receipt's cell.fn_hash");
     }
     if a.superseded_by.as_deref() == Some(r.hash()) {
         return env_err(&p("superseded_by"), "a receipt cannot supersede itself");
@@ -898,56 +901,51 @@ fn cmp_keys(a: &[Scalar], b: &[Scalar]) -> core::cmp::Ordering {
     a.len().cmp(&b.len())
 }
 
-/// 5.6: a page bound to its request.
+/// 5.6: a page bound to its request, the page first, then each member completely.
 fn check_page(m: &[(String, Value)], mut a: Answer, keys: &Keys, req: &SliceRequest) -> Result<Answer> {
     let Value::Array(items) = schema::get(m, "members") else {
         return env_err("$.members", "members is an array of envelopes");
     };
     let slice = Slice::from_value(schema::get(m, "slice")).map_err(|e| e.recode(ErrorCode::Envelope))?;
     let next = schema::opt(m, "next").and_then(Value::as_str).map(String::from);
-    // 1. The members of each member envelope.
-    let mut members = Vec::with_capacity(items.len());
-    for (i, item) in items.iter().enumerate() {
-        let p = format!("$.members[{i}]");
-        let mm = match item {
-            Value::Object(mm) => mm,
-            _ => return env_err(&p, "a member is an envelope"),
-        };
-        let o = schema::get(mm, "outcome").as_str().and_then(AnswerOutcome::from_name);
-        let o = match o {
-            Some(o @ (AnswerOutcome::Ok | AnswerOutcome::Stale)) => o,
-            _ => return env_err(&p, "a member is an ok or stale envelope"),
-        };
-        let ma = check_members(mm, o, &Ctx::None, false).map_err(|e| nested(e, &p))?;
-        members.push((ma, schema::get(mm, "receipt"), p));
-    }
-    // 2. The slice and next.
+    // 2. The page: the slice, its fn_hash, next, the cursor.
     if slice.id() != req.slice_id {
         return env_err("$.slice", "the page is of another slice than the one requested");
+    }
+    if a.fn_hash.as_deref().is_some_and(|h| h != slice.fn_hash()) {
+        return env_err("$.fn_hash", "fn_hash differs from the slice's");
     }
     if let (Some(host), Some(n)) = (&req.mesh, &next) {
         if url_host(n) != Some(host.as_str()) {
             return env_err("$.next", "next is on another host than the one asked");
         }
     }
-    echo(&a, req.pin.as_deref(), "$.fn_hash")?;
-    if let Some(h) = &a.fn_hash {
-        if h != slice.fn_hash() {
-            return env_err("$.fn_hash", "fn_hash differs from the slice's");
-        }
-    }
-    // 3. Each member.
+    // The cursor on the open arguments only; other names are ignored.
     let names = slice.key_names();
-    if let Some(after) = &req.after {
-        if after.keys().cloned().collect::<Vec<_>>() != names {
-            return env_err("$", "after names other arguments than the slice's open ones");
+    let mut last: Option<Vec<Scalar>> = match &req.after {
+        None => None,
+        Some(after) => {
+            let key: Vec<Scalar> = names.iter().filter_map(|n| after.get(n).cloned()).collect();
+            if key.len() != names.len() {
+                return env_err("$", "the cursor lacks an open argument of the slice");
+            }
+            Some(key)
         }
-    }
-    let mut last: Option<Vec<Scalar>> =
-        req.after.as_ref().map(|af| names.iter().filter_map(|n| af.get(n).cloned()).collect());
-    let mut out = Vec::with_capacity(members.len());
-    for (mut ma, rv, p) in members {
-        let r = member_receipt(rv, keys, &format!("{p}.receipt"))?;
+    };
+    // 3. Each member, completely, in order.
+    let mut out = Vec::with_capacity(items.len());
+    for (i, item) in items.iter().enumerate() {
+        let p = format!("$.members[{i}]");
+        let mm = match item {
+            Value::Object(mm) => mm,
+            _ => return env_err(&p, "a member is an envelope"),
+        };
+        let o = match schema::get(mm, "outcome").as_str().and_then(AnswerOutcome::from_name) {
+            Some(o @ (AnswerOutcome::Ok | AnswerOutcome::Stale)) => o,
+            _ => return env_err(&p, "a member is an ok or stale envelope"),
+        };
+        let mut ma = check_members(mm, o, &Ctx::None, false).map_err(|e| nested(e, &p))?;
+        let r = member_receipt(schema::get(mm, "receipt"), keys, &format!("{p}.receipt"))?;
         if !slice.contains(&r) {
             return env_err(&p, "the member's cell is not a member of the slice");
         }
@@ -956,16 +954,18 @@ fn check_page(m: &[(String, Value)], mut a: Answer, keys: &Keys, req: &SliceRequ
                 return env_err(&format!("{p}.receipt.asof"), "the member's asof is after the requested asof");
             }
         }
-        ma.receipt = Some(r.clone());
-        echo(&ma, None, &format!("{p}.fn_hash"))?;
         trust_check(&ma, &r, req.mesh.as_deref(), &p)?;
         let key = key_of(&r, &names);
         if let Some(prev) = &last {
+            if key.len() != prev.len() || key.iter().zip(prev).any(|(x, y)| x.ty() != y.ty()) {
+                return env_err(&p, "the member's key has other types than the previous key (or the cursor)");
+            }
             if cmp_keys(&key, prev) != core::cmp::Ordering::Greater {
                 return env_err(&p, "members are in strictly ascending key order, after the cursor");
             }
         }
         last = Some(key);
+        ma.receipt = Some(r);
         out.push(ma);
     }
     a.page = Some(SlicePage { slice, members: out, next });

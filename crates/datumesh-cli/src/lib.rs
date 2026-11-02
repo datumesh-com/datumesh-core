@@ -265,9 +265,25 @@ fn status_of(v: &Value) -> u16 {
     v.get("status").and_then(Value::as_number_text).map_or(0, |n| n.parse::<u16>().unwrap_or(0))
 }
 
+/// A member a request description does not have, or one that is not a string where a string
+/// is due, is a malformed description: the caller's error (5.5, fc870ab), a malformed vector.
+fn known_members(req: &Value, names: &[&str]) -> Result<(), Error> {
+    let Some(m) = req.as_object() else { return Err(vector_error("a request description is an object")) };
+    for (k, v) in m {
+        if !names.contains(&k.as_str()) {
+            return Err(vector_error(&format!("a request description has no member {k:?}")));
+        }
+        if k != "after" && !matches!(v, Value::String(_)) {
+            return Err(vector_error(&format!("request member {k:?} is a string")));
+        }
+    }
+    Ok(())
+}
+
 /// A request description of SPEC 11: `cell_id`, `asof`, `job` (spec-0.4.1), `fn_hash` and
 /// `mesh` (spec-0.4.2).
 fn request_of(req: &Value) -> Result<Request, Error> {
+    known_members(req, &["cell_id", "asof", "job", "fn_hash", "mesh"])?;
     let str_of = |k: &str| req.get(k).and_then(Value::as_str);
     let bad = |e: datumesh_core::InvalidRequest| vector_error(&e.to_string());
     let mut r = match str_of("job") {
@@ -286,6 +302,7 @@ fn request_of(req: &Value) -> Result<Request, Error> {
 
 /// A slice request of SPEC 11: `slice_id`, `asof`, `fn_hash`, `mesh`, `after`.
 fn slice_request(req: &Value) -> Result<SliceRequest, Error> {
+    known_members(req, &["slice_id", "asof", "fn_hash", "mesh", "after"])?;
     let str_of = |k: &str| req.get(k).and_then(Value::as_str);
     let bad = |e: datumesh_core::InvalidRequest| vector_error(&e.to_string());
     let mut r = SliceRequest::new(str_of("slice_id").unwrap_or(""), str_of("asof")).map_err(bad)?;
@@ -295,7 +312,8 @@ fn slice_request(req: &Value) -> Result<SliceRequest, Error> {
     if let Some(m) = str_of("mesh") {
         r = r.with_mesh(m).map_err(bad)?;
     }
-    if let Some(Value::Object(after)) = req.get("after") {
+    if let Some(after) = req.get("after") {
+        let Value::Object(after) = after else { return Err(vector_error("after is an object")) };
         let mut a = std::collections::BTreeMap::new();
         for (k, x) in after {
             a.insert(k.clone(), Scalar::from_json(&x.to_jcs()).map_err(|e| vector_error(&e.to_string()))?);
