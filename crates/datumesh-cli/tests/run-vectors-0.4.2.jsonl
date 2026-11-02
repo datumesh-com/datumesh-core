@@ -79,6 +79,7 @@
 {"error":null,"id":"envelope/served-ok","outcome":"ok","receipt_hash":"19a5fe3a744c5792f747fb4c286ce396ab44b95922de4f07937502fe595b6f81","trust":"primary"}
 {"error":null,"id":"envelope/served-stale","outcome":"stale","receipt_hash":"19a5fe3a744c5792f747fb4c286ce396ab44b95922de4f07937502fe595b6f81","trust":"primary"}
 {"error":null,"id":"envelope/slice-after","outcome":"ok","results":[{"outcome":"ok","receipt_hash":"0ee208b8aab2cf31b2c929ea9ee98101f9269852f69863aa8d7a835216324545","trust":"primary"},{"outcome":"ok","receipt_hash":"19a5fe3a744c5792f747fb4c286ce396ab44b95922de4f07937502fe595b6f81","trust":"primary"}]}
+{"error":null,"id":"envelope/slice-cursor-extra","outcome":"ok","results":[{"outcome":"ok","receipt_hash":"0ee208b8aab2cf31b2c929ea9ee98101f9269852f69863aa8d7a835216324545","trust":"primary"}]}
 {"error":null,"id":"envelope/slice-empty","outcome":"ok","results":[]}
 {"error":null,"id":"envelope/slice-last-page","outcome":"ok","results":[{"outcome":"ok","receipt_hash":"639c25d003be275ef236de07c5dc1b0ac50b9fa2d0b22f62143083f7bad287e5","trust":"primary"},{"outcome":"stale","receipt_hash":"717f448e9a703465079cab323e260ba781ee65fdf818de07a972640f36e5d295","trust":"primary"},{"outcome":"ok","receipt_hash":"19a5fe3a744c5792f747fb4c286ce396ab44b95922de4f07937502fe595b6f81","trust":"primary"}]}
 {"error":null,"id":"envelope/slice-not-covered","outcome":"not_covered"}
@@ -149,6 +150,7 @@
 {"error":null,"id":"excel/sqrt","skipped":"excel"}
 {"error":null,"id":"excel/stdev-p","skipped":"excel"}
 {"error":null,"id":"excel/stdev-s","skipped":"excel"}
+{"error":null,"id":"excel/substitute","skipped":"excel"}
 {"error":null,"id":"excel/sum","skipped":"excel"}
 {"error":null,"id":"excel/sumif","skipped":"excel"}
 {"error":null,"id":"excel/sumifs","skipped":"excel"}
@@ -387,6 +389,7 @@
 {"error":null,"id":"formula-eval/fx-forward","skipped":"formula-eval"}
 {"error":null,"id":"formula-eval/grouped-mean","skipped":"formula-eval"}
 {"error":null,"id":"formula-eval/haversine","skipped":"formula-eval"}
+{"error":null,"id":"formula-eval/hebrew-consonantal","skipped":"formula-eval"}
 {"error":null,"id":"formula-eval/if-unchosen-branch","skipped":"formula-eval"}
 {"error":null,"id":"formula-eval/instant-difference","skipped":"formula-eval"}
 {"error":null,"id":"formula-eval/instant-plus","skipped":"formula-eval"}
@@ -419,6 +422,7 @@
 {"error":null,"id":"formula-eval/power-negative","skipped":"formula-eval"}
 {"error":null,"id":"formula-eval/read-current","skipped":"formula-eval"}
 {"error":null,"id":"formula-eval/read-earlier-asof","skipped":"formula-eval"}
+{"error":null,"id":"formula-eval/remove-chars","skipped":"formula-eval"}
 {"error":null,"id":"formula-eval/round-digits-exact","skipped":"formula-eval"}
 {"error":null,"id":"formula-eval/round-half-away-negative","skipped":"formula-eval"}
 {"error":null,"id":"formula-eval/round-half-away","skipped":"formula-eval"}
@@ -447,6 +451,8 @@
 {"error":null,"id":"formula-eval/subtract-to-zero","skipped":"formula-eval"}
 {"error":null,"id":"formula-eval/text-boolean","skipped":"formula-eval"}
 {"error":null,"id":"formula-eval/text-number","skipped":"formula-eval"}
+{"error":null,"id":"formula-eval/text-of-nfc","skipped":"formula-eval"}
+{"error":null,"id":"formula-eval/text-of","skipped":"formula-eval"}
 {"error":null,"id":"formula-eval/trim","skipped":"formula-eval"}
 {"error":null,"id":"formula-eval/upper","skipped":"formula-eval"}
 {"error":null,"id":"formula-eval/versions-count","skipped":"formula-eval"}
@@ -566,6 +572,7 @@
 {"error":"E_ENVELOPE","id":"invalid/envelope-pending-uppercase-job"}
 {"error":"E_ENVELOPE","id":"invalid/envelope-pending-with-receipt"}
 {"error":"E_ENVELOPE","id":"invalid/envelope-pending-with-trust"}
+{"error":"E_ENVELOPE","id":"invalid/envelope-pin-not-echoed-bad-receipt"}
 {"error":"E_ENVELOPE","id":"invalid/envelope-pin-not-echoed"}
 {"error":"E_ENVELOPE","id":"invalid/envelope-pin-other"}
 {"error":"E_ENVELOPE","id":"invalid/envelope-poll-other-mesh"}
@@ -578,8 +585,12 @@
 {"error":"E_ENVELOPE","id":"invalid/envelope-seconds-negative-zero"}
 {"error":"E_ENVELOPE","id":"invalid/envelope-seconds-too-large"}
 {"error":"E_ENVELOPE","id":"invalid/envelope-slice-before-cursor"}
+{"error":"E_ENVELOPE","id":"invalid/envelope-slice-cursor-missing"}
+{"error":"E_ENVELOPE","id":"invalid/envelope-slice-cursor-type"}
 {"error":"E_ENVELOPE","id":"invalid/envelope-slice-duplicate"}
+{"error":"E_ENVELOPE","id":"invalid/envelope-slice-fn-hash"}
 {"error":"E_ENVELOPE","id":"invalid/envelope-slice-later-asof"}
+{"error":"E_SIGNATURE","id":"invalid/envelope-slice-member-checks-in-order"}
 {"error":"E_ENVELOPE","id":"invalid/envelope-slice-member-outcome"}
 {"error":"E_ENVELOPE","id":"invalid/envelope-slice-next-other-mesh"}
 {"error":"E_ENVELOPE","id":"invalid/envelope-slice-not-member"}
@@ -663,6 +674,11 @@
 {"error":null,"id":"invalid/formula-eval-sqrt-negative","skipped":"formula-eval"}
 {"error":null,"id":"invalid/formula-eval-string-range","skipped":"formula-eval"}
 {"error":null,"id":"invalid/formula-eval-substr-domain","skipped":"formula-eval"}
+{"error":null,"id":"invalid/formula-eval-text-of-control","skipped":"formula-eval"}
+{"error":null,"id":"invalid/formula-eval-text-of-long","skipped":"formula-eval"}
+{"error":null,"id":"invalid/formula-eval-text-of-media-type","skipped":"formula-eval"}
+{"error":null,"id":"invalid/formula-eval-text-of-unavailable","skipped":"formula-eval"}
+{"error":null,"id":"invalid/formula-eval-text-of-utf8","skipped":"formula-eval"}
 {"error":null,"id":"invalid/formula-eval-versions-future","skipped":"formula-eval"}
 {"error":null,"id":"invalid/formula-eval-window-width","skipped":"formula-eval"}
 {"error":null,"id":"invalid/formula-exponent-sqrt","skipped":"formula"}
@@ -728,6 +744,7 @@
 {"error":null,"id":"invalid/formula-string-nfd","skipped":"formula"}
 {"error":null,"id":"invalid/formula-string-unterminated","skipped":"formula"}
 {"error":null,"id":"invalid/formula-super","skipped":"formula"}
+{"error":null,"id":"invalid/formula-text-of-string","skipped":"formula"}
 {"error":null,"id":"invalid/formula-this","skipped":"formula"}
 {"error":null,"id":"invalid/formula-trailing-comma","skipped":"formula"}
 {"error":null,"id":"invalid/formula-trailing-operator","skipped":"formula"}
