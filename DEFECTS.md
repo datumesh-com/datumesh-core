@@ -16,7 +16,8 @@ found while implementing `spec-0.3.0`, are resolved by `dedd132` (`spec-0.4.0`).
 RS-37, found while implementing `spec-0.4.0` at `dedd132`, are resolved by `18be70f`; 0.3.4
 pinned `f3d3e2c` (the `spec-0.4.0` tag), whose verification text, vectors and schemas are those
 of `18be70f`. For 0.3.5 the submodule is at `3f79313` (`spec-0.4.1`): RS-38 to RS-41, found while
-implementing `0dac072`, are resolved by it. No entry is open.
+implementing `0dac072`, are resolved by it. For 0.3.6 the submodule is at `810761d`
+(`spec-0.4.2`); RS-42 and RS-43, found while implementing it, are open.
 
 Disclosure: before the submodule existed I ran oracle probes against a copy of
 `/root/datumesh-spec`, a working tree that turned out to contain uncommitted `spec-0.2.1` edits to
@@ -607,3 +608,46 @@ at a job URL), the mesh document and cross-mesh resolution with `E_MESH_DOC`. 85
   known endpoint is `E_MESH_DOC` (it was accepted). Also settled in `3f79313`, SPEC 5.5 `poll`:
   "The text between `https://` and the next `/` is a DNS name (2.1)"; `check_envelope_any` and
   `Pending::new` now reject a `poll` whose host is not one (`E_ENVELOPE`).
+
+## spec-0.4.2 (`810761d`), implemented in datumesh-core 0.3.6
+
+What the new text settles, checked against this crate: the pin in URIs and references and its
+place in 5.4's order; `fn_hash` reserved; the `fn_hash` echo; trust `computed` with and without
+the mesh asked; `not_covered`'s `error`; the request codes; slice pages (5.6); batches (5.7);
+the `versions` endpoint. 124 more probes (`tools/probes/gen5.py`), 399 in all, agree with the
+reference tool at `810761d`. Two probes were dropped because they test request descriptions
+the text leaves to the caller (RS-42, RS-43).
+
+### RS-42. 5.5 step 5 / 11: a malformed pin in a request description
+- **Section.** 5.5 ("A malformed request description ... is the caller's error. It is not an
+  `E_*` code"), 11 (`request.fn_hash`).
+- **Problem.** The text makes a malformed request description the caller's error, but lists only
+  `cell_id` and `asof`. The reference tool, given an envelope vector whose `request.fn_hash` is
+  uppercase hex, reports `E_ENVELOPE` (it checks the echo against the pin as given), where this
+  crate refuses the description (`Request::with_pin` gives `InvalidRequest`; the runner reports a
+  malformed vector). No vector has one.
+- **Resolution.** `InvalidRequest`, by the stated rule. A malformed `mesh` (not a DNS name), or a
+  malformed slice request member (`slice_id`, `asof`, `fn_hash`, `mesh`), likewise.
+- **Proposed wording (5.5).** "A malformed request description, meaning a `cell_id` that is not
+  64 lowercase hex digits, an `asof` that is not an instant, a `fn_hash` that is not 64 lowercase
+  hex digits or a `mesh` that is not a DNS name, is the caller's error."
+- **Status.** **Open.**
+
+### RS-43. 5.6: `after` that is not a key of the slice
+- **Section.** 5.6 ("`after`, an object from each open argument's name to the member's typed
+  scalar"; "its key after the previous member's, and after `after`").
+- **Problem.** Not said: an `after` naming other arguments than the slice's open ones, or whose
+  value has another type than the argument's. The reference tool gives `E_ENVELOPE` for the
+  first and accepts the second (comparing across types somehow). Both are malformed request
+  descriptions rather than properties of the page.
+- **Resolution.** Other names: `E_ENVELOPE`, as the oracle. Another type: compared by type,
+  then in the type's order; no probe kept.
+- **Proposed wording.** "`after` names exactly the slice's open arguments, each with a value of
+  the argument's type; any other `after` is a malformed request description (the caller's
+  error)."
+- **Status.** **Open.**
+
+### Not checked here: the versions response (9.8)
+The answer of the `versions` endpoint is unsigned, read only by a mesh importing a cell's
+history, and has no vector; this crate exposes no check for it (the mesh document's `versions`
+template is checked). An importer verifies each receipt on its own (10.1).

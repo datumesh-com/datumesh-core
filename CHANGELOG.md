@@ -3,7 +3,38 @@
 All notable changes to `datumesh-core`. The crate follows the specification revision named in
 each entry; the public API is frozen from 0.3.0 until 1.0 except for additions.
 
-## 0.3.5 (unreleased)
+## 0.3.6 (unreleased)
+
+Specification: `spec-0.4.2` (`810761d`); all 555 vectors for verifier libraries pass (574 for
+formula evaluators skipped, `call` included; 1129 in all). Additions only
+(`API-CHANGES-0.3.6.md` has the `cargo public-api diff` against 0.3.5).
+
+### Added
+- `ErrorCode::SliceAtCell` (`E_SLICE_AT_CELL`), `ErrorCode::NameUnbound` (`E_NAME_UNBOUND`).
+- Pins: `Reference` (`#[non_exhaustive]`), `parse_reference`, `format_reference`.
+- `check_answer`, `Answer`, `AnswerOutcome`, `TrustLabel` (`#[non_exhaustive]`): every envelope
+  of `spec-0.4.2`, trust `computed`, the `fn_hash` echo, `not_covered`'s `error`;
+  `Request::with_pin`, `with_mesh`, `fn_hash`, `mesh`; `EnvelopeExtras::fn_hash`.
+- The envelope builder: `Answer::ok`, `stale`, `not_covered`, `unlicensed`,
+  `payment_required`, `rate_limited`, `bad_request`, `error`, `pending`, `page`, the `with_*`
+  members, `to_json`, `to_value`, `status`; `batch_body`.
+- Slice pages: `check_slice_answer`, `SliceRequest`, `SlicePage`. Batches: `check_batch`,
+  `Batch`. The mesh document's `versions` endpoint.
+
+### Changed (behaviour, following the specification)
+- `fn_hash` is a reserved argument name (`E_CANON_ARG_NAME`) in descriptors, cells, receipts
+  and URIs.
+- `parse_uri` refuses a pinned URI (`E_CANON_ARG_NAME`: its `CellRef` has no pin); the 0.3.x
+  envelope functions accept the `fn_hash` echo, `not_covered`'s `error` and the new codes, and
+  refuse trust `computed` (their `Trust` has no `computed`), as 0.3.5 did.
+- `datumesh-cli`: the `batch` kind; `request.fn_hash`, `mesh`, `slice_id`, `after`; slice
+  page `results`; `call` skipped.
+
+### Not here
+- The call form (5.8) is parsed by the formula crate: see README. The versions response (9.8)
+  has no check here: no vector exercises it and a verifier never reads it.
+
+## 0.3.5
 
 Specification: `spec-0.4.1` (`3f79313`); all 491 vectors for verifier libraries pass (546 for
 formula evaluators skipped; 1037 in all). Additions only (`API-CHANGES-0.3.5.md` has the
