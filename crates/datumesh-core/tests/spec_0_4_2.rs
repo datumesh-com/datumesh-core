@@ -50,7 +50,7 @@ fn status(v: &Value) -> u16 {
 fn codes_and_the_reserved_name() {
     assert_eq!(ErrorCode::from_code("E_SLICE_AT_CELL"), Some(ErrorCode::SliceAtCell));
     assert_eq!(ErrorCode::from_code("E_NAME_UNBOUND"), Some(ErrorCode::NameUnbound));
-    assert_eq!(&ErrorCode::ALL[46..], [ErrorCode::SliceAtCell, ErrorCode::NameUnbound]);
+    assert_eq!(&ErrorCode::ALL[46..48], [ErrorCode::SliceAtCell, ErrorCode::NameUnbound]);
     assert_eq!(datumesh_core::lexical::check_arg_name("fn_hash", "$").unwrap_err().code(), ErrorCode::CanonArgName);
 }
 

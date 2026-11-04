@@ -1,13 +1,14 @@
 """fill.py <dir> <results>: replace the PROBE outputs of valid envelope and batch probes with
 what the reference tool gave ("<field>: expected 'PROBE', got <python repr>"); a field it
-gave as None is dropped."""
+gave as None is dropped, except a licence vector's licence (null: a refusal)."""
 import ast, json, os, re, sys
 d, res = sys.argv[1:3]
-FIELDS = ("outcome", "trust", "receipt_hash", "results", "object", "canonical", "sha256", "https")
+FIELDS = ("outcome", "trust", "receipt_hash", "results", "object", "canonical", "sha256", "https",
+          "key_ids", "declarations", "licence", "reason", "entitled")
 got = {}
 for line in open(res, encoding="utf-8"):
     name, _, r = line.rstrip("\n").partition(": ")
-    m = re.match(r"(outcome|trust|receipt_hash|results|object|canonical|sha256|https): expected 'PROBE', got (.*)$", r)
+    m = re.match(r"(outcome|trust|receipt_hash|results|object|canonical|sha256|https|key_ids|declarations|licence|reason|entitled): expected 'PROBE', got (.*)$", r)
     if m:
         got.setdefault(name, {})[m.group(1)] = ast.literal_eval(m.group(2))
 for f in os.listdir(d):
@@ -18,7 +19,9 @@ for f in os.listdir(d):
     g = got.get(f[:-5], {})
     for k in FIELDS:
         if v.get(k) == "PROBE":
-            if g.get(k) is None:
+            if g.get(k) is None and k == "licence" and k in g:
+                v[k] = None  # spec-0.4.3: a refusal is a null licence, not an absent one
+            elif g.get(k) is None:
                 del v[k]
             else:
                 v[k] = g[k]

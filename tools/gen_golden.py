@@ -2,16 +2,18 @@
 by path components, as the Rust test sorts), from the files alone: id, error, and the kind's
 output members the vector gives. A valid mesh vector without bindings and endpoints (spec
 0dac072, DEFECTS.md RS-38) has them derived from the mesh document in its env, unknown
-endpoints dropped; since 3f79313 the vectors carry them. Usage: python3 tools/gen_golden.py spec/vectors"""
+endpoints dropped; since 3f79313 the vectors carry them. Since spec-0.4.3: keys vectors
+with declarations carry them as an output; the kinds licence and entitlement. Usage: python3 tools/gen_golden.py spec/vectors"""
 import json, os, sys
 OUT = {"jcs": ["canonical", "sha256"], "scalar": ["canonical", "sha256"], "cell": ["canonical", "sha256"],
        "ref": ["canonical", "sha256"], "function": ["canonical", "sha256"],
-       "uri": ["object", "canonical", "sha256", "https"], "keyid": ["key_id"], "keys": ["key_ids"],
+       "uri": ["object", "canonical", "sha256", "https"], "keyid": ["key_id"], "keys": ["key_ids", "declarations"],
        "receipt": ["canonical", "sha256", "sig", "level", "blob_checked", "code"], "unit": ["unit"],
        "envelope": ["outcome", "trust", "receipt_hash", "results"],
        "batch": ["results", "outcome"],
        "slice": ["canonical", "sha256", "slice_id", "members_hash", "entry"],
-       "mesh": ["bindings", "endpoints"]}
+       "mesh": ["bindings", "endpoints"],
+       "licence": ["licence", "reason"], "entitlement": ["entitled", "reason"]}
 KNOWN = {"blob", "cell", "cells", "descriptor", "explain", "find", "jobs", "manifest", "receipt", "slice", "verify",
          "versions"}
 SKIP = {"formula", "formula-eval", "excel", "decimal", "call"}

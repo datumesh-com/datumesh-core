@@ -17,7 +17,8 @@ for f in sorted(os.listdir(src)):
         rs = results[re.sub(r".json", "", f)]
     r0 = rs[0]
     for k in ("error",):
-        v.pop(k, None)
+        if v["kind"] != "licence":
+            v.pop(k, None)
     if v["kind"] == "receipt":
         if r0.startswith("expected valid, got "):
             code = r0[len("expected valid, got "):].split(" ")[0]
@@ -44,6 +45,13 @@ for f in sorted(os.listdir(src)):
             known = {"blob", "cell", "cells", "descriptor", "explain", "find", "jobs", "manifest", "receipt", "slice", "verify"}
             v["bindings"] = d["bindings"]
             v["endpoints"] = {n: u for n, u in d["endpoints"].items() if n in known}
+        elif v["kind"] == "licence":
+            # spec-0.4.3: always valid; licence and reason filled by fill.py.
+            pass
+        elif r0 == "success" and v["kind"] in ("keys", "entitlement"):
+            v["valid"] = True
+            for k in (("key_ids", "declarations") if v["kind"] == "keys" else ("entitled", "reason")):
+                v[k] = "PROBE"
         elif r0 == "success" and v["kind"] in ("envelope", "batch", "uri"):
             # Outputs filled from a second run of the reference tool (fill.py).
             v["valid"] = True

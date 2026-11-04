@@ -1,8 +1,8 @@
 //! Test 1: every vector in spec/vectors passes (valid: all outputs equal; invalid: exact code).
 //!
 //! Since spec-0.4.0 the vectors include kinds for formula evaluators (`formula`, `formula-eval`,
-//! `excel`, `decimal`; SPEC 11), which a verifier library does not run: 561 of the 1146 vectors
-//! of spec-0.4.1 apply, and the runner reports the others as skipped.
+//! `excel`, `decimal`, `call`; SPEC 11), which a verifier library does not run: 651 of the 1236
+//! vectors of spec-0.4.3 apply (the kinds `licence` and `entitlement` included), and the runner reports the others as skipped.
 
 use std::path::{Path, PathBuf};
 
@@ -22,7 +22,7 @@ const FORMULA_KINDS: [&str; 5] = ["formula", "formula-eval", "excel", "decimal",
 #[test]
 fn every_vector_passes() {
     let files = vectors();
-    assert_eq!(files.len(), 1146, "spec-0.4.2 (fc870ab) has 1146 vectors");
+    assert_eq!(files.len(), 1236, "spec-0.4.3 (99123b2) has 1236 vectors");
     let mut failures = Vec::new();
     let mut applicable = 0;
     for f in &files {
@@ -36,7 +36,7 @@ fn every_vector_passes() {
             failures.push(format!("{}: {}", f.display(), problems.join("; ")));
         }
     }
-    assert_eq!(applicable, 561, "vectors a verifier library runs");
+    assert_eq!(applicable, 651, "vectors a verifier library runs");
     assert!(failures.is_empty(), "{} of {applicable} vectors fail:\n{}", failures.len(), failures.join("\n"));
 }
 

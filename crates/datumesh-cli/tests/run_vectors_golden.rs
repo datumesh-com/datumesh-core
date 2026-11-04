@@ -11,7 +11,9 @@
 //! formula evaluators (`formula`, `formula-eval`, `excel`, `decimal`) gives
 //! `{"error":null,"id":…,"skipped":<kind>}`, and a valid `mesh` vector's `bindings` and
 //! `endpoints` are derived from its mesh document, unknown endpoints dropped (the vectors do
-//! not carry them, DEFECTS.md RS-38). Each revision's file keeps the previous one's lines
+//! not carry them, DEFECTS.md RS-38); since spec-0.4.3 a valid `keys` vector carries `declarations`
+//! when its document has them, and the kinds `licence` (`licence`, `reason`) and `entitlement`
+//! (`entitled`, `reason`) are run. Each revision's file keeps the previous one's lines
 //! unchanged. The crosscheck harness depends on this interface, so any change to it must be
 //! deliberate.
 
@@ -46,7 +48,7 @@ fn run_vectors_output_is_the_expected_output() {
     let out = child.wait_with_output().unwrap();
     writer.join().unwrap().unwrap();
     assert!(out.status.success());
-    let want = std::fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/run-vectors-0.4.2.jsonl")).unwrap();
+    let want = std::fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/run-vectors-0.4.3.jsonl")).unwrap();
     let got = String::from_utf8(out.stdout).unwrap();
     let want = String::from_utf8(want).unwrap();
     assert_eq!(got.lines().count(), files.len());

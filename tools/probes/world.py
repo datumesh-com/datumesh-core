@@ -34,13 +34,13 @@ H_GRID = sha(jcs(D_GRID))
 def cell(fn, fn_hash, args):
     return {"args": args, "fn": fn, "fn_hash": fn_hash, "ns": HOST}
 
-def receipt(c, value, tx, asof=None, inputs=(), issued=None, key=SK, ty='number', valid=None):
+def receipt(c, value, tx, asof=None, inputs=(), issued=None, key=SK, ty='number', valid=None, licence='CC0-1.0'):
     asof = asof or tx
     issued = issued or asof
     if valid is None:
         valid = {k: v for k, v in c['args'].items() if k == 'date'}
     r = {"asof": asof, "cell": c, "computed_by": f"{HOST}#{KID}", "inputs": sorted(inputs), "issued": issued,
-         "licence": "CC0-1.0", "proto": "datumesh/1", "publisher": HOST, "summary": "probe", "tx": tx,
+         "licence": licence, "proto": "datumesh/1", "publisher": HOST, "summary": "probe", "tx": tx,
          "type": ty, "valid": valid, "value": value}
     payload = jcs(r)
     r = dict(r, sig=key.sign(payload).signature.hex())
