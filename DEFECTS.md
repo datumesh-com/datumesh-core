@@ -667,3 +667,64 @@ the text leaves to the caller (RS-42, RS-43).
 The answer of the `versions` endpoint is unsigned, read only by a mesh importing a cell's
 history, and has no vector; this crate exposes no check for it (the mesh document's `versions`
 template is checked). An importer verifies each receipt on its own (10.1).
+
+## spec-0.4.3 (`99123b2`), implemented in datumesh-core 0.3.7
+
+What the new text settles, checked against this crate: `declarations` in the key document
+(9.2, 4.5), licence inheritance (8.5), the entitlement check (10.3), `E_FOREIGN_UNAVAILABLE`
+with `detail` (5.5, 10.2) and unrooted namespaces (2.5). 45 more probes
+(`tools/probes/gen7.py`), 460 in all, agree with the reference tool at `99123b2`: declaration
+corners (null, the host alone, path namespaces, 512/513-character names, a parent host or a
+host's suffix, an unrooted host, a repeated name; 64/65-character SPDX ids, 512/513-character
+URLs, instants without micros or on 30 February, `valid_to` null, duplicate and overlapping
+entries, an open licence declared), licence mixes and windows, and the entitlement check's
+inputs. Nothing in the text was insufficient to implement it; three points the text leaves to
+the implementation are recorded here, none of which changes a vector's result.
+
+### RS-44. 10.3 / 11: inputs an entitlement vector does not supply
+- **Section.** 10.3 ("L, the licences of R's input receipts ... as step 7.5 obtains them"), 11
+  ("a runner may verify them first, as the reference does").
+- **Problem.** Not said: what a runner reports when R or an input receipt fails verification,
+  or an input or manifest is not in the vector. The reference reports the failing receipt's own
+  code (`E_SIGNATURE` at `$.sig` for a bad input signature, not `E_INPUT_INVALID`), and stops
+  with a Python exception (no code) for an input missing or given under another hash (seen as
+  `canon.py check` crashing on a probe; the traceback printed a few lines of `canon.py`, the
+  only reference source seen, and the probes were dropped).
+- **Resolution.** As the reference: R, then each input receipt in `inputs` order (slice members
+  in manifest order), verified through step 6 with its own codes; a missing input or manifest,
+  or one under another hash or entry, is a malformed vector (the caller's error). Probes
+  `p/e-*` hold the codes; the missing cases have no probe. `check_entitlement` itself takes L
+  and never verifies.
+- **Proposed wording (11).** "A runner verifies R and each input receipt through step 6 of 10.1
+  first and reports the first failure's code; an input the vector does not supply is a
+  malformed vector."
+
+### RS-45. 2.5: `is_unrooted` on what is not a name
+- **Section.** 2.5 ("A namespace whose host's last label is `invalid` ... is unrooted").
+- **Problem.** Defined for namespaces only. The reference's `is_unrooted` (called as a black box
+  from Python, `canon.is_unrooted(<name>)`, its source not read) answers on any string
+  by its last label: `invalid` (one label) and `local.invalid/Bad` are unrooted, `LOCAL.INVALID`
+  is not.
+- **Resolution.** The same: `is_unrooted` does not check the name (documented: check it with
+  `check_namespace` or `check_dns_name`).
+- **Proposed wording.** None needed; a sentence that the predicate presumes a valid namespace
+  would settle it.
+
+### RS-46. 8.5 / 11: declarations given to the rule directly
+- **Section.** 8.5 (D: "from the key document of the host of `cell.ns`"), 11 (`licence`
+  vectors: "`declarations` ... `{}` for none").
+- **Problem.** The `licence` vectors give D as a value, not a key document, and `{}` (which a key
+  document rejects) for none; whether a name under another host than `fn`'s may appear there is
+  not said (from a key document it cannot).
+- **Resolution.** `Declarations::from_value` checks the shape of 9.2 (names, entries, limits)
+  but not the host rule or `{}`, which are the key document's (`KeyDocument::from_json` checks
+  both); `inherit_licence` looks up `fn` only, so another host's names never match
+  (`p/l-declared-for-other-host-fn`: `not_declared`, as the reference).
+
+### Decisions where the contract left room
+- **Where the declarations live.** `KeyDoc` is an exhaustive struct with public fields, so it
+  could not gain a field: `KeyDocument` holds a `KeyDoc` and `Option<Declarations>`, and `Keys`
+  stores `KeyDocument`s (its fields are private). The 0.3.x functions keep returning `KeyDoc`.
+  `ResolvedMesh` (`#[non_exhaustive]`) gains `declarations`.
+- **Building `E_FOREIGN_UNAVAILABLE`.** `Answer::error` refuses it (`E_ENVELOPE`, it needs a
+  `detail`); `Answer::foreign_unavailable(detail)` builds it with 502.

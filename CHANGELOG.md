@@ -3,7 +3,45 @@
 All notable changes to `datumesh-core`. The crate follows the specification revision named in
 each entry; the public API is frozen from 0.3.0 until 1.0 except for additions.
 
-## 0.3.6 (unreleased)
+## 0.3.7 (unreleased)
+
+Specification: `spec-0.4.3` (`99123b2`); all 651 vectors for verifier libraries pass (585 for
+formula evaluators skipped; 1236 in all), the new kinds `licence` and `entitlement` included.
+Additions only (`API-CHANGES-0.3.7.md` has the `cargo public-api diff` against 0.3.6).
+
+**A mesh that serves `declarations` is unverifiable by clients on core < 0.3.7 or datumesh < 0.4.3; publishers should wait for their consumers to upgrade before declaring.** The same holds for @datumesh/verify < 0.4.3.
+
+Envelopes carrying `E_FOREIGN_UNAVAILABLE` (or its `detail` member) are rejected (`E_ENVELOPE`) by libraries that check the closed code and member lists of `spec-0.4.2`: core < 0.3.7, datumesh < 0.4.3 and @datumesh/verify < 0.4.3.
+
+### Added
+- `ErrorCode::ForeignUnavailable` (`E_FOREIGN_UNAVAILABLE`), after `NameUnbound`; never a
+  verification result. `ForeignDetail` (`offline`, `network`, `dns`, `tls`, `timeout`,
+  `refused`); `Answer::detail`, `EnvelopeExtras::detail`; the builder's
+  `Answer::foreign_unavailable` (outcome `error`, HTTP 502).
+- Key documents with `declarations` (SPEC 9.2): `KeyDocument` (`from_json`, `new`, `host`,
+  `From<KeyDoc>`), `key_document_from_response`, `Keys::get_document`, `Keys::insert_document`,
+  `ResolvedMesh::declarations`; `Declarations` (`new`, `from_value`, `insert`, `get`, `names`,
+  `iter`, `len`, `is_empty`, `to_value`) and `Declaration` (`new`, `open_at`);
+  `lexical::limits::DECLARATIONS` and `DECLARATION_ENTRIES`.
+- Licence inheritance (SPEC 8.5): `inherit_licence`, `Inheritance`, `LicenceReason`. In core
+  because the engine applies it when it signs a computed receipt and the entitlement check
+  applies the same rule on the verifier's side.
+- The entitlement check (SPEC 10.3): `check_entitlement`, a pure function of the receipt, its
+  input licences and its publisher's `KeyDocument`; `Entitlement`; `WrongPublisher` for a key
+  document of another host (the caller's error, not a reason).
+- `is_unrooted` (SPEC 2.5): names under `.invalid`.
+
+### Changed (behaviour, following the specification)
+- A key document may carry `declarations`; anything malformed in them rejects the document
+  (`E_KEY_DOC`). `KeyDoc::from_json`, `keys_from_response`, `Keys` and `resolve_mesh` accept
+  such documents; verification is unchanged by them. (0.3.6 rejected every such document.)
+- Envelope checks: `detail` is allowed on `error` only, required with
+  `E_FOREIGN_UNAVAILABLE` and forbidden otherwise; that code is answered with 502 exactly.
+  `Answer::error(ErrorCode::ForeignUnavailable)` is `E_ENVELOPE` (it needs a detail).
+- `datumesh-cli`: `keys` outputs `declarations`; the kinds `licence` and `entitlement` (the
+  receipt and its input receipts verified through step 6 first).
+
+## 0.3.6
 
 Specification: `spec-0.4.2` (`fc870ab`); all 561 vectors for verifier libraries pass (585 for
 formula evaluators skipped, `call` included; 1146 in all). Additions only
