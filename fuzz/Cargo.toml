@@ -73,3 +73,17 @@ path = "fuzz_targets/slice_page.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "keydoc"
+path = "fuzz_targets/keydoc.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "licence"
+path = "fuzz_targets/licence.rs"
+test = false
+doc = false
+bench = false

@@ -34,6 +34,13 @@ for path in sorted(glob.glob(os.path.join(root, "spec", "vectors", "*", "*.json"
         for mode in range(8): put("batch", f"{name}_{mode}", bytes([mode]) + raw)
     elif v["kind"] == "envelope" and "slice_id" in v.get("request", {}):
         for mode in range(16): put("slice_page", f"{name}_{mode}", bytes([mode]) + raw)
+    elif v["kind"] == "keys" and "https" in v.get("env", {}) and v["env"]["https"].get("body"):
+        put("keydoc", name, v["env"]["https"]["body"].encode("utf-8", "surrogatepass"))
+    elif v["kind"] == "licence":
+        pool = ["CC0-1.0", "PDDL-1.0", "MIT", "Apache-2.0", "CC-BY-4.0", "OGL-UK-3.0", "CC-BY-SA-4.0", "ODbL-1.0",
+                "CC-BY-NC-4.0", "https://r.example.org/l", "cc0-1.0", "https://r.example.org/m"]
+        ls = bytes(pool.index(l) if l in pool else 9 for l in v["licences"])
+        put("licence", name, bytes([2, 9, 0]) + ls)
     elif v["kind"] == "mesh":
         body = v["env"].get("mesh", {}).get("https", {}).get("body")
         if body:
