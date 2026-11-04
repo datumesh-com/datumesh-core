@@ -10,9 +10,10 @@ use std::process::ExitCode;
 
 use datumesh_core::json::{self, Value};
 use datumesh_core::{
-    check_answer, check_batch, check_slice_answer, format_reference, https_url, key_id, parse_reference, resolve_mesh,
-    resolved_unit_value, sha256_hex, verify, Answer, Batch, Cell, Error, ErrorCode, FunctionDescriptor, Keys, Manifest,
-    MapResolver, Receipt, Reference, Request, Retrieval, Scalar, Slice, SliceRequest,
+    check_answer, check_batch, check_entitlement, check_slice_answer, format_reference, https_url, inherit_licence,
+    key_id, parse_reference, resolve_mesh, resolved_unit_value, sha256_hex, verify, Answer, Batch, Cell, Declarations,
+    Error, ErrorCode, FunctionDescriptor, Keys, Manifest, MapResolver, Receipt, Reference, Request, Retrieval, Scalar,
+    Slice, SliceRequest,
 };
 
 /// The vector kinds for formula evaluators (SPEC 11, `spec-0.4.0`; `call` since `spec-0.4.2`):
@@ -185,9 +186,29 @@ pub fn run(v: &Value) -> Result<Outputs, Error> {
                 wrapped.clear();
             }
             let keys = keys_from_env(Some(&Value::Object(wrapped)));
-            let doc = keys.get(host)?;
-            Ok(vec![("key_ids".into(), Value::Array(doc.key_ids().into_iter().map(s).collect()))])
+            let doc = keys.get_document(host)?;
+            let mut out = vec![("key_ids".to_string(), Value::Array(doc.keys.key_ids().into_iter().map(s).collect()))];
+            // spec-0.4.3: the document's declarations, when it has them.
+            if let Some(d) = &doc.declarations {
+                out.push(("declarations".into(), d.to_value()));
+            }
+            Ok(out)
         }
+        "licence" => {
+            // spec-0.4.3 (8.5): the input licences, the publisher's declarations ({} for none),
+            // the function, issued and the mesh's own licence.
+            let Some(Value::Array(ls)) = v.get("licences") else { return Err(vector_error("no licences")) };
+            let licences: Vec<&str> = ls.iter().map(|l| l.as_str().unwrap_or("")).collect();
+            let d = Declarations::from_value(v.get("declarations").unwrap_or(&Value::Object(Vec::new())))
+                .map_err(|e| vector_error(&e.to_string()))?;
+            let str_of = |k: &str| v.get(k).and_then(Value::as_str).unwrap_or("");
+            let r = inherit_licence(&licences, Some(&d), str_of("fn"), str_of("issued"), str_of("mesh_licence"));
+            Ok(vec![
+                ("licence".into(), r.licence.as_deref().map_or(Value::Null, s)),
+                ("reason".into(), s(r.reason.as_str())),
+            ])
+        }
+        "entitlement" => run_entitlement(v),
         "receipt" => run_receipt(v),
         "unit" => {
             let input = json::parse(&input_bytes(v)?)?;
@@ -402,12 +423,64 @@ fn run_receipt(v: &Value) -> Result<Outputs, Error> {
     Ok(out)
 }
 
+/// An entitlement vector (SPEC 11, `spec-0.4.3`): R verified through step 6 of 10.1 first (as
+/// the reference does), K the key document of the host of R's `cell.ns`, and L by following R's
+/// inputs through `receipts` and `manifests`, slice members included, each input receipt
+/// verified through step 6 with its own codes. An input the vector does not supply, or one
+/// supplied under another hash, is a malformed vector.
+fn run_entitlement(v: &Value) -> Result<Outputs, Error> {
+    let input = input_bytes(v)?;
+    let keys = keys_from_env(v.get("keys"));
+    let checked = verify(&input, &keys, None, None);
+    if let Some(e) = checked.error() {
+        return Err(e);
+    }
+    let r = Receipt::from_json(&input)?;
+    let k = keys.get_document(r.cell().ns.split('/').next().unwrap_or(""))?;
+    let text = |group: &str, key: &str| -> Result<Vec<u8>, Error> {
+        v.get(group)
+            .and_then(|m| m.get(key))
+            .and_then(Value::as_str)
+            .map(|t| t.as_bytes().to_vec())
+            .ok_or_else(|| vector_error(&format!("{group} has no {key}")))
+    };
+    let licence_of = |h: &str| -> Result<String, Error> {
+        let bytes = text("receipts", h)?;
+        let res = verify(&bytes, &keys, None, None);
+        if let Some(e) = res.error() {
+            return Err(e);
+        }
+        if res.hash.as_deref() != Some(h) {
+            return Err(vector_error(&format!("the receipt given for {h} has another hash")));
+        }
+        Ok(Receipt::from_json(&bytes)?.licence().to_string())
+    };
+    let mut licences = Vec::new();
+    for e in r.inputs() {
+        if e.starts_with("slice:") {
+            let m = Manifest::from_value(&json::parse(&text("manifests", e)?)?)?;
+            if m.entry() != *e {
+                return Err(vector_error(&format!("the manifest given for {e} is another slice's")));
+            }
+            for h in m.members() {
+                licences.push(licence_of(h)?);
+            }
+        } else {
+            licences.push(licence_of(e)?);
+        }
+    }
+    let ent = check_entitlement(&r, &licences, k).map_err(|e| vector_error(&e.to_string()))?;
+    Ok(vec![("entitled".into(), Value::Bool(ent.entitled)), ("reason".into(), s(ent.reason.as_str()))])
+}
+
 fn expected_outputs(kind: &str) -> &'static [&'static str] {
     match kind {
         "jcs" | "scalar" | "cell" | "ref" | "function" => &["canonical", "sha256"],
         "uri" => &["object", "canonical", "sha256", "https"],
         "keyid" => &["key_id"],
-        "keys" => &["key_ids"],
+        "keys" => &["key_ids", "declarations"],
+        "licence" => &["licence", "reason"],
+        "entitlement" => &["entitled", "reason"],
         "receipt" => &["canonical", "sha256", "sig", "level", "blob_checked", "code"],
         "unit" => &["unit"],
         "envelope" => &["outcome", "trust", "receipt_hash", "results"],

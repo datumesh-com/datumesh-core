@@ -4,7 +4,7 @@ use core::fmt;
 
 macro_rules! codes {
     ($( $(#[$doc:meta])* $variant:ident = $text:literal, )*) => {
-        /// One variant per `E_*` code of SPEC 10.2 (`spec-0.4.2`).
+        /// One variant per `E_*` code of SPEC 10.2 (`spec-0.4.3`).
         /// Non-exhaustive: codes added by later revisions of the specification are additions.
         ///
         /// The variants are declared in the order of 10.2, except the codes added within
@@ -14,7 +14,8 @@ macro_rules! codes {
         /// (0.3.4, `spec-0.4.0`; 10.2 lists them after `E_INPUT_UNDECLARED` and after
         /// `E_EVAL_UNAVAILABLE`), then `JobUnknown` and `MeshDoc` (0.3.5, `spec-0.4.1`; last in
         /// 10.2 too, after `E_ENVELOPE`), then `SliceAtCell` and `NameUnbound` (0.3.6,
-        /// `spec-0.4.2`, after `E_MESH_DOC`). The formula codes of SPEC 15.11 are not verification codes
+        /// `spec-0.4.2`, after `E_MESH_DOC`), then `ForeignUnavailable` (0.3.7, `spec-0.4.3`, last in
+        /// 10.2 too). The formula codes of SPEC 15.11 are not verification codes
         /// and have no variant; the envelope's `fault` is a [`crate::Fault`].
         #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
         #[non_exhaustive]
@@ -151,6 +152,11 @@ codes! {
     /// In a `not_covered` envelope's `error`: the name (or alias) is not bound as of the
     /// requested `asof`; it may be bound later (5.5, 5.8, `spec-0.4.2`). A mesh's code.
     NameUnbound = "E_NAME_UNBOUND",
+    /// In an `error` envelope, with HTTP 502 and a `detail` ([`crate::ForeignDetail`]): the cell
+    /// belongs to another mesh, which could not be reached (offline, network, DNS, TLS, timeout,
+    /// a refused connection; 5.5, 9.6, `spec-0.4.3`). A mesh's or resolver's code, never a
+    /// verification result.
+    ForeignUnavailable = "E_FOREIGN_UNAVAILABLE",
 }
 
 impl fmt::Display for ErrorCode {

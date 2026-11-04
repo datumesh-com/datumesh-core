@@ -6,6 +6,7 @@ use crate::error::{err, member, ErrorCode, Result};
 use crate::json::{self, Value};
 use crate::keys::{key_doc, KeyDoc};
 use crate::lexical::limits;
+use crate::licence::Declarations;
 use crate::schema;
 
 /// The endpoints of 9.6: name, placeholders, whether required.
@@ -99,6 +100,9 @@ pub struct ResolvedMesh {
     pub keys: KeyDoc,
     /// The mesh document (9.6).
     pub mesh: MeshDoc,
+    /// The key document's `declarations` (9.2, `spec-0.4.3`), checked with it in step 5; `None`
+    /// when it has none.
+    pub declarations: Option<Declarations>,
 }
 
 /// Cross-mesh resolution of `host` (9.6, `spec-0.4.1`), from what `GET
@@ -154,10 +158,10 @@ pub fn resolve_mesh(host: &str, key_doc_got: Retrieval<'_>, mesh_doc_got: Retrie
         }
     }
     // 5.
-    let keys = key_doc(host, &kv)?;
+    let doc = key_doc(host, &kv)?;
     // 6.
     let mesh = mesh_members(host, mm)?;
-    Ok(ResolvedMesh { keys, mesh })
+    Ok(ResolvedMesh { keys: doc.keys, mesh, declarations: doc.declarations })
 }
 
 fn parse_mesh(body: &[u8]) -> Result<Value> {

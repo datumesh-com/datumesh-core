@@ -121,6 +121,62 @@ impl core::fmt::Display for Fault {
     }
 }
 
+/// What failed in reaching a foreign mesh (SPEC 5.5, `spec-0.4.3`): the `detail` member, required
+/// with `E_FOREIGN_UNAVAILABLE` ([`ErrorCode::ForeignUnavailable`]) and forbidden in every other
+/// envelope. The list is closed; it is non-exhaustive only so that later revisions can add to
+/// it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[non_exhaustive]
+pub enum ForeignDetail {
+    /// `offline`: the asked party has no network, or is configured not to use it.
+    Offline,
+    /// `network`: any other network failure.
+    Network,
+    /// `dns`: the foreign host's name did not resolve.
+    Dns,
+    /// `tls`: the TLS handshake or the certificate failed.
+    Tls,
+    /// `timeout`.
+    Timeout,
+    /// `refused`: the connection was refused.
+    Refused,
+}
+
+impl ForeignDetail {
+    /// Every detail, in the order of SPEC 5.5.
+    pub const ALL: &'static [ForeignDetail] = &[
+        ForeignDetail::Offline,
+        ForeignDetail::Network,
+        ForeignDetail::Dns,
+        ForeignDetail::Tls,
+        ForeignDetail::Timeout,
+        ForeignDetail::Refused,
+    ];
+
+    /// The detail as written in JSON, e.g. `"offline"`.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            ForeignDetail::Offline => "offline",
+            ForeignDetail::Network => "network",
+            ForeignDetail::Dns => "dns",
+            ForeignDetail::Tls => "tls",
+            ForeignDetail::Timeout => "timeout",
+            ForeignDetail::Refused => "refused",
+        }
+    }
+
+    /// Looks a detail up by its JSON name; `None` for anything else (case included).
+    pub fn from_name(text: &str) -> Option<ForeignDetail> {
+        ForeignDetail::ALL.iter().copied().find(|d| d.as_str() == text)
+    }
+}
+
+impl core::fmt::Display for ForeignDetail {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 /// The members of a checked envelope that [`Envelope`] has no field for, because they were
 /// added to SPEC 5.5 after it was frozen (0.3.0): see [`check_envelope_extras`].
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
@@ -131,6 +187,8 @@ pub struct EnvelopeExtras {
     /// The function the answer is of: the echo of a pin, or the hash the name resolved to
     /// (`spec-0.4.2`).
     pub fn_hash: Option<String>,
+    /// What failed in reaching a foreign mesh, with `E_FOREIGN_UNAVAILABLE` (`spec-0.4.3`).
+    pub detail: Option<ForeignDetail>,
 }
 
 /// A price quote (`payment_required`).
@@ -316,7 +374,8 @@ pub fn check_envelope(status: u16, body: &[u8], keys: &Keys, request: &Request) 
 /// in 0.3.4; [`check_envelope_any`] accepts it. Nor has its [`Trust`] `computed` (`spec-0.4.2`):
 /// an envelope with it is `E_ENVELOPE` here and in [`check_envelope_any`], as in 0.3.5;
 /// [`crate::check_answer`] accepts it. Everything else of `spec-0.4.2` (the `fn_hash` echo, in
-/// [`EnvelopeExtras`]; `not_covered`'s `error`; the new codes) is checked as there.
+/// [`EnvelopeExtras`]; `not_covered`'s `error`; the new codes) is checked as there, and so is
+/// `spec-0.4.3`'s `E_FOREIGN_UNAVAILABLE` (502, with its `detail` in [`EnvelopeExtras`]).
 pub fn check_envelope_extras(
     status: u16,
     body: &[u8],

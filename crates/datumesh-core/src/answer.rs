@@ -5,8 +5,8 @@ use std::collections::BTreeMap;
 
 use crate::descriptor::cmp_lexical;
 use crate::envelope::{
-    check_job_and_poll, env_err, integer_member, quote, EnvelopeExtras, Fault, Outcome, Pending, Quote, Request, Trust,
-    BAD_REQUEST_CODES,
+    check_job_and_poll, env_err, integer_member, quote, EnvelopeExtras, Fault, ForeignDetail, Outcome, Pending, Quote,
+    Request, Trust, BAD_REQUEST_CODES,
 };
 use crate::error::{Error, ErrorCode, Result};
 use crate::json::{self, Value};
@@ -103,7 +103,9 @@ impl AnswerOutcome {
             AnswerOutcome::Unlicensed => (&[], &["fn_hash"]),
             AnswerOutcome::PaymentRequired => (&["quote"], &["fn_hash"]),
             AnswerOutcome::RateLimited => (&["retry_after_seconds"], &["fn_hash"]),
-            AnswerOutcome::BadRequest | AnswerOutcome::Error => (&["error"], &["fn_hash"]),
+            AnswerOutcome::BadRequest => (&["error"], &["fn_hash"]),
+            // spec-0.4.3: detail, with E_FOREIGN_UNAVAILABLE only.
+            AnswerOutcome::Error => (&["error"], &["detail", "fn_hash"]),
             AnswerOutcome::Pending => (&["estimate_seconds", "job", "poll", "request"], &[]),
         }
     }
@@ -166,7 +168,8 @@ impl SlicePage {
 }
 
 /// An envelope of `spec-0.4.2` (5.5), checked or to be written: every outcome, trust label and
-/// member, with a slice page (5.6) for the `ok` answer of the slice endpoint. As a builder: one
+/// member, with a slice page (5.6) for the `ok` answer of the slice endpoint; since 0.3.7
+/// (`spec-0.4.3`) also `E_FOREIGN_UNAVAILABLE` with its `detail` ([`Answer::foreign_unavailable`]). As a builder: one
 /// constructor per outcome, `with_*` for the optional members, [`Answer::to_json`] for the body
 /// and [`Answer::status`] for the HTTP status; check the body back with [`check_answer`] (or
 /// [`check_slice_answer`]) to hold it to every rule.
@@ -193,6 +196,9 @@ pub struct Answer {
     pub error: Option<ErrorCode>,
     /// The formula evaluation fault (`not_covered`).
     pub fault: Option<Fault>,
+    /// What failed in reaching a foreign mesh: with `E_FOREIGN_UNAVAILABLE` only, and always
+    /// with it (`error`, 502; `spec-0.4.3`).
+    pub detail: Option<ForeignDetail>,
     /// The function the answer is of: a pin's echo, or the hash the name resolved to.
     pub fn_hash: Option<String>,
     /// The `pending` envelope's members.
@@ -215,6 +221,7 @@ fn bare(outcome: AnswerOutcome) -> Answer {
         retry_after_seconds: None,
         error: None,
         fault: None,
+        detail: None,
         fn_hash: None,
         pending: None,
         page: None,
@@ -285,11 +292,29 @@ impl Answer {
 
     /// `error` (500; see [`Answer::with_status`]) with a code it can carry (any of 10.2 but
     /// `E_ENVELOPE`, `E_JOB_UNKNOWN`, `E_SLICE_AT_CELL` and `E_NAME_UNBOUND`).
+    /// `E_FOREIGN_UNAVAILABLE` needs a `detail` and HTTP 502: build it with
+    /// [`Answer::foreign_unavailable`] (here it is `E_ENVELOPE`).
     pub fn error(code: ErrorCode) -> Result<Answer> {
         if !code_allowed(AnswerOutcome::Error, code, false) {
             return env_err("$.error", format!("error cannot carry {code}"));
         }
+        if code == ErrorCode::ForeignUnavailable {
+            return env_err("$.detail", "E_FOREIGN_UNAVAILABLE needs a detail: Answer::foreign_unavailable");
+        }
         Ok(Answer { error: Some(code), ..bare(AnswerOutcome::Error) })
+    }
+
+    /// `error` with `E_FOREIGN_UNAVAILABLE` and `detail` (5.5, `spec-0.4.3`), HTTP 502: the cell
+    /// belongs to another mesh, which could not be reached. Answered by a resolver, or by a mesh
+    /// fetching across meshes, when no HTTP response came back from the foreign host. Its
+    /// status must stay 502 ([`Answer::with_status`] to another fails [`check_answer`]).
+    pub fn foreign_unavailable(detail: ForeignDetail) -> Answer {
+        Answer {
+            error: Some(ErrorCode::ForeignUnavailable),
+            detail: Some(detail),
+            status: 502,
+            ..bare(AnswerOutcome::Error)
+        }
     }
 
     /// `pending` (202).
@@ -383,6 +408,9 @@ impl Answer {
         if let Some(f) = self.fault {
             m.push(("fault".into(), s(f.as_str())));
         }
+        if let Some(d) = self.detail {
+            m.push(("detail".into(), s(d.as_str())));
+        }
         if let Some(h) = &self.fn_hash {
             m.push(("fn_hash".into(), s(h)));
         }
@@ -432,7 +460,7 @@ impl Answer {
             retry_after_seconds: self.retry_after_seconds,
             error: self.error,
         };
-        Ok((env, EnvelopeExtras { fault: self.fault, fn_hash: self.fn_hash }))
+        Ok((env, EnvelopeExtras { fault: self.fault, fn_hash: self.fn_hash, detail: self.detail }))
     }
 }
 
@@ -677,6 +705,10 @@ fn check_inner(status: u16, v: &Value, keys: &Keys, ctx: &Ctx<'_>) -> Result<Ans
     if !outcome.status_ok(status) {
         return env_err("$.outcome", format!("status {status} does not match outcome {oname}"));
     }
+    // spec-0.4.3: E_FOREIGN_UNAVAILABLE is answered with 502 exactly.
+    if a.error == Some(ErrorCode::ForeignUnavailable) && status != 502 {
+        return env_err("$.outcome", format!("E_FOREIGN_UNAVAILABLE is answered with 502, not {status}"));
+    }
     a.status = status;
     // 3a. What the request decides without the receipt: the pin echo (E_JOB_UNKNOWN only at
     // a job URL was checked with the members; pending is checked apart).
@@ -757,6 +789,16 @@ fn check_members(m: &[(String, Value)], outcome: AnswerOutcome, ctx: &Ctx<'_>, i
             Some(c) if code_allowed(outcome, c, ctx.job_url()) => a.error = Some(c),
             _ => return env_err("$.error", format!("{e:?} is not a code this outcome can carry")),
         }
+    }
+    // spec-0.4.3: detail, one of the closed list, present exactly with E_FOREIGN_UNAVAILABLE.
+    if let Some(d) = schema::opt(m, "detail") {
+        let Some(detail) = d.as_str().and_then(ForeignDetail::from_name) else {
+            return env_err("$.detail", format!("{d:?} is not a detail of E_FOREIGN_UNAVAILABLE"));
+        };
+        a.detail = Some(detail);
+    }
+    if (a.error == Some(ErrorCode::ForeignUnavailable)) != a.detail.is_some() {
+        return env_err("$.detail", "detail is present exactly when error is E_FOREIGN_UNAVAILABLE");
     }
     if let Some(f) = schema::opt(m, "fault") {
         let Some(fault) = f.as_str().and_then(Fault::from_code) else {

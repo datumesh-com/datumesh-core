@@ -104,7 +104,8 @@ fn every_valid_receipt_vector_with_a_keypair_round_trips_and_verifies() {
     }
     // Every valid receipt vector (18 at spec-0.3.0) but receipt/ed25519-mixed-order-key (built
     // by hand, no seed).
-    assert_eq!(count, 30);
+    // spec-0.4.3 adds receipt/keydoc-declarations and receipt/unrooted-key-supplied.
+    assert_eq!(count, 32);
 }
 
 #[test]
@@ -133,7 +134,8 @@ fn invalid_vectors_that_pass_steps_1_to_4_sign_identically() {
         }
     }
     // 18 at spec-0.2.1; spec-0.3.0 adds 7 receipt vectors failing in step 7.
-    assert_eq!(count, 38);
+    // spec-0.4.3 adds invalid/receipt-unrooted-no-key-document (E_KEY_UNAVAILABLE).
+    assert_eq!(count, 39);
 }
 
 fn stored_number() -> (Receipt, SigningKey) {

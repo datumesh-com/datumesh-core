@@ -1,10 +1,12 @@
-//! Key documents (9.2), key resolution results (9.3) and the key set `verify` takes (9.4).
+//! Key documents (9.2), their declarations (`spec-0.4.3`), key resolution results (9.3) and the
+//! key set `verify` takes (9.4).
 
 use std::collections::BTreeMap;
 
 use crate::error::{err, index, member, Error, ErrorCode, Result};
 use crate::json::{self, Value};
 use crate::lexical::{self, limits};
+use crate::licence::{declarations_member, Declarations};
 use crate::schema;
 
 /// One published key.
@@ -39,9 +41,10 @@ pub struct KeyDoc {
 
 impl KeyDoc {
     /// Parses and checks a key document fetched from `host`. Every failure is `E_KEY_DOC`.
+    /// Since 0.3.7 (`spec-0.4.3`) the document may carry `declarations`, which are checked like
+    /// the rest and dropped here: [`KeyDocument::from_json`] keeps them.
     pub fn from_json(host: &str, body: &[u8]) -> Result<KeyDoc> {
-        let v = json::parse(body).map_err(|e| e.recode(ErrorCode::KeyDoc))?;
-        key_doc(host, &v)
+        KeyDocument::from_json(host, body).map(|d| d.keys)
     }
 
     /// The key with this id.
@@ -55,10 +58,55 @@ impl KeyDoc {
     }
 }
 
-pub(crate) fn key_doc(host: &str, v: &Value) -> Result<KeyDoc> {
+/// A host's key document (9.2) with its `declarations` (`spec-0.4.3`), checked: the keys as a
+/// [`KeyDoc`], and the declarations the publisher made for its own functions, which licence
+/// inheritance (8.5, [`crate::inherit_licence`]) and the entitlement check (10.3,
+/// [`crate::check_entitlement`]) read. Verification (10.1) reads the keys only: a document with
+/// declarations verifies every receipt exactly as the same document without them.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub struct KeyDocument {
+    /// The host and its keys.
+    pub keys: KeyDoc,
+    /// The declarations; `None` when the document has none (an empty `declarations` is not a
+    /// valid document, so `Some` is never empty).
+    pub declarations: Option<Declarations>,
+}
+
+impl KeyDocument {
+    /// Parses and checks a key document fetched from `host`, `declarations` included (9.2).
+    /// Every failure is `E_KEY_DOC`: anything malformed in the declarations rejects the whole
+    /// document, as a malformed key does.
+    pub fn from_json(host: &str, body: &[u8]) -> Result<KeyDocument> {
+        let v = json::parse(body).map_err(|e| e.recode(ErrorCode::KeyDoc))?;
+        key_doc(host, &v)
+    }
+
+    /// A key document from its parts, for a publisher writing its own: `declarations`, when
+    /// given, must be non-empty and name only functions under `keys.host` (`E_KEY_DOC`).
+    pub fn new(keys: KeyDoc, declarations: Option<Declarations>) -> Result<KeyDocument> {
+        if let Some(d) = &declarations {
+            d.check_host(&keys.host, "$.declarations")?;
+        }
+        Ok(KeyDocument { keys, declarations })
+    }
+
+    /// The host the document was fetched from.
+    pub fn host(&self) -> &str {
+        &self.keys.host
+    }
+}
+
+impl From<KeyDoc> for KeyDocument {
+    fn from(keys: KeyDoc) -> KeyDocument {
+        KeyDocument { keys, declarations: None }
+    }
+}
+
+pub(crate) fn key_doc(host: &str, v: &Value) -> Result<KeyDocument> {
     let kd = ErrorCode::KeyDoc;
     let m = schema::object_or(v, "$", kd, "a key document")?;
-    schema::exact(m, &["host", "keys", "proto"], &[], "$", kd)?;
+    schema::exact(m, &["host", "keys", "proto"], &["declarations"], "$", kd)?;
     let doc_host = schema::string_or(m, "host", "$", kd)?;
     let proto = schema::string_or(m, "proto", "$", kd)?;
     if proto != "datumesh/1" {
@@ -109,7 +157,12 @@ pub(crate) fn key_doc(host: &str, v: &Value) -> Result<KeyDoc> {
         }
         keys.push(Key { id: id.into(), public: raw, valid_from: from.into(), valid_to: to.map(String::from) });
     }
-    Ok(KeyDoc { host: host.into(), keys })
+    // spec-0.4.3: declarations, after the keys.
+    let declarations = match schema::opt(m, "declarations") {
+        None => None,
+        Some(d) => Some(declarations_member(d, host)?),
+    };
+    Ok(KeyDocument { keys: KeyDoc { host: host.into(), keys }, declarations })
 }
 
 /// Resolves a host's keys from the HTTPS response to `GET https://<host>/.well-known/datumesh.json`
@@ -120,20 +173,28 @@ pub(crate) fn key_doc(host: &str, v: &Value) -> Result<KeyDoc> {
 /// TLS and timeout failures are also `E_KEY_UNAVAILABLE`: record them with
 /// [`Keys::insert_unavailable`].
 pub fn keys_from_response(host: &str, status: u16, body: Option<&[u8]>) -> Result<KeyDoc> {
+    key_document_from_response(host, status, body).map(|d| d.keys)
+}
+
+/// [`keys_from_response`], keeping the document's `declarations` (`spec-0.4.3`): the
+/// [`KeyDocument`] of a 200 response with a valid document, `E_KEY_DOC` for a 200 with an invalid
+/// or missing one, `E_KEY_UNAVAILABLE` for any other status.
+pub fn key_document_from_response(host: &str, status: u16, body: Option<&[u8]>) -> Result<KeyDocument> {
     if status != 200 {
         return err(ErrorCode::KeyUnavailable, "$", format!("key document request for {host} returned HTTP {status}"));
     }
     match body {
-        Some(b) => KeyDoc::from_json(host, b),
+        Some(b) => KeyDocument::from_json(host, b),
         None => err(ErrorCode::KeyDoc, "$", "a 200 response without a document"),
     }
 }
 
-/// The keys a verifier has resolved: per host, a key document or the failure resolving it.
-/// A host that was never resolved behaves as `E_KEY_UNAVAILABLE` (SPEC 11).
+/// The keys a verifier has resolved: per host, a key document (with its declarations, since
+/// 0.3.7) or the failure resolving it. A host that was never resolved behaves as
+/// `E_KEY_UNAVAILABLE` (SPEC 11).
 #[derive(Clone, Debug, Default)]
 pub struct Keys {
-    hosts: BTreeMap<String, core::result::Result<KeyDoc, Error>>,
+    hosts: BTreeMap<String, core::result::Result<KeyDocument, Error>>,
 }
 
 impl Keys {
@@ -142,20 +203,26 @@ impl Keys {
         Keys::default()
     }
 
-    /// Adds a checked key document for its host.
+    /// Adds a checked key document for its host (with no declarations).
     pub fn insert(&mut self, doc: KeyDoc) {
-        self.hosts.insert(doc.host.clone(), Ok(doc));
+        self.hosts.insert(doc.host.clone(), Ok(doc.into()));
+    }
+
+    /// Adds a checked key document, with its declarations, for its host (`spec-0.4.3`).
+    pub fn insert_document(&mut self, doc: KeyDocument) {
+        self.hosts.insert(doc.keys.host.clone(), Ok(doc));
     }
 
     /// Records the outcome of resolving a host: a document, or the error (`E_KEY_DOC`,
     /// `E_KEY_UNAVAILABLE`) that resolving it gave.
     pub fn insert_result(&mut self, host: &str, result: Result<KeyDoc>) {
-        self.hosts.insert(host.into(), result);
+        self.hosts.insert(host.into(), result.map(KeyDocument::from));
     }
 
-    /// Records the response to a key document request (see [`keys_from_response`]).
+    /// Records the response to a key document request (see [`key_document_from_response`]):
+    /// the document's declarations are kept ([`Keys::get_document`]).
     pub fn insert_response(&mut self, host: &str, status: u16, body: Option<&[u8]>) {
-        self.insert_result(host, keys_from_response(host, status, body));
+        self.hosts.insert(host.into(), key_document_from_response(host, status, body));
     }
 
     /// Records that a host's keys could not be retrieved (network, DNS, TLS, timeout).
@@ -166,6 +233,12 @@ impl Keys {
 
     /// The key document for `host`, or why there is none.
     pub fn get(&self, host: &str) -> Result<&KeyDoc> {
+        self.get_document(host).map(|d| &d.keys)
+    }
+
+    /// The key document for `host` with its declarations (`spec-0.4.3`), or why there is none:
+    /// the K of the entitlement check ([`crate::check_entitlement`]).
+    pub fn get_document(&self, host: &str) -> Result<&KeyDocument> {
         match self.hosts.get(host) {
             Some(Ok(doc)) => Ok(doc),
             Some(Err(e)) => Err(e.clone()),

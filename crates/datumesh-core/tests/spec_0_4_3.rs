@@ -59,7 +59,8 @@ fn foreign_unavailable_envelopes() {
             continue;
         }
         n += 1;
-        let got = check_answer(status(&v), str_of(&v, "input").as_bytes(), &keys(&v), &request(v.get("request").unwrap()));
+        let got =
+            check_answer(status(&v), str_of(&v, "input").as_bytes(), &keys(&v), &request(v.get("request").unwrap()));
         if v.get("valid") == Some(&Value::Bool(true)) {
             let a = got.unwrap_or_else(|e| panic!("{}: {e}", str_of(&v, "id")));
             assert_eq!(a.outcome, AnswerOutcome::Error);
@@ -127,7 +128,10 @@ fn key_documents_with_declarations() {
         }
         let host = str_of(&v, "host");
         let env = v.get("env").unwrap();
-        let st: u16 = env.get("https").unwrap().get("status").and_then(Value::as_number_text).unwrap().parse().unwrap();
+        // A status that is not the integer 200 (a string, spec-0.3.0) is E_KEY_UNAVAILABLE: not
+        // this test's concern.
+        let Some(st) = env.get("https").unwrap().get("status").and_then(Value::as_number_text) else { continue };
+        let st: u16 = st.parse().unwrap();
         let body = env.get("https").unwrap().get("body").and_then(Value::as_str).map(str::as_bytes);
         let got = key_document_from_response(host, st, body);
         if v.get("valid") == Some(&Value::Bool(true)) {
@@ -152,7 +156,9 @@ fn key_documents_with_declarations() {
             }
         }
     }
-    assert!(valid >= 2 + 2 && invalid >= 15, "{valid} valid, {invalid} invalid");
+    // Retrieved documents: 2 valid with declarations and keys/https-document; 15 invalid with
+    // declarations and 10 older ones.
+    assert_eq!((valid, invalid), (3, 25));
 }
 
 #[test]

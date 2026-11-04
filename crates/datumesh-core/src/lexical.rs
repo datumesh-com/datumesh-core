@@ -40,6 +40,10 @@ pub mod limits {
     pub const EXTENT: usize = 4096;
     /// Member receipt hashes in a slice manifest (15.13; `spec-0.4.0`).
     pub const MEMBERS: usize = 1_048_576;
+    /// Function names in a key document's `declarations` (9.2; `spec-0.4.3`).
+    pub const DECLARATIONS: usize = 64;
+    /// Entries for one declared function name (9.2; `spec-0.4.3`).
+    pub const DECLARATION_ENTRIES: usize = 16;
 }
 
 fn is_lower_digit(c: u8) -> bool {
@@ -135,6 +139,17 @@ pub fn check_namespace(s: &str, path: &str) -> Result<()> {
 /// The host of a namespace: its DNS name.
 pub(crate) fn host_of(namespace: &str) -> &str {
     namespace.split('/').next().unwrap_or(namespace)
+}
+
+/// Whether a namespace or host is unrooted (2.5, `spec-0.4.3`): its host's last label is
+/// `invalid` (`local.invalid`, `agent-7.local.invalid`, `local.invalid/notes`). `.invalid` never
+/// resolves (RFC 2606, RFC 6761 6.4), so an unrooted host is never a real host; every other
+/// namespace is rooted. The name is not checked: check it with [`check_namespace`] (a namespace)
+/// or [`check_dns_name`] (a host) first; `local.invalid` passes both. A mesh refuses at define
+/// time a rooted function whose `inputs` name an unrooted one; a verifier never checks this.
+pub fn is_unrooted(name: &str) -> bool {
+    let host = name.split('/').next().unwrap_or("");
+    host.rsplit('.').next() == Some("invalid")
 }
 
 /// A fully qualified function name (2.3): namespace, `/`, name; at most 512 characters.

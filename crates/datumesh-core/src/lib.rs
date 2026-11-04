@@ -21,7 +21,11 @@
 //! verifier needs neither. Since `spec-0.4.2` a reference may be pinned to a function hash
 //! ([`Reference`], [`parse_reference`]), and [`Answer`] checks ([`check_answer`],
 //! [`check_slice_answer`], [`check_batch`]) and builds every envelope, trust `computed`, slice
-//! pages and batches included. Feature `sign` adds `SigningKey` and
+//! pages and batches included. Since `spec-0.4.3` a key document may carry a publisher's
+//! `declarations` ([`KeyDocument`], [`Declarations`]), a computed receipt's licence follows
+//! from its inputs' ([`inherit_licence`], and on the verifier's side [`check_entitlement`]),
+//! an `error` envelope may say a foreign mesh was unreachable (`E_FOREIGN_UNAVAILABLE`,
+//! [`ForeignDetail`]), and names under `.invalid` are unrooted ([`is_unrooted`]). Feature `sign` adds `SigningKey` and
 //! `ReceiptBuilder`, which make receipts that verify byte for byte like the specification's.
 //! Feature `fetch` (`fetch_keys`) is deprecated since 0.3.1 and removed at 1.0: fetch key
 //! documents with your own HTTP client and pass the response to [`keys_from_response`].
@@ -53,6 +57,7 @@ mod fetch;
 pub mod json;
 mod keys;
 pub mod lexical;
+mod licence;
 mod mesh;
 mod model;
 mod receipt;
@@ -78,7 +83,7 @@ pub use descriptor::{
 };
 pub use envelope::{
     check_envelope, check_envelope_any, check_envelope_extras, AnyEnvelope, Envelope, EnvelopeExtras, Fault,
-    InvalidRequest, Outcome, Pending, Quote, Request, Trust,
+    ForeignDetail, InvalidRequest, Outcome, Pending, Quote, Request, Trust,
 };
 pub use error::{Error, ErrorCode, Result};
 pub use mesh::{resolve_mesh, MeshDoc, ResolvedMesh, Retrieval};
@@ -86,7 +91,12 @@ pub use mesh::{resolve_mesh, MeshDoc, ResolvedMesh, Retrieval};
 #[cfg(feature = "fetch")]
 #[allow(deprecated)]
 pub use fetch::fetch_keys;
-pub use keys::{keys_from_response, Key, KeyDoc, Keys};
+pub use keys::{key_document_from_response, keys_from_response, Key, KeyDoc, KeyDocument, Keys};
+pub use lexical::is_unrooted;
+pub use licence::{
+    check_entitlement, inherit_licence, Declaration, Declarations, Entitlement, Inheritance, LicenceReason,
+    WrongPublisher,
+};
 pub use model::{Arg, Args, Cell, CellRef, Reference, Scalar, Type};
 pub use receipt::{receipt_hash, receipt_payload, Receipt};
 #[cfg(feature = "sign")]
