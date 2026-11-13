@@ -19,9 +19,9 @@ use std::collections::BTreeMap;
 use common::*;
 use datumesh_core::json::Value;
 use datumesh_core::{
-    check_define, check_describe, define_class, format_object_key, parse_object_key, sha256_hex, short_id,
-    ClassDescriptor, ClassEnv, DescribeKind, ErrorCode, FunctionDescriptor, KeyNormalisation, KeyValue, ObjectKey,
-    Scalar,
+    check_define, check_describe, check_describe_with, define_class, format_object_key, parse_object_key, sha256_hex,
+    short_id, ClassDescriptor, ClassEnv, DescribeKind, ErrorCode, FunctionDescriptor, KeyNormalisation, KeyValue,
+    ObjectKey, Scalar,
 };
 
 fn array<'a>(v: &'a Value, k: &str) -> &'a [Value] {
@@ -480,6 +480,13 @@ mod normalisation {
         }
     }
 
+    fn bad_string(rule: KeyNormalisation, s: &str) {
+        match rule.check(s) {
+            Ok(()) => panic!("{rule} should reject {s:?}"),
+            Err(e) => assert_eq!(e.code(), ErrorCode::CanonString, "{rule} {s:?}"),
+        }
+    }
+
     #[test]
     fn the_rules_are_the_closed_list() {
         let names: Vec<&str> = KeyNormalisation::ALL.iter().map(|r| r.as_str()).collect();
@@ -538,9 +545,12 @@ mod normalisation {
         for s in ["EUR", "1M", "XAMS:ASML", "!", "~", "A-B_C.D", "0"] {
             ok(UpperAscii, s); // printable ASCII U+0021 to U+007E, no lowercase letter
         }
-        for s in ["eur", "Eur", "E R", " EUR", "EUR ", "\u{7F}", "\t", "\u{00C9}", "\u{FF21}", "EU\u{0301}R", "a", "z"]
-        {
+        for s in ["eur", "Eur", "E R", " EUR", "EUR ", "\u{00C9}", "\u{FF21}", "a", "z"] {
             bad(UpperAscii, s);
+        }
+        // 6d5633e (16.4): a control or a non-NFC value fails as a 3.5 string value first.
+        for s in ["\u{7F}", "\t", "EU\u{0301}R"] {
+            bad_string(UpperAscii, s);
         }
         // The boundaries of the lowercase range: '@' and '`' flank A-Z and a-z, '[' and '{' follow.
         for s in ["@", "[", "`", "{", "A", "Z"] {
@@ -630,9 +640,11 @@ mod normalisation {
         }
         // "no combining mark U+0300-U+036F in its NFD form": precomposed accented letters,
         // breathings, iota subscript, dialytika, and any Latin letter with an accent too.
-        for s in ["λόγος", "ὁ", "Ἐν", "ᾳ", "ϊ", "\u{1F00}", "é", "\u{03B1}\u{0345}", "λ\u{0301}"] {
+        for s in ["λόγος", "ὁ", "Ἐν", "ᾳ", "ϊ", "\u{1F00}", "é", "λ\u{0301}"] {
             bad(GreekUnaccented, s);
         }
+        // 6d5633e (16.4): U+03B1 U+0345 is not NFC (it composes to U+1FB3), so 3.5 refuses it first.
+        bad_string(GreekUnaccented, "\u{03B1}\u{0345}");
     }
 
     #[test]
@@ -889,7 +901,14 @@ mod describe {
         assert_eq!(all.len(), 24); // 6 valid, 18 invalid
         for v in &all {
             let id = str_of(v, "id");
-            let got = check_describe(str_of(v, "input").as_bytes(), &held_of(v));
+            // 6d5633e (16.8 step 6): a vector's held function descriptors go to check_describe_with
+            let functions: Vec<FunctionDescriptor> =
+                array(v, "functions").iter().map(|f| FunctionDescriptor::from_value(f).unwrap()).collect();
+            let got = if functions.is_empty() {
+                check_describe(str_of(v, "input").as_bytes(), &held_of(v))
+            } else {
+                check_describe_with(str_of(v, "input").as_bytes(), &held_of(v), &functions)
+            };
             if is_valid(v) {
                 got.unwrap_or_else(|e| panic!("{id}: {e}"));
             } else {
