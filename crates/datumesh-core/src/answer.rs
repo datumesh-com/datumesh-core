@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use crate::descriptor::cmp_lexical;
 use crate::envelope::{
     check_job_and_poll, env_err, integer_member, quote, EnvelopeExtras, Fault, ForeignDetail, Outcome, Pending, Quote,
-    Request, Trust, BAD_REQUEST_CODES,
+    Request, Resolved, Shadows, Trust, BAD_REQUEST_CODES,
 };
 use crate::error::{Error, ErrorCode, Result};
 use crate::json::{self, Value};
@@ -205,6 +205,12 @@ pub struct Answer {
     pub pending: Option<Pending>,
     /// The slice page (`ok` at the slice endpoint).
     pub page: Option<SlicePage>,
+    /// What a short call resolved (`ok`, `stale`, `not_covered`, `unlicensed`,
+    /// `payment_required`, `error`; 5.5, `spec-0.5.0`).
+    pub resolved: Option<Resolved>,
+    /// The class this mesh binds to another hash than its reference class (the same outcomes as
+    /// `resolved`; 5.5, 16.9, `spec-0.5.0`).
+    pub shadows: Option<Shadows>,
     /// The HTTP status to send (`error`'s exact 5xx); checked answers carry the one received.
     status: u16,
 }
@@ -225,6 +231,8 @@ fn bare(outcome: AnswerOutcome) -> Answer {
         fn_hash: None,
         pending: None,
         page: None,
+        resolved: None,
+        shadows: None,
         status: outcome.status(),
     }
 }
@@ -349,6 +357,23 @@ impl Answer {
             return env_err("$.error", "not_covered carries E_NAME_UNBOUND only, and not with a fault");
         }
         Ok(Answer { error: Some(code), ..self })
+    }
+
+    /// With the `resolved` member (`spec-0.5.0`): allowed on `ok`, `stale`, `not_covered`,
+    /// `unlicensed`, `payment_required` and `error`; `E_ENVELOPE` on `rate_limited`,
+    /// `bad_request` and `pending`.
+    pub fn with_resolved(self, resolved: Resolved) -> Result<Answer> {
+        let _ = resolved;
+        // STUB (0.3.8 tests first).
+        todo!("5.5: an answer with resolved")
+    }
+
+    /// With the `shadows` member (`spec-0.5.0`), on the same outcomes as
+    /// [`with_resolved`](Self::with_resolved); `E_ENVELOPE` otherwise.
+    pub fn with_shadows(self, shadows: Shadows) -> Result<Answer> {
+        let _ = shadows;
+        // STUB (0.3.8 tests first).
+        todo!("5.5: an answer with shadows")
     }
 
     /// An `ok` or `stale` answer pointing to a newer receipt, with an optional reason.

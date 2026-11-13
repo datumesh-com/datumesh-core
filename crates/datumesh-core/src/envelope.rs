@@ -89,12 +89,25 @@ pub enum Fault {
     Absent,
     /// `E_FORMULA_FUTURE`
     Future,
+    /// `E_FORMULA_KEY` (since `spec-0.5.0`): a computed key argument not canonical under its
+    /// normalisation (16.4).
+    Key,
+    /// `E_FORMULA_DISPATCH_KEY` (since `spec-0.5.0`): a value outside the dispatch set (16.6).
+    DispatchKey,
 }
 
 impl Fault {
     /// Every fault an envelope may carry, in the order of SPEC 5.5.
-    pub const ALL: &'static [Fault] =
-        &[Fault::DivZero, Fault::Domain, Fault::Range, Fault::Empty, Fault::Absent, Fault::Future];
+    pub const ALL: &'static [Fault] = &[
+        Fault::DivZero,
+        Fault::Domain,
+        Fault::Range,
+        Fault::Empty,
+        Fault::Absent,
+        Fault::Future,
+        Fault::Key,
+        Fault::DispatchKey,
+    ];
 
     /// The code as written, e.g. `"E_FORMULA_DIV_ZERO"`.
     pub const fn as_str(self) -> &'static str {
@@ -105,6 +118,8 @@ impl Fault {
             Fault::Empty => "E_FORMULA_EMPTY",
             Fault::Absent => "E_FORMULA_ABSENT",
             Fault::Future => "E_FORMULA_FUTURE",
+            Fault::Key => "E_FORMULA_KEY",
+            Fault::DispatchKey => "E_FORMULA_DISPATCH_KEY",
         }
     }
 
@@ -189,6 +204,126 @@ pub struct EnvelopeExtras {
     pub fn_hash: Option<String>,
     /// What failed in reaching a foreign mesh, with `E_FOREIGN_UNAVAILABLE` (`spec-0.4.3`).
     pub detail: Option<ForeignDetail>,
+}
+
+/// The `kind` of one resolution of a short call (16.7, `spec-0.5.0`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[non_exhaustive]
+pub enum ResolutionKind {
+    /// `alias`: a bare name resolved through the mesh's alias map.
+    Alias,
+    /// `default`: an unbound argument took its `"default": "asof"`.
+    Default,
+    /// `lookup`: a label resolved to a key through the class's `lookup` method; the resolution
+    /// carries `asof`, the instant the lookup cell was read as of.
+    Lookup,
+    /// `method`: a method call resolved to the method's function.
+    Method,
+}
+
+impl ResolutionKind {
+    /// Every kind, in the order of 5.5: `alias`, `default`, `lookup`, `method`.
+    pub const ALL: &'static [ResolutionKind] =
+        &[ResolutionKind::Alias, ResolutionKind::Default, ResolutionKind::Lookup, ResolutionKind::Method];
+
+    /// The kind as written: `alias`, `default`, `lookup` or `method`.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            ResolutionKind::Alias => "alias",
+            ResolutionKind::Default => "default",
+            ResolutionKind::Lookup => "lookup",
+            ResolutionKind::Method => "method",
+        }
+    }
+
+    /// Looks a kind up by its text; `None` for anything else.
+    pub fn from_name(text: &str) -> Option<ResolutionKind> {
+        ResolutionKind::ALL.iter().copied().find(|k| k.as_str() == text)
+    }
+}
+
+/// One entry of [`Resolved::resolutions`]: an object with exactly `from`, `kind` and `to`, all
+/// strings, and `asof` (an instant) exactly when the kind is `lookup`.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub struct Resolution {
+    /// What was resolved: an alias, an argument name, a label, or `<class>(...).<method>`.
+    pub from: String,
+    /// The kind of resolution.
+    pub kind: ResolutionKind,
+    /// What it resolved to.
+    pub to: String,
+    /// The instant a `lookup` cell was read as of; `Some` exactly for [`ResolutionKind::Lookup`].
+    pub asof: Option<String>,
+}
+
+impl Resolution {
+    /// A resolution of any kind but `lookup`; `E_ENVELOPE` for `lookup` (use
+    /// [`Resolution::lookup`], which needs the `asof`).
+    pub fn new(from: &str, kind: ResolutionKind, to: &str) -> Result<Resolution> {
+        let _ = (from, kind, to);
+        // STUB (0.3.8 tests first).
+        todo!("5.5: build a resolution")
+    }
+
+    /// A `lookup` resolution: the label, the key encoding it resolved to, and the instant its
+    /// lookup cell was read as of (`E_ENVELOPE` when `asof` is not an instant).
+    pub fn lookup(label: &str, key: &str, asof: &str) -> Result<Resolution> {
+        let _ = (label, key, asof);
+        // STUB (0.3.8 tests first).
+        todo!("5.5: build a lookup resolution")
+    }
+}
+
+/// The `resolved` member of an envelope (5.5, 16.7, `spec-0.5.0`): what a short call resolved.
+/// Exactly `call`, `resolutions` and optionally `aliases_tx`.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub struct Resolved {
+    /// The full canonical call (16.7), a non-empty string.
+    pub call: String,
+    /// What was resolved, in the mesh's order.
+    pub resolutions: Vec<Resolution>,
+    /// The instant of the alias snapshot used.
+    pub aliases_tx: Option<String>,
+}
+
+impl Resolved {
+    /// `call` (non-empty) and its resolutions; `E_ENVELOPE` otherwise.
+    pub fn new(call: &str, resolutions: Vec<Resolution>) -> Result<Resolved> {
+        let _ = (call, resolutions);
+        // STUB (0.3.8 tests first).
+        todo!("5.5: build resolved")
+    }
+
+    /// With `aliases_tx`, the instant of the alias snapshot used (`E_ENVELOPE` when it is not
+    /// an instant).
+    pub fn with_aliases_tx(self, instant: &str) -> Result<Resolved> {
+        let _ = instant;
+        // STUB (0.3.8 tests first).
+        todo!("5.5: resolved.aliases_tx")
+    }
+}
+
+/// The `shadows` member of an envelope (5.5, 16.9, `spec-0.5.0`): the class name this mesh
+/// binds to another hash than the reference class of that name.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub struct Shadows {
+    /// A full class name (2.3).
+    pub class: String,
+    /// The reference class's hash: 64 lowercase hex digits.
+    pub reference: String,
+}
+
+impl Shadows {
+    /// Builds `shadows`; `E_ENVELOPE` for a class that is not a full name or a reference that is
+    /// not 64 lowercase hex digits.
+    pub fn new(class: &str, reference: &str) -> Result<Shadows> {
+        let _ = (class, reference);
+        // STUB (0.3.8 tests first).
+        todo!("5.5: build shadows")
+    }
 }
 
 /// A price quote (`payment_required`).

@@ -9,15 +9,19 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use datumesh_core::json::{self, Value};
+use datumesh_core::lexical;
 use datumesh_core::{
-    check_answer, check_batch, check_entitlement, check_slice_answer, format_reference, https_url, inherit_licence,
-    key_id, parse_reference, resolve_mesh, resolved_unit_value, sha256_hex, verify, Answer, Batch, Cell, Declarations,
-    Error, ErrorCode, FunctionDescriptor, Keys, Manifest, MapResolver, Receipt, Reference, Request, Retrieval, Scalar,
-    Slice, SliceRequest,
+    check_answer, check_batch, check_define, check_describe, check_entitlement, check_slice_answer, define_class,
+    format_reference, https_url, inherit_licence, key_id, parse_object_key, parse_reference, resolve_mesh,
+    resolved_unit_value, sha256_hex, verify, Answer, Batch, Cell, ClassDescriptor, ClassEnv, Declarations, Error,
+    ErrorCode, FunctionDescriptor, KeyNormalisation, Keys, Manifest, MapResolver, Receipt, Reference, Request,
+    Retrieval, Scalar, Slice, SliceRequest,
 };
 
 /// The vector kinds for formula evaluators (SPEC 11, `spec-0.4.0`; `call` since `spec-0.4.2`):
-/// a verifier library does not run them. `run-vectors` answers each with `{"error": null, "id": …, "skipped": <kind>}`
+/// a verifier library does not run them. The kinds of `spec-0.5.0` that a verifier library
+/// does run are `class`, `normalisation`, `key`, `describe` and `define`, besides the new
+/// `envelope`, `mesh`, `function`, `licence` and `entitlement` vectors. `run-vectors` answers each with `{"error": null, "id": …, "skipped": <kind>}`
 /// and `check` counts them as skipped.
 pub const SKIPPED_KINDS: [&str; 5] = ["formula", "formula-eval", "excel", "decimal", "call"];
 
@@ -66,7 +70,7 @@ pub fn run_vectors() -> ExitCode {
                     }
                     continue;
                 }
-                match run(&vector) {
+                match run_guarded(&vector) {
                     Ok(outputs) => {
                         m.push(("error".into(), Value::Null));
                         m.extend(outputs);
@@ -130,6 +134,22 @@ fn keys_from_env(keys: Option<&Value>) -> Keys {
         }
     }
     out
+}
+
+/// [`run`], with a panic (an unimplemented stub, a bug) reported as a vector failure,
+/// `E_VECTOR`, instead of ending the process: the runner reports every vector.
+pub fn run_guarded(v: &Value) -> Result<Outputs, Error> {
+    match std::panic::catch_unwind(|| run(v)) {
+        Ok(r) => r,
+        Err(p) => {
+            let what = p
+                .downcast_ref::<&str>()
+                .map(|s| s.to_string())
+                .or_else(|| p.downcast_ref::<String>().cloned())
+                .unwrap_or_default();
+            Err(Error::new(ErrorCode::Schema, "vector", format!("E_VECTOR: panicked: {what}")))
+        }
+    }
 }
 
 /// Runs one vector: its outputs (SPEC 11) on success, or the error it raised.
@@ -202,6 +222,15 @@ pub fn run(v: &Value) -> Result<Outputs, Error> {
             let d = Declarations::from_value(v.get("declarations").unwrap_or(&Value::Object(Vec::new())))
                 .map_err(|e| vector_error(&e.to_string()))?;
             let str_of = |k: &str| v.get(k).and_then(Value::as_str).unwrap_or("");
+            // spec-0.5.0 (8.5): the arguments first, the first failure reported: each input
+            // licence in order (E_CANON_LICENCE, then E_CANON_LIMIT), `fn`, `issued`, then the
+            // mesh's own licence.
+            for l in &licences {
+                lexical::check_licence(l, "$.licences")?;
+            }
+            lexical::check_function_name(str_of("fn"), "$.fn")?;
+            lexical::check_instant(str_of("issued"), "$.issued")?;
+            lexical::check_licence(str_of("mesh_licence"), "$.mesh_licence")?;
             let r = inherit_licence(&licences, Some(&d), str_of("fn"), str_of("issued"), str_of("mesh_licence"));
             Ok(vec![
                 ("licence".into(), r.licence.as_deref().map_or(Value::Null, s)),
@@ -277,6 +306,45 @@ pub fn run(v: &Value) -> Result<Outputs, Error> {
             let r = resolve_mesh(host, retrieval("keys"), retrieval("mesh"))?;
             let endpoints = r.mesh.endpoints.iter().map(|(k, u)| (k.clone(), s(u))).collect();
             Ok(vec![("bindings".into(), s(&r.mesh.bindings)), ("endpoints".into(), Value::Object(endpoints))])
+        }
+        // spec-0.5.0 (16.2): define a class: `input` the descriptor as written, `name`, and the
+        // definer's knowledge in `env` (method functions, known flattened classes, the definer).
+        "class" => {
+            let name = v.get("name").and_then(Value::as_str).ok_or_else(|| vector_error("no name"))?;
+            let env = class_env(v.get("env"))?;
+            let flat = define_class(name, &input_bytes(v)?, &env)?;
+            let canonical = flat.canonical();
+            Ok(vec![
+                ("flattened".into(), s(&String::from_utf8_lossy(&canonical))),
+                ("class_hash".into(), s(&sha256_hex(&canonical))),
+            ])
+        }
+        // spec-0.5.0 (16.4): a pure check of `text` under `rule`.
+        "normalisation" => {
+            let rule = v.get("rule").and_then(Value::as_str).unwrap_or("");
+            let rule = KeyNormalisation::from_name(rule).ok_or_else(|| vector_error("unknown rule"))?;
+            let text = v.get("text").and_then(Value::as_str).ok_or_else(|| vector_error("no text"))?;
+            rule.check(text)?;
+            Ok(Vec::new())
+        }
+        // spec-0.5.0 (16.5): parse an object key string; output its decoded form.
+        "key" => {
+            let text = v.get("input").and_then(Value::as_str).ok_or_else(|| vector_error("no input"))?;
+            Ok(vec![("decoded".into(), parse_object_key(text)?.to_value())])
+        }
+        // spec-0.5.0 (16.8): check a describe answer against the classes held, by name.
+        "describe" => {
+            let mut held = BTreeMap::new();
+            for (name, d) in v.get("classes").and_then(Value::as_object).unwrap_or(&[]) {
+                held.insert(name.clone(), ClassDescriptor::from_value(d).map_err(|e| vector_error(&e.to_string()))?);
+            }
+            check_describe(&input_bytes(v)?, &held)?;
+            Ok(Vec::new())
+        }
+        // spec-0.5.0 (2.5): the define-time check of a function under a name.
+        "define" => {
+            let name = v.get("name").and_then(Value::as_str).ok_or_else(|| vector_error("no name"))?;
+            Ok(canon_outputs(check_define(name, &input_bytes(v)?)?.canonical()))
         }
         other => Err(vector_error(&format!("unknown kind {other:?}"))),
     }
@@ -437,21 +505,25 @@ fn run_entitlement(v: &Value) -> Result<Outputs, Error> {
     }
     let r = Receipt::from_json(&input)?;
     let k = keys.get_document(r.cell().ns.split('/').next().unwrap_or(""))?;
+    // spec-0.5.0 (11, 10.1 step 7.5): an input the vector does not supply (a receipt, a
+    // manifest, a member of a slice), or supplies under another hash, cannot be obtained:
+    // E_INPUT_UNAVAILABLE; one obtained but not signature-valid is E_INPUT_INVALID.
+    let unavailable = |what: String| Error::new(ErrorCode::InputUnavailable, "$.inputs", what);
     let text = |group: &str, key: &str| -> Result<Vec<u8>, Error> {
         v.get(group)
             .and_then(|m| m.get(key))
             .and_then(Value::as_str)
             .map(|t| t.as_bytes().to_vec())
-            .ok_or_else(|| vector_error(&format!("{group} has no {key}")))
+            .ok_or_else(|| unavailable(format!("{group} has no {key}")))
     };
     let licence_of = |h: &str| -> Result<String, Error> {
         let bytes = text("receipts", h)?;
         let res = verify(&bytes, &keys, None, None);
         if let Some(e) = res.error() {
-            return Err(e);
+            return Err(Error::new(ErrorCode::InputInvalid, e.path(), e.detail()));
         }
         if res.hash.as_deref() != Some(h) {
-            return Err(vector_error(&format!("the receipt given for {h} has another hash")));
+            return Err(unavailable(format!("the receipt given for {h} has another hash")));
         }
         Ok(Receipt::from_json(&bytes)?.licence().to_string())
     };
@@ -460,7 +532,7 @@ fn run_entitlement(v: &Value) -> Result<Outputs, Error> {
         if e.starts_with("slice:") {
             let m = Manifest::from_value(&json::parse(&text("manifests", e)?)?)?;
             if m.entry() != *e {
-                return Err(vector_error(&format!("the manifest given for {e} is another slice's")));
+                return Err(unavailable(format!("the manifest given for {e} is another slice's")));
             }
             for h in m.members() {
                 licences.push(licence_of(h)?);
@@ -487,6 +559,9 @@ fn expected_outputs(kind: &str) -> &'static [&'static str] {
         "batch" => &["results", "outcome"],
         "slice" => &["canonical", "sha256", "slice_id", "members_hash", "entry"],
         "mesh" => &["bindings", "endpoints"],
+        "class" => &["flattened", "class_hash"],
+        "key" => &["decoded"],
+        "define" => &["canonical", "sha256"],
         _ => &[],
     }
 }
@@ -495,7 +570,7 @@ fn expected_outputs(kind: &str) -> &'static [&'static str] {
 pub fn check_vector(v: &Value) -> Vec<String> {
     let kind = v.get("kind").and_then(Value::as_str).unwrap_or("");
     let valid = matches!(v.get("valid"), Some(Value::Bool(true)));
-    let got = run(v);
+    let got = run_guarded(v);
     let mut problems = Vec::new();
     match (valid, got) {
         (true, Ok(out)) => {
@@ -554,6 +629,8 @@ pub fn check(dir: &Path) -> ExitCode {
         return ExitCode::from(2);
     }
     files.sort();
+    // A panic in the library is reported as a failure of that vector (see `run_guarded`).
+    std::panic::set_hook(Box::new(|_| {}));
     let mut passed = 0;
     let mut skips = 0;
     for f in &files {
@@ -587,4 +664,25 @@ pub fn check(dir: &Path) -> ExitCode {
     } else {
         ExitCode::FAILURE
     }
+}
+
+/// The class environment of a `class` vector (SPEC 11): `env.functions`, an array of function
+/// descriptors; `env.classes`, an array of flattened class descriptors; `env.definer`. A
+/// descriptor of `env` that does not parse is a malformed vector.
+fn class_env(env: Option<&Value>) -> Result<ClassEnv, Error> {
+    let env = env.ok_or_else(|| vector_error("no env"))?;
+    let definer = env.get("definer").and_then(Value::as_str).ok_or_else(|| vector_error("no env.definer"))?;
+    let mut out = ClassEnv::new(definer);
+    let bad = |what: &str, e: Error| vector_error(&format!("env.{what}: {e}"));
+    if let Some(Value::Array(fs)) = env.get("functions") {
+        for f in fs {
+            out.insert_function(FunctionDescriptor::from_value(f).map_err(|e| bad("functions", e))?);
+        }
+    }
+    if let Some(Value::Array(cs)) = env.get("classes") {
+        for c in cs {
+            out.insert_class(ClassDescriptor::from_value(c).map_err(|e| bad("classes", e))?);
+        }
+    }
+    Ok(out)
 }

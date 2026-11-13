@@ -6,6 +6,7 @@ use crate::error::{err, index, member, ErrorCode, Result};
 use crate::json::{self, jcs_sorted, Value};
 use crate::lexical::{self, limits};
 use crate::model::{self, Arg, Cell, Scalar, Type};
+use crate::normalisation::KeyNormalisation;
 use crate::schema;
 
 /// One side of a rate: a currency code or an argument reference.
@@ -215,6 +216,34 @@ pub struct FunctionDescriptor {
     pub order: Option<Vec<String>>,
     /// The arguments' `extent` members, by argument name; empty when none has one.
     pub extents: BTreeMap<String, Extent>,
+    /// The optional members of `spec-0.5.0` of the `string` and `date`/`instant` argument
+    /// declarations (`classes`, `default`, `key_normalisation`), by argument name; an entry
+    /// exists only for an argument that has at least one of them. Absent, a descriptor is
+    /// byte for byte and hash for hash what it was (7).
+    pub arg_extras: BTreeMap<String, ArgExtras>,
+    /// `returns.classes` (7, `spec-0.5.0`): the function returns an object key of one of these
+    /// classes (ascending, unique, at least one); `None` when absent.
+    pub returns_classes: Option<Vec<String>>,
+}
+
+/// The `spec-0.5.0` members of one argument declaration (7), each absent by default.
+///
+/// [`ArgDecl`] has no field for them (it is not `#[non_exhaustive]`, so adding fields would
+/// break the 0.3.x API); they live in [`FunctionDescriptor::arg_extras`], as `extent` lives in
+/// [`FunctionDescriptor::extents`].
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub struct ArgExtras {
+    /// `classes`: a `string` argument holding an object key of one of these classes (full class
+    /// names, ascending and unique, at least one; 16.6).
+    pub classes: Option<Vec<String>>,
+    /// `default`: `true` when the declaration says `"default": "asof"` (the only value), on a
+    /// valid-time `date` or `instant` argument (16.7).
+    pub default_asof: bool,
+    /// `key_normalisation` of a `string` argument without `classes`: never
+    /// [`KeyNormalisation::NoRule`]. An absent member means `none`, so `"none"` written out is
+    /// `E_SCHEMA`.
+    pub key_normalisation: Option<KeyNormalisation>,
 }
 
 impl FunctionDescriptor {
@@ -273,6 +302,8 @@ impl From<Descriptor> for FunctionDescriptor {
             signature: d.signature,
             order: None,
             extents: BTreeMap::new(),
+            arg_extras: BTreeMap::new(),
+            returns_classes: None,
         }
     }
 }
@@ -615,6 +646,9 @@ pub(crate) fn descriptor_canonical(v: &Value) -> Result<FunctionDescriptor> {
         signature: Signature { args: decls, returns },
         order,
         extents,
+        // STUB (0.3.8 tests first): the implementation parses classes/default/key_normalisation.
+        arg_extras: BTreeMap::new(),
+        returns_classes: None,
     })
 }
 

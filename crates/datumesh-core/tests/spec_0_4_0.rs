@@ -384,7 +384,8 @@ fn envelope_faults_are_accepted_and_exposed() {
         (Fault::Absent, "E_FORMULA_ABSENT"),
         (Fault::Future, "E_FORMULA_FUTURE"),
     ];
-    assert_eq!(Fault::ALL.len(), 6);
+    // 0.3.8 (spec-0.5.0) appends E_FORMULA_KEY and E_FORMULA_DISPATCH_KEY: the first six stay.
+    assert_eq!(&Fault::ALL[..6], all.map(|(f, _)| f));
     for (f, s) in all {
         assert_eq!(f.as_str(), s);
         assert_eq!(Fault::from_code(s), Some(f));

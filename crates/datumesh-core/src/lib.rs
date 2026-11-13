@@ -48,7 +48,10 @@
 #![deny(missing_docs)]
 
 mod answer;
+mod class;
 mod crypto;
+mod define;
+mod describe;
 mod descriptor;
 mod envelope;
 mod error;
@@ -60,6 +63,8 @@ pub mod lexical;
 mod licence;
 mod mesh;
 mod model;
+mod normalisation;
+mod object;
 mod receipt;
 mod schema;
 #[cfg(feature = "sign")]
@@ -76,14 +81,18 @@ pub use answer::{
     batch_body, check_answer, check_batch, check_slice_answer, Answer, AnswerOutcome, Batch, SlicePage, SliceRequest,
     TrustLabel,
 };
+pub use class::{define_class, ClassDescriptor, ClassEnv, ClassExtent, ClassKey, Steward};
 pub use crypto::{key_id, sha256, sha256_hex, verify_ed25519};
+pub use define::check_define;
+pub use describe::{check_describe, DescribeKind, Described};
 pub use descriptor::{
-    resolve_with, resolved_unit, resolved_unit_value, ArgDecl, Descriptor, Extent, FunctionDescriptor, RateSide,
-    Returns, Signature, Unit,
+    resolve_with, resolved_unit, resolved_unit_value, ArgDecl, ArgExtras, Descriptor, Extent, FunctionDescriptor,
+    RateSide, Returns, Signature, Unit,
 };
 pub use envelope::{
     check_envelope, check_envelope_any, check_envelope_extras, AnyEnvelope, Envelope, EnvelopeExtras, Fault,
-    ForeignDetail, InvalidRequest, Outcome, Pending, Quote, Request, Trust,
+    ForeignDetail, InvalidRequest, Outcome, Pending, Quote, Request, Resolution, ResolutionKind, Resolved, Shadows,
+    Trust,
 };
 pub use error::{Error, ErrorCode, Result};
 pub use mesh::{resolve_mesh, MeshDoc, ResolvedMesh, Retrieval};
@@ -98,6 +107,8 @@ pub use licence::{
     WrongPublisher,
 };
 pub use model::{Arg, Args, Cell, CellRef, Reference, Scalar, Type};
+pub use normalisation::KeyNormalisation;
+pub use object::{format_object_key, parse_object_key, short_id, KeyValue, ObjectKey};
 pub use receipt::{receipt_hash, receipt_payload, Receipt};
 #[cfg(feature = "sign")]
 pub use sign::{ReceiptBuilder, SigningKey};

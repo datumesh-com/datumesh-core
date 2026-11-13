@@ -4,7 +4,7 @@ use core::fmt;
 
 macro_rules! codes {
     ($( $(#[$doc:meta])* $variant:ident = $text:literal, )*) => {
-        /// One variant per `E_*` code of SPEC 10.2 (`spec-0.4.3`).
+        /// One variant per `E_*` code of SPEC 10.2 (`spec-0.5.0`).
         /// Non-exhaustive: codes added by later revisions of the specification are additions.
         ///
         /// The variants are declared in the order of 10.2, except the codes added within
@@ -15,7 +15,10 @@ macro_rules! codes {
         /// `E_EVAL_UNAVAILABLE`), then `JobUnknown` and `MeshDoc` (0.3.5, `spec-0.4.1`; last in
         /// 10.2 too, after `E_ENVELOPE`), then `SliceAtCell` and `NameUnbound` (0.3.6,
         /// `spec-0.4.2`, after `E_MESH_DOC`), then `ForeignUnavailable` (0.3.7, `spec-0.4.3`, last in
-        /// 10.2 too). The formula codes of SPEC 15.11 are not verification codes
+        /// 10.2 too), then, since 0.3.8 (`spec-0.5.0`), in the order of 10.2: `UnrootedInput`,
+        /// `NamespaceSuspended`, the class codes `ClassMember` to `ClassOwner`,
+        /// `KeyNormalisation`, `KeyEncoding`, `ShortIdAmbiguous` and `Describe`. The formula
+        /// codes of SPEC 15.11 are not verification codes
         /// and have no variant; the envelope's `fault` is a [`crate::Fault`].
         #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
         #[non_exhaustive]
@@ -157,6 +160,42 @@ codes! {
     /// a refused connection; 5.5, 9.6, `spec-0.4.3`). A mesh's or resolver's code, never a
     /// verification result.
     ForeignUnavailable = "E_FOREIGN_UNAVAILABLE",
+    /// Define's code (2.5, `spec-0.5.0`): a function under a rooted namespace whose `inputs`
+    /// name a function under an unrooted one ([`crate::check_define`]). Never a verification
+    /// result, and never in an envelope.
+    UnrootedInput = "E_UNROOTED_INPUT",
+    /// A write refusal (9.9, `spec-0.5.0`) under a suspended namespace. In a `not_covered`
+    /// envelope's `error` only, for a refused cross-mesh import; never of an `error` envelope
+    /// and never a verification result.
+    NamespaceSuspended = "E_NAMESPACE_SUSPENDED",
+    /// A class descriptor member breaks its rule (16.1, `spec-0.5.0`).
+    ClassMember = "E_CLASS_MEMBER",
+    /// The parent's class descriptor is not known to define (16.2, `spec-0.5.0`).
+    ClassParent = "E_CLASS_PARENT",
+    /// A subclass redeclares a parent key (16.2, `spec-0.5.0`).
+    ClassInherit = "E_CLASS_INHERIT",
+    /// An override changes the method's signature, return type or unit (16.2, `spec-0.5.0`).
+    ClassOverride = "E_CLASS_OVERRIDE",
+    /// A subclass of a `final` class overrides a method not marked `open` (16.2, `spec-0.5.0`).
+    ClassFinal = "E_CLASS_FINAL",
+    /// A method's function is unknown, lacks `order`, or does not take the class keys first
+    /// with their types and normalisations; a `same_as` or `by_` method of the wrong return
+    /// (16.2, `spec-0.5.0`).
+    ClassMethod = "E_CLASS_METHOD",
+    /// `implements` names a class that is not a keyless interface the define knows, or an
+    /// interface method is not implemented with its signature (16.2, `spec-0.5.0`).
+    ClassInterface = "E_CLASS_INTERFACE",
+    /// A namespace defines a class under another namespace (16.2, `spec-0.5.0`).
+    ClassOwner = "E_CLASS_OWNER",
+    /// A string key value is not canonical under its normalisation (16.4, 7, `spec-0.5.0`).
+    KeyNormalisation = "E_KEY_NORMALISATION",
+    /// An object key string is malformed or not its canonical encoding (16.5, `spec-0.5.0`).
+    KeyEncoding = "E_KEY_ENCODING",
+    /// In a `bad_request` envelope: a short id names more than one cell or object (16.8,
+    /// `spec-0.5.0`). A mesh's code.
+    ShortIdAmbiguous = "E_SHORT_ID_AMBIGUOUS",
+    /// A client's check of a describe answer failed (16.8, `spec-0.5.0`).
+    Describe = "E_DESCRIBE",
 }
 
 impl fmt::Display for ErrorCode {

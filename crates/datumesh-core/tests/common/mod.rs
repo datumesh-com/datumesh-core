@@ -72,3 +72,66 @@ pub fn resolver(v: &Value) -> Option<MapResolver> {
     }
     Some(out)
 }
+
+// ---- spec-0.5.0 helpers ----
+
+/// The vector with this id, from the directory of its group or from `invalid/`.
+pub fn vector_by_id(id: &str) -> Value {
+    let (group, _) = id.split_once('/').unwrap();
+    vectors(group).into_iter().find(|v| str_of(v, "id") == id).unwrap_or_else(|| panic!("no vector {id}"))
+}
+
+/// Every vector of a kind: the valid ones of the kind's directory, then the invalid ones of
+/// `invalid/` that have the kind (sorted by path within each).
+pub fn vectors_of_kind(kind: &str) -> Vec<Value> {
+    let mut out = vectors(kind);
+    out.extend(vectors("invalid").into_iter().filter(|v| str_of(v, "kind") == kind));
+    out
+}
+
+pub fn is_valid(v: &Value) -> bool {
+    v.get("valid") == Some(&Value::Bool(true))
+}
+
+/// `v` with the member at `path` (object members only) replaced by `new`, or removed when `new`
+/// is `None`. A path that does not exist is a bug in the test.
+pub fn edit(v: &Value, path: &[&str], new: Option<Value>) -> Value {
+    let Value::Object(members) = v else { panic!("edit: not an object at {path:?}") };
+    let mut out = Vec::new();
+    let mut found = false;
+    for (k, x) in members {
+        if k == path[0] {
+            found = true;
+            if path.len() == 1 {
+                if let Some(n) = &new {
+                    out.push((k.clone(), n.clone()));
+                }
+            } else {
+                out.push((k.clone(), edit(x, &path[1..], new.clone())));
+            }
+        } else {
+            out.push((k.clone(), x.clone()));
+        }
+    }
+    if !found && path.len() == 1 {
+        if let Some(n) = new {
+            out.push((path[0].to_string(), n));
+        }
+    } else {
+        assert!(found, "edit: no member {} in the value", path[0]);
+    }
+    Value::Object(out)
+}
+
+pub fn text(s: &str) -> Value {
+    Value::String(s.to_string())
+}
+
+/// The JSON text of a value (compact, JCS).
+pub fn jcs(v: &Value) -> String {
+    String::from_utf8(v.to_jcs()).unwrap()
+}
+
+pub fn parse(text: &str) -> Value {
+    json::parse(text.as_bytes()).unwrap()
+}
