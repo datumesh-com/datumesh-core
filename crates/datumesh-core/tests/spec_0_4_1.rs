@@ -179,7 +179,12 @@ fn mesh_vectors_through_resolve_mesh() {
             (Some(Value::Bool(true)), Ok(r)) => {
                 assert_eq!(r.mesh.host, str_of(&v, "host"), "{id}");
                 assert_eq!(r.keys.host, str_of(&v, "host"), "{id}");
-                assert!(r.mesh.bindings.starts_with("https://"), "{id}");
+                // spec-0.5.0 (9.6): an unrooted host's documents may be on a loopback http:// origin
+                if str_of(&v, "host").ends_with(".invalid") {
+                    assert!(r.mesh.bindings.starts_with("https://") || r.mesh.bindings.starts_with("http://"), "{id}");
+                } else {
+                    assert!(r.mesh.bindings.starts_with("https://"), "{id}");
+                }
                 for e in ["cell", "descriptor", "jobs", "manifest", "receipt"] {
                     assert!(r.mesh.endpoints.contains_key(e), "{id}: {e}");
                 }

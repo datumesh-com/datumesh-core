@@ -121,8 +121,8 @@ const ARABIC_MARKS: &[core::ops::RangeInclusive<u32>] = &[
 ];
 
 /// Format characters (general category Cf) of Unicode 15.1, as 16.4's `nfc_strict` names them.
-/// The ranges are those of the Unicode database; a code point added after 12.1 is listed here
-/// by hand (U+0890-U+0891, U+13439-U+1343F).
+/// The ranges are those of the Unicode database, checked against Python 3.13's `unicodedata`
+/// (Unicode 15.1.0): every Cf code point, and no other.
 const FORMAT_CHARACTERS: &[(u32, u32)] = &[
     (0x00AD, 0x00AD),
     (0x0600, 0x0605),
