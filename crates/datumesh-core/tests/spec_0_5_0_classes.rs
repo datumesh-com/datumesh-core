@@ -82,7 +82,7 @@ mod classes {
     fn every_class_vector_defines_or_fails_with_its_code() {
         let all = vectors_of_kind("class");
         // 12 valid, 32 invalid (every class code of 10.2 among them).
-        assert_eq!(all.len(), 44);
+        assert_eq!(all.len(), 45);
         for v in &all {
             let id = str_of(v, "id");
             let got = define_class(str_of(v, "name"), str_of(v, "input").as_bytes(), &env_of(v));
@@ -501,7 +501,7 @@ mod normalisation {
     #[test]
     fn every_normalisation_vector() {
         let all = vectors_of_kind("normalisation");
-        assert_eq!(all.len(), 17); // 8 valid, 9 invalid
+        assert_eq!(all.len(), 24); // 9 valid, 15 invalid
         for v in &all {
             let id = str_of(v, "id");
             let rule = KeyNormalisation::from_name(str_of(v, "rule")).unwrap_or_else(|| panic!("{id}: rule"));
@@ -516,17 +516,20 @@ mod normalisation {
 
     #[test]
     fn none_accepts_any_string() {
-        // 16.4: "Every rule but `none` rejects the empty string and a value that is not NFC".
-        for s in ["", "anything at all", "  Mixed  CASE  ", "e\u{0301}", "\u{05D1}\u{05B0}", "ΑΒΓ", "a\u{200D}b"] {
+        // 16.4 (6d5633e): `none` is any string valid by 3.5, the empty string included. A value that is
+        // not NFC is no string value at all (E_CANON_STRING), under `none` too: see
+        // `a_key_value_is_first_a_string_value_by_3_5`.
+        for s in ["", "anything at all", "  Mixed  CASE  ", "ΑΒΓ", "a\u{200D}b", "a\u{00A0}b"] {
             ok(NoRule, s);
         }
     }
 
     #[test]
-    fn every_rule_but_none_rejects_the_empty_string_and_a_value_that_is_not_nfc() {
+    fn every_rule_but_none_rejects_the_empty_string() {
+        // (Before 6d5633e this test also had a value that is not NFC here with E_KEY_NORMALISATION;
+        // that is now E_CANON_STRING under every rule, 3.5 first.)
         for rule in KeyNormalisation::ALL.iter().filter(|r| **r != NoRule) {
             bad(*rule, "");
-            bad(*rule, "e\u{0301}"); // e + combining acute: NFD, not NFC
         }
     }
 
@@ -654,7 +657,7 @@ mod object_keys {
     #[test]
     fn every_key_vector() {
         let all = vectors_of_kind("key");
-        assert_eq!(all.len(), 11); // 5 valid, 6 invalid
+        assert_eq!(all.len(), 17); // 7 valid, 10 invalid
         for v in &all {
             let id = str_of(v, "id");
             let got = parse_object_key(str_of(v, "input"));
@@ -883,7 +886,7 @@ mod describe {
     #[test]
     fn every_describe_vector() {
         let all = vectors_of_kind("describe");
-        assert_eq!(all.len(), 8); // 2 valid, 6 invalid
+        assert_eq!(all.len(), 24); // 6 valid, 18 invalid
         for v in &all {
             let id = str_of(v, "id");
             let got = check_describe(str_of(v, "input").as_bytes(), &held_of(v));

@@ -536,7 +536,7 @@ mod envelopes {
         // define and write codes E_UNROOTED_INPUT and E_NAMESPACE_SUSPENDED. The reference tool
         // (canon.py, as a black box) also refuses the class codes, which are define's (10.2), and
         // E_DESCRIBE, a client's code like E_ENVELOPE: the text of 5.5 does not say so (DEFECTS).
-        // E_KEY_NORMALISATION and E_KEY_ENCODING, "reader's" codes, it accepts.
+        // Since 6d5633e 5.5 names them all, and E_KEY_NORMALISATION and E_KEY_ENCODING too (`repin::*`).
         let refused = [
             "E_UNROOTED_INPUT",
             "E_NAMESPACE_SUSPENDED",
@@ -563,13 +563,8 @@ mod envelopes {
         }
         // A short id is a bad_request's code only.
         assert_eq!(Answer::error(ErrorCode::ShortIdAmbiguous).unwrap_err().code(), ErrorCode::Envelope);
-        // The reader's codes are ordinary 10.2 codes in an `error` envelope.
-        for code in ["E_KEY_NORMALISATION", "E_KEY_ENCODING"] {
-            let body = format!(r#"{{"error":"{code}","outcome":"error"}}"#);
-            let a = check(500, &body).unwrap_or_else(|e| panic!("{code}: {e}"));
-            assert_eq!(a.error.map(ErrorCode::as_str), Some(code));
-            assert!(Answer::error(ErrorCode::from_code(code).unwrap()).is_ok(), "{code}");
-        }
+        // (Before 6d5633e this test said E_KEY_NORMALISATION and E_KEY_ENCODING were ordinary codes in
+        // an `error` envelope; they are request codes now, `bad_request`'s only: see `repin::*`.)
         // Any other code of 10.2 is allowed as before, the two new ones of this test file excepted.
         assert!(Answer::error(ErrorCode::InputUnavailable).is_ok());
     }

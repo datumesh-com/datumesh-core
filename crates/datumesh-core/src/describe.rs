@@ -4,6 +4,7 @@
 use std::collections::BTreeMap;
 
 use crate::class::{ClassDescriptor, ClassKey};
+use crate::descriptor::FunctionDescriptor;
 use crate::error::{err, Error, ErrorCode, Result};
 use crate::json::{self, Value};
 use crate::lexical;
@@ -55,6 +56,24 @@ pub fn check_describe(answer: &[u8], held: &BTreeMap<String, ClassDescriptor>) -
         "object" => check_object(m, held),
         other => err(ErrorCode::Describe, "$.kind", format!("kind is class or object, not {other:?}")),
     }
+}
+
+/// Checks a describe answer (16.8) like [`check_describe`], and, for a class answer, step 6
+/// against the method functions the client holds: each method whose function descriptor is in
+/// `functions` (found by its `fn_hash`) has as `args` exactly the function's arguments other
+/// than the class keys, and as `returns` exactly its `returns`; a method whose descriptor is not
+/// held has them unchecked. An empty `functions` is [`check_describe`]. Since 0.3.8.
+///
+/// The held class is found by its class hash, never by the name in `held` (16.8 step 4); a class
+/// not held ends the check after step 3.
+pub fn check_describe_with(
+    answer: &[u8],
+    held: &BTreeMap<String, ClassDescriptor>,
+    functions: &[FunctionDescriptor],
+) -> Result<Described> {
+    // STUB (0.3.8 re-pin tests first)
+    let _ = (answer, held, functions);
+    todo!("16.8: the six steps, with the held method functions")
 }
 
 /// A class answer (16.8): its flattened descriptor, which must be the held one and hash to

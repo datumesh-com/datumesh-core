@@ -84,7 +84,7 @@ pub use answer::{
 pub use class::{define_class, ClassDescriptor, ClassEnv, ClassExtent, ClassKey, Steward};
 pub use crypto::{key_id, sha256, sha256_hex, verify_ed25519};
 pub use define::check_define;
-pub use describe::{check_describe, DescribeKind, Described};
+pub use describe::{check_describe, check_describe_with, DescribeKind, Described};
 pub use descriptor::{
     resolve_with, resolved_unit, resolved_unit_value, ArgDecl, ArgExtras, Descriptor, Extent, FunctionDescriptor,
     RateSide, Returns, Signature, Unit,

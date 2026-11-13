@@ -16,7 +16,7 @@ OUT = {"jcs": ["canonical", "sha256"], "scalar": ["canonical", "sha256"], "cell"
        "slice": ["canonical", "sha256", "slice_id", "members_hash", "entry"],
        "mesh": ["bindings", "endpoints"],
        "licence": ["licence", "reason"], "entitlement": ["entitled", "reason"],
-       "class": ["flattened", "class_hash"], "normalisation": [], "key": ["decoded"], "describe": [],
+       "class": ["flattened", "class_hash"], "normalisation": [], "key": ["decoded", "object", "object_id"], "describe": [],
        "define": ["canonical", "sha256"]}
 KNOWN = {"blob", "cell", "cells", "descriptor", "explain", "find", "jobs", "manifest", "receipt", "slice", "verify",
          "versions", "describe"}

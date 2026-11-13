@@ -65,7 +65,11 @@
 {"canonical":"{\"code\":{\"body\":\"amount * rates.example.org/fx_rate(base: base, date: date, quote: quote)\\n\",\"lang\":\"expr\"},\"inputs\":[\"rates.example.org/fx_rate\"],\"signature\":{\"args\":{\"amount\":{\"type\":\"number\",\"unit\":{\"arg\":\"base\"},\"valid\":false},\"base\":{\"type\":\"string\",\"valid\":false},\"date\":{\"type\":\"date\",\"valid\":true},\"quote\":{\"type\":\"string\",\"valid\":false}},\"returns\":{\"type\":\"number\",\"unit\":{\"arg\":\"quote\"}}}}","error":null,"id":"define/rooted-reads-rooted","sha256":"014fc97eb3a442ab28a96d89131ccfd11c9eec8187595578c212b392d0702c71"}
 {"canonical":"{\"code\":{\"body\":\"\",\"lang\":\"expr\"},\"inputs\":[\"rates.example.org/fx_rate\"],\"signature\":{\"args\":{},\"returns\":{\"type\":\"number\",\"unit\":\"1\"}}}","error":null,"id":"define/unrooted-reads-rooted","sha256":"e96598a65eaaa5168c65a48100795059c4516a651e1b013d36aa4f5be73c5084"}
 {"canonical":"{\"code\":{\"body\":\"\",\"lang\":\"expr\"},\"inputs\":[\"local.invalid/notes/fx\"],\"signature\":{\"args\":{},\"returns\":{\"type\":\"number\",\"unit\":\"1\"}}}","error":null,"id":"define/unrooted-reads-unrooted","sha256":"93b6b4cde2dfe3c878c1d80920165acc111031c8e6e1f157e63bf17124631ae2"}
+{"error":null,"id":"describe/class-args-unchecked"}
+{"error":null,"id":"describe/class-functions"}
 {"error":null,"id":"describe/class"}
+{"error":null,"id":"describe/object-class-typed-key"}
+{"error":null,"id":"describe/object-not-held"}
 {"error":null,"id":"describe/object"}
 {"entitled":false,"error":null,"id":"entitlement/declaration-closed","reason":"declaration_not_open"}
 {"entitled":false,"error":null,"id":"entitlement/declaration-opens-later","reason":"declaration_not_open"}
@@ -79,6 +83,8 @@
 {"entitled":true,"error":null,"id":"entitlement/slice-members","reason":"open"}
 {"entitled":true,"error":null,"id":"entitlement/stored-no-inputs","reason":"no_inputs"}
 {"error":null,"id":"envelope/bad-request-argument","outcome":"bad_request"}
+{"error":null,"id":"envelope/bad-request-key-encoding","outcome":"bad_request"}
+{"error":null,"id":"envelope/bad-request-key-normalisation","outcome":"bad_request"}
 {"error":null,"id":"envelope/bad-request-pin","outcome":"bad_request"}
 {"error":null,"id":"envelope/bad-request-short-id-ambiguous","outcome":"bad_request"}
 {"error":null,"id":"envelope/bad-request-slice-at-cell","outcome":"bad_request"}
@@ -628,6 +634,7 @@
 {"error":"E_CLASS_MEMBER","id":"invalid/class-key-normalisation-unknown"}
 {"error":"E_CANON_UNIT","id":"invalid/class-key-number-unit"}
 {"error":"E_CANON_ARG_NAME","id":"invalid/class-key-reserved"}
+{"error":"E_CLASS_MEMBER","id":"invalid/class-lookup-keys-only"}
 {"error":"E_CLASS_MEMBER","id":"invalid/class-lookup-not-a-method"}
 {"error":"E_CLASS_MEMBER","id":"invalid/class-lookup-returns"}
 {"error":"E_CLASS_MEMBER","id":"invalid/class-lookup-signature"}
@@ -651,11 +658,23 @@
 {"error":"E_CANON_NAME","id":"invalid/define-bad-name"}
 {"error":"E_UNROOTED_INPUT","id":"invalid/define-rooted-reads-unrooted-path"}
 {"error":"E_UNROOTED_INPUT","id":"invalid/define-rooted-reads-unrooted"}
+{"error":"E_DESCRIBE","id":"invalid/describe-class-args"}
 {"error":"E_DESCRIBE","id":"invalid/describe-class-hash"}
 {"error":"E_DESCRIBE","id":"invalid/describe-class-methods"}
+{"error":"E_DESCRIBE","id":"invalid/describe-class-not-string"}
+{"error":"E_DESCRIBE","id":"invalid/describe-class-returns"}
+{"error":"E_DESCRIBE","id":"invalid/describe-description-empty"}
+{"error":"E_PARSE_DUPLICATE_KEY","id":"invalid/describe-duplicate-member"}
 {"error":"E_DESCRIBE","id":"invalid/describe-kind"}
+{"error":"E_PARSE_JSON","id":"invalid/describe-not-json"}
 {"error":"E_DESCRIBE","id":"invalid/describe-object-id"}
+{"error":"E_DESCRIBE","id":"invalid/describe-object-key-names"}
+{"error":"E_DESCRIBE","id":"invalid/describe-object-key-normalisation"}
+{"error":"E_DESCRIBE","id":"invalid/describe-object-key-type"}
 {"error":"E_DESCRIBE","id":"invalid/describe-object-methods"}
+{"error":"E_DESCRIBE","id":"invalid/describe-object-not-held-call"}
+{"error":"E_DESCRIBE","id":"invalid/describe-same-as-duplicate"}
+{"error":"E_DESCRIBE","id":"invalid/describe-same-as-unsorted"}
 {"error":"E_DESCRIBE","id":"invalid/describe-short-id"}
 {"error":"E_INPUT_INVALID","id":"invalid/entitlement-input-bad-signature"}
 {"error":"E_INPUT_UNAVAILABLE","id":"invalid/entitlement-input-missing"}
@@ -666,8 +685,10 @@
 {"error":"E_ENVELOPE","id":"invalid/envelope-age-negative"}
 {"error":"E_ENVELOPE","id":"invalid/envelope-bad-request-code"}
 {"error":"E_ENVELOPE","id":"invalid/envelope-bad-request-status"}
+{"error":"E_ENVELOPE","id":"invalid/envelope-class-code-in-error"}
 {"error":"E_ENVELOPE","id":"invalid/envelope-computed-other-signer"}
 {"error":"E_ENVELOPE","id":"invalid/envelope-computed-primary"}
+{"error":"E_ENVELOPE","id":"invalid/envelope-describe-in-error"}
 {"error":"E_PARSE_DUPLICATE_KEY","id":"invalid/envelope-duplicate-member"}
 {"error":"E_ENVELOPE","id":"invalid/envelope-echo-other-than-receipt"}
 {"error":"E_ENVELOPE","id":"invalid/envelope-error-client-status"}
@@ -684,6 +705,8 @@
 {"error":"E_ENVELOPE","id":"invalid/envelope-job-result-later-asof"}
 {"error":"E_ENVELOPE","id":"invalid/envelope-job-result-other-cell"}
 {"error":"E_ENVELOPE","id":"invalid/envelope-job-unknown-on-cell"}
+{"error":"E_ENVELOPE","id":"invalid/envelope-key-encoding-in-error"}
+{"error":"E_ENVELOPE","id":"invalid/envelope-key-normalisation-in-error"}
 {"error":"E_ENVELOPE","id":"invalid/envelope-namespace-suspended-in-error"}
 {"error":"E_ENVELOPE","id":"invalid/envelope-not-covered-error-and-fault"}
 {"error":"E_ENVELOPE","id":"invalid/envelope-not-covered-fault-unknown"}
@@ -947,6 +970,7 @@
 {"error":"E_CANON_UNIT","id":"invalid/function-blob-unit"}
 {"error":"E_CANON_TYPE","id":"invalid/function-blob-valid-time"}
 {"error":"E_CANON_STRING","id":"invalid/function-body-cr"}
+{"error":"E_CANON_SET","id":"invalid/function-classes-empty"}
 {"error":"E_CANON_TYPE","id":"invalid/function-extent-boolean"}
 {"error":"E_CANON_DATE","id":"invalid/function-extent-lexical"}
 {"error":"E_CANON_SET","id":"invalid/function-extent-number-order"}
@@ -957,12 +981,15 @@
 {"error":"E_CANON_SET","id":"invalid/function-extent-unsorted"}
 {"error":"E_CANON_NAME","id":"invalid/function-inputs-alias"}
 {"error":"E_CANON_SET","id":"invalid/function-inputs-unsorted"}
+{"error":"E_SCHEMA","id":"invalid/function-key-normalisation-none-number"}
 {"error":"E_SCHEMA","id":"invalid/function-key-normalisation-none"}
 {"error":"E_CANON_TYPE","id":"invalid/function-key-normalisation-number"}
+{"error":"E_SCHEMA","id":"invalid/function-key-normalisation-unknown"}
 {"error":"E_CANON_SET","id":"invalid/function-order-duplicate"}
 {"error":"E_CANON_SET","id":"invalid/function-order-missing-argument"}
 {"error":"E_SCHEMA","id":"invalid/function-order-not-array"}
 {"error":"E_CANON_SET","id":"invalid/function-order-unknown"}
+{"error":"E_CANON_SET","id":"invalid/function-returns-classes-empty"}
 {"error":"E_CANON_UNIT","id":"invalid/function-unit-arg-missing"}
 {"error":"E_CANON_UNIT","id":"invalid/function-unit-arg-not-a-name"}
 {"error":"E_CANON_UNIT","id":"invalid/function-unit-arg-not-string"}
@@ -990,8 +1017,12 @@
 {"error":"E_PARSE_JSON","id":"invalid/jcs-nesting-65"}
 {"error":"E_PARSE_JSON","id":"invalid/jcs-nesting-before-duplicate"}
 {"error":"E_KEY_ENCODING","id":"invalid/key-bare-class"}
+{"error":"E_KEY_ENCODING","id":"invalid/key-date-calendar"}
 {"error":"E_KEY_ENCODING","id":"invalid/key-number-form"}
 {"error":"E_KEY_ENCODING","id":"invalid/key-spaces"}
+{"error":"E_KEY_ENCODING","id":"invalid/key-string-control"}
+{"error":"E_KEY_ENCODING","id":"invalid/key-string-nfd"}
+{"error":"E_KEY_ENCODING","id":"invalid/key-too-long"}
 {"error":"E_KEY_ENCODING","id":"invalid/key-trailing"}
 {"error":"E_KEY_ENCODING","id":"invalid/key-unquoted-string"}
 {"error":"E_KEY_ENCODING","id":"invalid/key-unsorted"}
@@ -1063,7 +1094,13 @@
 {"error":"E_KEY_NORMALISATION","id":"invalid/normalisation-hebrew-consonantal-accent"}
 {"error":"E_KEY_NORMALISATION","id":"invalid/normalisation-hebrew-consonantal-pointed"}
 {"error":"E_KEY_NORMALISATION","id":"invalid/normalisation-nfc-strict-double-space"}
+{"error":"E_KEY_NORMALISATION","id":"invalid/normalisation-nfc-strict-nbsp"}
 {"error":"E_KEY_NORMALISATION","id":"invalid/normalisation-nfc-strict-zwj"}
+{"error":"E_CANON_STRING","id":"invalid/normalisation-none-newline"}
+{"error":"E_CANON_STRING","id":"invalid/normalisation-none-nfd"}
+{"error":"E_CANON_STRING","id":"invalid/normalisation-none-nul"}
+{"error":"E_CANON_STRING","id":"invalid/normalisation-none-tab"}
+{"error":"E_KEY_NORMALISATION","id":"invalid/normalisation-upper-ascii-empty"}
 {"error":"E_KEY_NORMALISATION","id":"invalid/normalisation-upper-ascii-lowercase"}
 {"error":"E_KEY_NORMALISATION","id":"invalid/normalisation-upper-ascii-space"}
 {"error":"E_ARG_MISSING","id":"invalid/receipt-arg-missing"}
@@ -1244,7 +1281,9 @@
 {"canonical":"[0,0,5e-324,-5e-324,1.7976931348623157e+308,9007199254740992,295147905179352830000,9.999999999999997e+22,1e+23,1.0000000000000001e+23,999999999999999700000,1e+21,9.999999999999997e-7,0.000001,333333333.3333332,333333333.33333325,-0.0000033333333333333333,1424953923781206.2]","error":null,"id":"jcs/rfc8785-numbers","sha256":"e9f99f80fe1110394288f948dfb268e78a3c72eeff4de61483cb9da45570654d"}
 {"canonical":"{\"\\r\":\"Carriage Return\",\"1\":\"One\",\"\":\"Control\",\"ö\":\"Latin Small Letter O With Diaeresis\",\"€\":\"Euro Sign\",\"😀\":\"Emoji: Grinning Face\",\"דּ\":\"Hebrew Letter Dalet With Dagesh\"}","error":null,"id":"jcs/rfc8785-sorting","sha256":"5e321556d22018a9656991a9e94f77ec175fa193e52a2429d312f8419ec8b08c"}
 {"decoded":{"class":"a.example.org/k","keys":{"b":{"type":"boolean","value":true},"d":{"type":"date","value":"2024-03-15"},"i":{"type":"instant","value":"2024-03-15T16:00:00.000000Z"},"n":{"type":"number","value":"-1.5"},"s":{"type":"string","value":"say \"hi\""}}},"error":null,"id":"key/all-types"}
+{"decoded":{"class":"a.example.org/k","keys":{"s":{"type":"string","value":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}}},"error":null,"id":"key/at-limit"}
 {"decoded":{"class":"iso.example.org/currency","keys":{"code":{"type":"string","value":"EUR"}}},"error":null,"id":"key/currency"}
+{"decoded":{"class":"rates.example.org/ccy_pair","keys":{"base":{"class":"iso.example.org/currency","keys":{"code":{"type":"string","value":"EUR"}}},"quote":{"class":"iso.example.org/currency","keys":{"code":{"type":"string","value":"USD"}}}}},"error":null,"id":"key/nested-object","object":{"class":"rates.example.org/ccy_pair","class_hash":"7dec090c2573450e6e9ee022f0d3c128529afa551c7f9bf47e949f0bfb2937c4","keys":{"base":{"type":"string","value":"iso.example.org/currency(code:\"EUR\")"},"quote":{"type":"string","value":"iso.example.org/currency(code:\"USD\")"}}},"object_id":"fcb2180650816aab6614bc0fd855fdec3301e41eab5a6bbcea0970f3cb7a590a"}
 {"decoded":{"class":"rates.example.org/fx_pair","keys":{"base":{"class":"iso.example.org/currency","keys":{"code":{"type":"string","value":"EUR"}}},"quote":{"class":"iso.example.org/currency","keys":{"code":{"type":"string","value":"USD"}}}}},"error":null,"id":"key/nested"}
 {"decoded":{"class":"a.example.org/singleton","keys":{}},"error":null,"id":"key/no-keys"}
 {"decoded":{"class":"scripture.example.org/verse","keys":{"book":{"type":"string","value":"Gen"},"chapter":{"type":"number","value":"1"},"corpus":{"type":"string","value":"tanakh"},"verse":{"type":"number","value":"1"}}},"error":null,"id":"key/verse"}
@@ -1320,6 +1359,7 @@
 {"error":null,"id":"normalisation/hebrew-consonantal"}
 {"error":null,"id":"normalisation/nfc-strict"}
 {"error":null,"id":"normalisation/none-anything"}
+{"error":null,"id":"normalisation/none-empty"}
 {"error":null,"id":"normalisation/upper-ascii-period"}
 {"error":null,"id":"normalisation/upper-ascii"}
 {"blob_checked":true,"canonical":"{\"asof\":\"2024-03-16T09:00:00.000000Z\",\"cell\":{\"args\":{\"company\":{\"type\":\"string\",\"value\":\"01234567\"},\"date\":{\"type\":\"date\",\"value\":\"2024-03-15\"}},\"fn\":\"filing\",\"fn_hash\":\"4c1603b8f930dadc724afe3a023a53596b2f2ac6b0c963e8de99e3ba216b811e\",\"ns\":\"rates.example.org\"},\"computed_by\":\"rates.example.org#d712b32a2cc5cb7c\",\"inputs\":[],\"issued\":\"2024-03-16T09:00:00.000000Z\",\"licence\":\"CC-BY-4.0\",\"proto\":\"datumesh/1\",\"publisher\":\"rates.example.org\",\"summary\":\"The filing of company 01234567 on 15 March 2024.\",\"tx\":\"2024-03-15T16:00:00.000000Z\",\"type\":\"blob\",\"valid\":{\"date\":{\"type\":\"date\",\"value\":\"2024-03-15\"}},\"value\":\"62817c3c4fda158438aab46250f31d77514c50b31db7c6e9e1fa763e91f90c8f:46:text/csv\"}","error":null,"id":"receipt/blob-value-recomputed","level":"recomputed","sha256":"dee1d70dd4d516422e33d1f0aa54756e9e9468795dc44dd3bd9c27ff9f86596a","sig":"07c79ba6d8272ffdd4d1e4c837a2844bbf2dbd0bc9ddc23381a0605f886cdadad3a4d3d85279f9c1dd47aee6293795a1bbf00f165601710be020015b4ee0fa0f"}

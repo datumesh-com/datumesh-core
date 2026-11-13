@@ -11,11 +11,11 @@ use std::process::ExitCode;
 use datumesh_core::json::{self, Value};
 use datumesh_core::lexical;
 use datumesh_core::{
-    check_answer, check_batch, check_define, check_describe, check_entitlement, check_slice_answer, define_class,
-    format_reference, https_url, inherit_licence, key_id, parse_object_key, parse_reference, resolve_mesh,
-    resolved_unit_value, sha256_hex, verify, Answer, Batch, Cell, ClassDescriptor, ClassEnv, Declarations, Error,
-    ErrorCode, FunctionDescriptor, KeyNormalisation, Keys, Manifest, MapResolver, Receipt, Reference, Request,
-    Retrieval, Scalar, Slice, SliceRequest,
+    check_answer, check_batch, check_define, check_describe, check_describe_with, check_entitlement,
+    check_slice_answer, define_class, format_reference, https_url, inherit_licence, key_id, parse_object_key,
+    parse_reference, resolve_mesh, resolved_unit_value, sha256_hex, verify, Answer, Batch, Cell, ClassDescriptor,
+    ClassEnv, Declarations, Error, ErrorCode, FunctionDescriptor, KeyNormalisation, Keys, Manifest, MapResolver,
+    Receipt, Reference, Request, Retrieval, Scalar, Slice, SliceRequest,
 };
 
 /// The vector kinds for formula evaluators (SPEC 11, `spec-0.4.0`; `call` since `spec-0.4.2`):
@@ -330,7 +330,14 @@ pub fn run(v: &Value) -> Result<Outputs, Error> {
         // spec-0.5.0 (16.5): parse an object key string; output its decoded form.
         "key" => {
             let text = v.get("input").and_then(Value::as_str).ok_or_else(|| vector_error("no input"))?;
-            Ok(vec![("decoded".into(), parse_object_key(text)?.to_value())])
+            let key = parse_object_key(text)?;
+            let mut out = vec![("decoded".into(), key.to_value())];
+            // Given the class hash (an input), also the object and its id (16.5, 6d5633e).
+            if let Some(class_hash) = v.get("class_hash").and_then(Value::as_str) {
+                out.push(("object".into(), key.object_value(class_hash)?));
+                out.push(("object_id".into(), s(&key.object_id(class_hash)?)));
+            }
+            Ok(out)
         }
         // spec-0.5.0 (16.8): check a describe answer against the classes held, by name.
         "describe" => {
@@ -338,7 +345,20 @@ pub fn run(v: &Value) -> Result<Outputs, Error> {
             for (name, d) in v.get("classes").and_then(Value::as_object).unwrap_or(&[]) {
                 held.insert(name.clone(), ClassDescriptor::from_value(d).map_err(|e| vector_error(&e.to_string()))?);
             }
-            check_describe(&input_bytes(v)?, &held)?;
+            // The method functions the client holds, when the vector gives them (16.8 step 6).
+            let mut functions = Vec::new();
+            let given: &[Value] = match v.get("functions") {
+                Some(Value::Array(a)) => a,
+                _ => &[],
+            };
+            for f in given {
+                functions.push(FunctionDescriptor::from_value(f).map_err(|e| vector_error(&e.to_string()))?);
+            }
+            if functions.is_empty() {
+                check_describe(&input_bytes(v)?, &held)?;
+            } else {
+                check_describe_with(&input_bytes(v)?, &held, &functions)?;
+            }
             Ok(Vec::new())
         }
         // spec-0.5.0 (2.5): the define-time check of a function under a name.
@@ -560,7 +580,7 @@ fn expected_outputs(kind: &str) -> &'static [&'static str] {
         "slice" => &["canonical", "sha256", "slice_id", "members_hash", "entry"],
         "mesh" => &["bindings", "endpoints"],
         "class" => &["flattened", "class_hash"],
-        "key" => &["decoded"],
+        "key" => &["decoded", "object", "object_id"],
         "define" => &["canonical", "sha256"],
         _ => &[],
     }
