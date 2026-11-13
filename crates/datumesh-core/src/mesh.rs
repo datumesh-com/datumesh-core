@@ -5,15 +5,17 @@ use std::collections::BTreeMap;
 use crate::error::{err, member, ErrorCode, Result};
 use crate::json::{self, Value};
 use crate::keys::{key_doc, KeyDoc};
+use crate::lexical;
 use crate::lexical::limits;
 use crate::licence::Declarations;
 use crate::schema;
 
 /// The endpoints of 9.6: name, placeholders, whether required.
-const ENDPOINTS: [(&str, &[&str], bool); 12] = [
+const ENDPOINTS: [(&str, &[&str], bool); 13] = [
     ("blob", &["sha256"], false),
     ("cell", &["cell"], true),
     ("cells", &[], false),
+    ("describe", &["id"], false),
     ("descriptor", &["hash"], true),
     ("explain", &["cell"], false),
     ("find", &[], false),
@@ -172,20 +174,41 @@ fn parse_mesh(body: &[u8]) -> Result<Value> {
     Ok(v)
 }
 
-/// A URL by the licence URL rule on `host`: `https://`, printable ASCII, at most 512
-/// characters, its authority exactly `host`, followed by a path.
-fn url_on_host(u: &str, host: &str) -> bool {
-    let Some(rest) = u.strip_prefix("https://") else { return false };
-    u.len() <= limits::LICENCE_URL
-        && rest.bytes().all(|c| (0x21..=0x7E).contains(&c))
-        && rest.strip_prefix(host).is_some_and(|path| path.starts_with('/'))
+/// The origin of a URL of a mesh document of `host` (9.6): `https://`, printable ASCII, at most
+/// 512 characters, its authority exactly `host`, followed by a path; for an unrooted host, also
+/// a loopback URL (`spec-0.5.0`, [`lexical::loopback_origin`]). `None` when it is neither.
+fn url_origin(u: &str, host: &str) -> Option<String> {
+    if let Some(rest) = u.strip_prefix("https://") {
+        let on_host = u.len() <= limits::LICENCE_URL
+            && rest.bytes().all(|c| (0x21..=0x7E).contains(&c))
+            && rest.strip_prefix(host).is_some_and(|path| path.starts_with('/'));
+        return on_host.then(|| format!("https://{host}"));
+    }
+    if lexical::is_unrooted(host) {
+        return lexical::loopback_origin(u).map(String::from);
+    }
+    None
 }
 
 fn mesh_members(host: &str, m: &[(String, Value)]) -> Result<MeshDoc> {
     let md = ErrorCode::MeshDoc;
+    // One origin for the whole document (9.6): all on https://<host>, or all on one loopback origin.
+    let mut origin: Option<String> = None;
+    let mut same_origin = |u: &str, p: &str| -> Result<()> {
+        match url_origin(u, host) {
+            Some(o) if origin.as_ref().is_none_or(|first| *first == o) => {
+                origin = Some(o);
+                Ok(())
+            }
+            _ => err(md, p, "a URL is on the host, or on one loopback origin for an unrooted host"),
+        }
+    };
     let bindings = match schema::get(m, "bindings") {
-        Value::String(b) if url_on_host(b, host) => b.clone(),
-        _ => return err(md, "$.bindings", "bindings is an https URL on this host"),
+        Value::String(b) => {
+            same_origin(b, "$.bindings")?;
+            b.clone()
+        }
+        _ => return err(md, "$.bindings", "bindings is a URL on this host"),
     };
     let Value::Object(em) = schema::get(m, "endpoints") else {
         return err(md, "$.endpoints", "endpoints is an object");
@@ -200,9 +223,7 @@ fn mesh_members(host: &str, m: &[(String, Value)]) -> Result<MeshDoc> {
         let Some(v) = schema::opt(em, name) else { continue };
         let p = member("$.endpoints", name);
         let Value::String(t) = v else { return err(md, &p, "an endpoint is a URL template") };
-        if !url_on_host(t, host) {
-            return err(md, &p, "an endpoint is an https URL on this host");
-        }
+        same_origin(t, &p)?;
         let mut rest = t.clone();
         for ph in placeholders {
             let token = format!("{{{ph}}}");

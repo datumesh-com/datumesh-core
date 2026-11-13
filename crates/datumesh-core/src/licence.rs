@@ -424,11 +424,65 @@ impl core::fmt::Display for WrongPublisher {
 
 impl std::error::Error for WrongPublisher {}
 
+/// A caller's error of [`try_check_entitlement`] (10.3, `spec-0.5.0`): the input is not one the
+/// check can judge, so it is reported as such, never as a reason. Not a verification result.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum EntitlementError {
+    /// The key document is not the receipt's publisher's ([`WrongPublisher`]).
+    WrongPublisher(WrongPublisher),
+    /// Input licences were given for a receipt whose `inputs` is empty: the caller's error
+    /// (10.3). The check of [`check_entitlement`] does not report it.
+    LicencesWithoutInputs,
+}
+
+impl core::fmt::Display for EntitlementError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            EntitlementError::WrongPublisher(e) => e.fmt(f),
+            EntitlementError::LicencesWithoutInputs => {
+                f.write_str("the entitlement check was given input licences for a receipt with no inputs")
+            }
+        }
+    }
+}
+
+impl std::error::Error for EntitlementError {}
+
+/// The entitlement check of [`check_entitlement`], with the caller's errors reported (10.3,
+/// `spec-0.5.0`): a K of another host, and a non-empty L for a receipt whose `inputs` is empty.
+/// The second is not an error of [`check_entitlement`], which is unchanged; this function is
+/// the same check otherwise, and returns the same [`Entitlement`].
+pub fn try_check_entitlement<I, S>(
+    receipt: &Receipt,
+    input_licences: I,
+    key_document: &KeyDocument,
+) -> core::result::Result<Entitlement, EntitlementError>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    let publisher = lexical::host_of(&receipt.cell().ns);
+    if key_document.host() != publisher {
+        return Err(EntitlementError::WrongPublisher(WrongPublisher {
+            expected: publisher.into(),
+            got: key_document.host().into(),
+        }));
+    }
+    let licences: Vec<S> = input_licences.into_iter().collect();
+    if receipt.inputs().is_empty() && !licences.is_empty() {
+        return Err(EntitlementError::LicencesWithoutInputs);
+    }
+    check_entitlement(receipt, licences, key_document).map_err(EntitlementError::WrongPublisher)
+}
+
 /// The entitlement check (SPEC 10.3, `spec-0.4.3`), a pure function of R, L and K: `receipt`
 /// (R, which the caller has verified through step 6 of 10.1), `input_licences` (L, the licences
 /// of R's input receipts, slice members included, one per receipt, as step 7.5 obtains them)
 /// and `key_document` (K, the checked key document of R's publisher, the host of
-/// `R.cell.ns`, even when `computed_by` names another host).
+/// `R.cell.ns`, even when `computed_by` names another host). A non-empty L for a receipt with
+/// no inputs is the caller's error (10.3), which this function does not report:
+/// [`try_check_entitlement`] does.
 ///
 /// Applies [`inherit_licence`] to L, K's declarations, `R.cell.ns + "/" + R.cell.fn` and
 /// `R.issued`, with `R.licence` as the mesh's own licence: a refusal is not entitled with the

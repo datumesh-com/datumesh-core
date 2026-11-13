@@ -5,8 +5,8 @@ use std::collections::BTreeMap;
 
 use crate::descriptor::cmp_lexical;
 use crate::envelope::{
-    check_job_and_poll, env_err, integer_member, quote, EnvelopeExtras, Fault, ForeignDetail, Outcome, Pending, Quote,
-    Request, Resolved, Shadows, Trust, BAD_REQUEST_CODES,
+    check_job_and_poll_for, env_err, integer_member, quote, EnvelopeExtras, Fault, ForeignDetail, Outcome, Pending,
+    Quote, Request, Resolution, ResolutionKind, Resolved, Shadows, Trust, BAD_REQUEST_CODES,
 };
 use crate::error::{Error, ErrorCode, Result};
 use crate::json::{self, Value};
@@ -97,15 +97,19 @@ impl AnswerOutcome {
 
     fn members(self) -> (&'static [&'static str], &'static [&'static str]) {
         match self {
-            AnswerOutcome::Ok => (&["receipt", "trust"], &["superseded_by", "reason", "fn_hash"]),
-            AnswerOutcome::Stale => (&["receipt", "trust", "age_seconds"], &["superseded_by", "reason", "fn_hash"]),
-            AnswerOutcome::NotCovered => (&[], &["fault", "error", "fn_hash"]),
-            AnswerOutcome::Unlicensed => (&[], &["fn_hash"]),
-            AnswerOutcome::PaymentRequired => (&["quote"], &["fn_hash"]),
+            AnswerOutcome::Ok => {
+                (&["receipt", "trust"], &["superseded_by", "reason", "fn_hash", "resolved", "shadows"])
+            }
+            AnswerOutcome::Stale => {
+                (&["receipt", "trust", "age_seconds"], &["superseded_by", "reason", "fn_hash", "resolved", "shadows"])
+            }
+            AnswerOutcome::NotCovered => (&[], &["fault", "error", "fn_hash", "resolved", "shadows"]),
+            AnswerOutcome::Unlicensed => (&[], &["fn_hash", "resolved", "shadows"]),
+            AnswerOutcome::PaymentRequired => (&["quote"], &["fn_hash", "resolved", "shadows"]),
             AnswerOutcome::RateLimited => (&["retry_after_seconds"], &["fn_hash"]),
             AnswerOutcome::BadRequest => (&["error"], &["fn_hash"]),
             // spec-0.4.3: detail, with E_FOREIGN_UNAVAILABLE only.
-            AnswerOutcome::Error => (&["error"], &["detail", "fn_hash"]),
+            AnswerOutcome::Error => (&["error"], &["detail", "fn_hash", "resolved", "shadows"]),
             AnswerOutcome::Pending => (&["estimate_seconds", "job", "poll", "request"], &[]),
         }
     }
@@ -241,13 +245,30 @@ fn code_allowed(outcome: AnswerOutcome, code: ErrorCode, job_url: bool) -> bool 
     match outcome {
         AnswerOutcome::BadRequest => {
             BAD_REQUEST_CODES.contains(&code)
-                || matches!(code, ErrorCode::CanonHex | ErrorCode::SliceAtCell)
+                || matches!(code, ErrorCode::CanonHex | ErrorCode::SliceAtCell | ErrorCode::ShortIdAmbiguous)
                 || (code == ErrorCode::JobUnknown && job_url)
         }
-        AnswerOutcome::NotCovered => code == ErrorCode::NameUnbound,
+        AnswerOutcome::NotCovered => matches!(code, ErrorCode::NameUnbound | ErrorCode::NamespaceSuspended),
+        // 5.5: the define and write codes are never in a read envelope; the class codes are
+        // define's and E_DESCRIBE a client's (DEFECTS, spec-0.5.0).
         AnswerOutcome::Error => !matches!(
             code,
-            ErrorCode::Envelope | ErrorCode::JobUnknown | ErrorCode::SliceAtCell | ErrorCode::NameUnbound
+            ErrorCode::Envelope
+                | ErrorCode::JobUnknown
+                | ErrorCode::SliceAtCell
+                | ErrorCode::NameUnbound
+                | ErrorCode::UnrootedInput
+                | ErrorCode::NamespaceSuspended
+                | ErrorCode::ClassMember
+                | ErrorCode::ClassParent
+                | ErrorCode::ClassInherit
+                | ErrorCode::ClassOverride
+                | ErrorCode::ClassFinal
+                | ErrorCode::ClassMethod
+                | ErrorCode::ClassInterface
+                | ErrorCode::ClassOwner
+                | ErrorCode::ShortIdAmbiguous
+                | ErrorCode::Describe
         ),
         _ => false,
     }
@@ -353,8 +374,9 @@ impl Answer {
     /// A `not_covered` answer with `error` (only `E_NAME_UNBOUND`, and not with a fault);
     /// `E_ENVELOPE` otherwise.
     pub fn with_error(self, code: ErrorCode) -> Result<Answer> {
-        if self.outcome != AnswerOutcome::NotCovered || self.fault.is_some() || code != ErrorCode::NameUnbound {
-            return env_err("$.error", "not_covered carries E_NAME_UNBOUND only, and not with a fault");
+        if self.outcome != AnswerOutcome::NotCovered || self.fault.is_some() || !code_allowed(self.outcome, code, false)
+        {
+            return env_err("$.error", "not_covered carries E_NAME_UNBOUND or E_NAMESPACE_SUSPENDED, not with a fault");
         }
         Ok(Answer { error: Some(code), ..self })
     }
@@ -363,17 +385,19 @@ impl Answer {
     /// `unlicensed`, `payment_required` and `error`; `E_ENVELOPE` on `rate_limited`,
     /// `bad_request` and `pending`.
     pub fn with_resolved(self, resolved: Resolved) -> Result<Answer> {
-        let _ = resolved;
-        // STUB (0.3.8 tests first).
-        todo!("5.5: an answer with resolved")
+        if !outcome_has_resolved(self.outcome) {
+            return env_err("$.resolved", format!("{} carries no resolved", self.outcome.as_str()));
+        }
+        Ok(Answer { resolved: Some(resolved), ..self })
     }
 
     /// With the `shadows` member (`spec-0.5.0`), on the same outcomes as
     /// [`with_resolved`](Self::with_resolved); `E_ENVELOPE` otherwise.
     pub fn with_shadows(self, shadows: Shadows) -> Result<Answer> {
-        let _ = shadows;
-        // STUB (0.3.8 tests first).
-        todo!("5.5: an answer with shadows")
+        if !outcome_has_resolved(self.outcome) {
+            return env_err("$.shadows", format!("{} carries no shadows", self.outcome.as_str()));
+        }
+        Ok(Answer { shadows: Some(shadows), ..self })
     }
 
     /// An `ok` or `stale` answer pointing to a newer receipt, with an optional reason.
@@ -438,6 +462,40 @@ impl Answer {
         }
         if let Some(h) = &self.fn_hash {
             m.push(("fn_hash".into(), s(h)));
+        }
+        if let Some(r) = &self.resolved {
+            let mut rm = vec![
+                ("call".to_string(), s(&r.call)),
+                (
+                    "resolutions".to_string(),
+                    Value::Array(
+                        r.resolutions
+                            .iter()
+                            .map(|x| {
+                                let mut xm = vec![
+                                    ("from".to_string(), s(&x.from)),
+                                    ("kind".to_string(), s(x.kind.as_str())),
+                                    ("to".to_string(), s(&x.to)),
+                                ];
+                                if let Some(a) = &x.asof {
+                                    xm.push(("asof".into(), s(a)));
+                                }
+                                Value::Object(xm)
+                            })
+                            .collect(),
+                    ),
+                ),
+            ];
+            if let Some(t) = &r.aliases_tx {
+                rm.push(("aliases_tx".into(), s(t)));
+            }
+            m.push(("resolved".into(), Value::Object(rm)));
+        }
+        if let Some(sh) = &self.shadows {
+            m.push((
+                "shadows".into(),
+                Value::Object(vec![("class".into(), s(&sh.class)), ("reference".into(), s(&sh.reference))]),
+            ));
         }
         if let Some(p) = &self.page {
             m.push(("slice".into(), p.slice.to_value()));
@@ -765,6 +823,61 @@ fn member_receipt(rv: &Value, keys: &Keys, path: &str) -> Result<Receipt> {
 }
 
 /// 5.5 step 2 for every outcome but `pending`; for a page, its own members.
+/// The outcomes that carry `resolved` and `shadows` (5.5 table, `spec-0.5.0`).
+fn outcome_has_resolved(outcome: AnswerOutcome) -> bool {
+    matches!(
+        outcome,
+        AnswerOutcome::Ok
+            | AnswerOutcome::Stale
+            | AnswerOutcome::NotCovered
+            | AnswerOutcome::Unlicensed
+            | AnswerOutcome::PaymentRequired
+            | AnswerOutcome::Error
+    )
+}
+
+/// The `resolved` member (5.5, 16.7): exactly `call` (a non-empty string), `resolutions` and
+/// optionally `aliases_tx` (an instant); each resolution exactly `from`, `kind` and `to`, plus
+/// `asof` (an instant) exactly when its kind is `lookup`.
+fn resolved_of(v: &Value) -> Result<Resolved> {
+    let m = schema::object_or(v, "$.resolved", ErrorCode::Envelope, "resolved")?;
+    schema::exact(m, &["call", "resolutions"], &["aliases_tx"], "$.resolved", ErrorCode::Envelope)?;
+    let call = schema::string_or(m, "call", "$.resolved", ErrorCode::Envelope)?;
+    let Value::Array(items) = schema::get(m, "resolutions") else {
+        return env_err("$.resolved.resolutions", "resolutions is an array");
+    };
+    let mut resolutions = Vec::with_capacity(items.len());
+    for (i, item) in items.iter().enumerate() {
+        let p = format!("$.resolved.resolutions[{i}]");
+        let rm = schema::object_or(item, &p, ErrorCode::Envelope, "a resolution")?;
+        let (required, optional): (&[&str], &[&str]) = match schema::opt(rm, "kind").and_then(Value::as_str) {
+            Some("lookup") => (&["from", "kind", "to", "asof"], &[]),
+            _ => (&["from", "kind", "to"], &[]),
+        };
+        schema::exact(rm, required, optional, &p, ErrorCode::Envelope)?;
+        let from = schema::string_or(rm, "from", &p, ErrorCode::Envelope)?;
+        let kind_text = schema::string_or(rm, "kind", &p, ErrorCode::Envelope)?;
+        let to = schema::string_or(rm, "to", &p, ErrorCode::Envelope)?;
+        let Some(kind) = ResolutionKind::from_name(kind_text) else {
+            return env_err(&p, format!("kind {kind_text:?} is not a resolution kind"));
+        };
+        let resolution = match kind {
+            ResolutionKind::Lookup => {
+                let asof = schema::string_or(rm, "asof", &p, ErrorCode::Envelope)?;
+                Resolution::lookup(from, to, asof)
+            }
+            _ => Resolution::new(from, kind, to),
+        };
+        resolutions.push(resolution.map_err(|e| e.recode(ErrorCode::Envelope))?);
+    }
+    let mut out = Resolved::new(call, resolutions).map_err(|e| e.recode(ErrorCode::Envelope))?;
+    if let Some(t) = schema::opt(m, "aliases_tx") {
+        let t = t.as_str().unwrap_or("");
+        out = out.with_aliases_tx(t).map_err(|e| e.recode(ErrorCode::Envelope))?;
+    }
+    Ok(out)
+}
+
 fn check_members(m: &[(String, Value)], outcome: AnswerOutcome, ctx: &Ctx<'_>, is_page: bool) -> Result<Answer> {
     let (req, opt): (&[&str], &[&str]) =
         if is_page { (&["members", "slice"], &["next", "fn_hash"]) } else { outcome.members() };
@@ -816,6 +929,16 @@ fn check_members(m: &[(String, Value)], outcome: AnswerOutcome, ctx: &Ctx<'_>, i
         }
     }
     // spec-0.4.3: detail, one of the closed list, present exactly with E_FOREIGN_UNAVAILABLE.
+    if let Some(r) = schema::opt(m, "resolved") {
+        a.resolved = Some(resolved_of(r)?);
+    }
+    if let Some(sh) = schema::opt(m, "shadows") {
+        let sm = schema::object_or(sh, "$.shadows", ErrorCode::Envelope, "shadows")?;
+        schema::exact(sm, &["class", "reference"], &[], "$.shadows", ErrorCode::Envelope)?;
+        let class = schema::string_or(sm, "class", "$.shadows", ErrorCode::Envelope)?;
+        let reference = schema::string_or(sm, "reference", "$.shadows", ErrorCode::Envelope)?;
+        a.shadows = Some(Shadows::new(class, reference).map_err(|e| e.recode(ErrorCode::Envelope))?);
+    }
     if let Some(d) = schema::opt(m, "detail") {
         let Some(detail) = d.as_str().and_then(ForeignDetail::from_name) else {
             return env_err("$.detail", format!("{d:?} is not a detail of E_FOREIGN_UNAVAILABLE"));
@@ -840,8 +963,12 @@ fn check_members(m: &[(String, Value)], outcome: AnswerOutcome, ctx: &Ctx<'_>, i
         a.fn_hash = Some(h.into());
     }
     if let Some(n) = schema::opt(m, "next") {
-        if n.as_str().and_then(url_host).is_none() {
-            return env_err("$.next", "next is https://, a DNS name, then a path, at most 512 characters");
+        let shape = n.as_str().is_some_and(|u| url_host(u).is_some() || lexical::loopback_origin(u).is_some());
+        if !shape {
+            return env_err(
+                "$.next",
+                "next is https://, a DNS name, then a path, or a loopback URL, at most 512 characters",
+            );
         }
     }
     Ok(a)
@@ -914,7 +1041,7 @@ fn check_pending(status: u16, m: &[(String, Value)], ctx: &Ctx<'_>) -> Result<An
     let estimate = integer_member(schema::get(m, "estimate_seconds"), "$.estimate_seconds")?;
     let Some(job) = schema::get(m, "job").as_str() else { return env_err("$.job", "job must be a string") };
     let Some(poll) = schema::get(m, "poll").as_str() else { return env_err("$.poll", "poll must be a string") };
-    check_job_and_poll(job, poll)?;
+    check_job_and_poll_for(job, poll, ctx.mesh())?;
     let rm = schema::object_or(schema::get(m, "request"), "$.request", ErrorCode::Envelope, "request")?;
     schema::exact(rm, &["cell_id"], &["asof", "fn_hash"], "$.request", ErrorCode::Envelope)?;
     let cell_id = schema::string_or(rm, "cell_id", "$.request", ErrorCode::Envelope)?;
@@ -943,13 +1070,16 @@ fn check_pending(status: u16, m: &[(String, Value)], ctx: &Ctx<'_>) -> Result<An
             return env_err("$.job", "the envelope is for another job than the one polled");
         }
     }
-    // 6. poll on the host asked.
-    if let Some(host) = &request.mesh {
+    // 6. poll on the host asked (a loopback poll was checked with the unrooted mesh asked).
+    if let (Some(host), false) = (&request.mesh, poll.starts_with("http://")) {
         if url_host(poll) != Some(host.as_str()) {
             return env_err("$.poll", "poll is on another host than the one asked");
         }
     }
-    let p = Pending::new(job, estimate, poll, echoed)?;
+    // The mesh asked is named to Pending::new, which checks the poll (a loopback one only for it);
+    // the echoed request does not carry it.
+    let with_mesh = Request { mesh: request.mesh.clone(), ..echoed };
+    let p = Pending::new(job, estimate, poll, with_mesh)?;
     Ok(Answer { pending: Some(p), ..bare(AnswerOutcome::Pending) })
 }
 
@@ -982,9 +1112,16 @@ fn check_page(m: &[(String, Value)], mut a: Answer, keys: &Keys, req: &SliceRequ
     if a.fn_hash.as_deref().is_some_and(|h| h != slice.fn_hash()) {
         return env_err("$.fn_hash", "fn_hash differs from the slice's");
     }
-    if let (Some(host), Some(n)) = (&req.mesh, &next) {
-        if url_host(n) != Some(host.as_str()) {
-            return env_err("$.next", "next is on another host than the one asked");
+    if let Some(n) = &next {
+        if n.starts_with("http://") {
+            // A loopback next only when the request names the unrooted mesh asked (5.6, 9.6).
+            if !req.mesh.as_deref().is_some_and(lexical::is_unrooted) {
+                return env_err("$.next", "a loopback next is only for an unrooted mesh the request names");
+            }
+        } else if let Some(host) = &req.mesh {
+            if url_host(n) != Some(host.as_str()) {
+                return env_err("$.next", "next is on another host than the one asked");
+            }
         }
     }
     // The cursor on the open arguments only; other names are ignored.

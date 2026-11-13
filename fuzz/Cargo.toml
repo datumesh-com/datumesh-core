@@ -10,6 +10,7 @@ cargo-fuzz = true
 [dependencies]
 libfuzzer-sys = "0.4"
 datumesh-core = { path = "../crates/datumesh-core", features = ["sign"] }
+unicode-normalization = { version = "0.1.26", default-features = false }
 
 [[bin]]
 name = "receipt"
@@ -84,6 +85,27 @@ bench = false
 [[bin]]
 name = "licence"
 path = "fuzz_targets/licence.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "class"
+path = "fuzz_targets/class.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "key"
+path = "fuzz_targets/key.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "normalisation"
+path = "fuzz_targets/normalisation.rs"
 test = false
 doc = false
 bench = false

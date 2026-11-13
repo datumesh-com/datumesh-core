@@ -728,3 +728,91 @@ the implementation are recorded here, none of which changes a vector's result.
   `ResolvedMesh` (`#[non_exhaustive]`) gains `declarations`.
 - **Building `E_FOREIGN_UNAVAILABLE`.** `Answer::error` refuses it (`E_ENVELOPE`, it needs a
   `detail`); `Answer::foreign_unavailable(detail)` builds it with 502.
+
+## spec-0.5.0 (`7bed002`), implemented in datumesh-core 0.3.8
+
+Found while implementing the classes, the loopback URLs and the envelopes of `spec-0.5.0`. The
+reference tool was run as a black box only (`canon.py check`, on probe vectors); its source was
+not read. Each entry is resolved in the implementation as stated.
+
+### RS-47. 10.2 and section 14: the class codes are eight, not ten
+- **Section.** 10.2 (the table), 14 (the `spec-0.5.0` entry).
+- **Problem.** The contract that asked for the codes said "the ten class codes". The table of
+  10.2 lists eight `E_CLASS_*` codes; ten counting `E_KEY_NORMALISATION` and `E_KEY_ENCODING`,
+  whose step column also says "class". The contract lists `E_DESCRIBE` before
+  `E_SHORT_ID_AMBIGUOUS`; the table has them the other way round.
+- **Resolution.** The table's order and eight codes (`ErrorCode::ALL[49..63]`).
+
+### RS-48. 5.5 and 10.2: which codes an `error` envelope may carry
+- **Section.** 5.5 (`error`), 10.2 (the step "define" and "class" codes).
+- **Problem.** 5.5 excludes only `E_UNROOTED_INPUT` and `E_NAMESPACE_SUSPENDED` from `error`. The
+  class codes are define's, and `E_DESCRIBE` is a client's code, like `E_ENVELOPE`; the text
+  does not exclude them. `E_KEY_NORMALISATION` and `E_KEY_ENCODING` are not excluded.
+- **Resolution.** As the reference: `error` refuses the two write and define codes, the eight
+  class codes and `E_DESCRIBE`, and accepts the two key codes. The text should say so.
+
+### RS-49. 5.5 and 16.3: a bad key in `bad_request` and `not_covered`
+- **Section.** 5.8 and 16.3 (a string not canonical under its normalisation is answered
+  `bad_request`); 5.5 (the `bad_request` and `not_covered` code lists).
+- **Problem.** `E_KEY_NORMALISATION` is not in the `bad_request` list of 5.5 (nor `E_KEY_ENCODING`).
+  The reference refuses it in both `bad_request` and `not_covered`.
+- **Resolution.** Not allowed in either envelope, as the reference. No vector asserts either way.
+  5.5's list should name it, or 5.8 should say which envelope carries it.
+
+### RS-50. 16.4: `none` and the empty string
+- **Section.** 16.4 ("`none` is any string (3.5)"; "every rule but `none` rejects the empty string
+  and a value that is not NFC").
+- **Problem.** 3.5 requires NFC; the second sentence implies `none` accepts both, and the first
+  says "any string" (3.5 is the string rule). Read literally, `none` rejects non-NFC text.
+- **Resolution.** `none` accepts any string, the empty string and non-NFC text included, as the
+  reference. A string key under `none` is still a string (3.5) when it is written in an object
+  key or a call: `E_KEY_ENCODING` and the string codes apply there.
+
+### RS-51. 16.5 and 16.8: the class-typed key in the object JSON and in the call form
+- **Section.** 16.5 ("the object travels as one canonical string"), 16.8 (the call form).
+- **Problem.** Not said how a class-typed key is written in the object JSON (`keys`) or in the
+  call form.
+- **Resolution.** As the reference: in the object JSON it is the typed `string` scalar holding its
+  encoding; in the call form it is quoted like any string (`x: "b.example.org/m(y:1)"`).
+
+### RS-52. 16.5, 16.8: encodings and describe answers the text leaves open
+- **Section.** 16.5 (a calendar-invalid date or a non-NFC string inside an encoding), 16.8 (a
+  describe answer for a class the caller does not hold; a descriptor that differs from the held
+  one with a consistent `class_hash`; a text that is not JSON).
+- **Problem.** No code is given for these.
+- **Resolution.** An encoding with a bad value is `E_KEY_ENCODING` (the whole encoding is one
+  string); a describe answer that is not JSON, that is for a class not held, or whose descriptor
+  is not the held one is `E_DESCRIBE`. The `args` and `returns` of a describe method cannot be
+  checked without its function descriptor, so the describe check gives their shape only.
+
+### RS-53. 16.2 and 16.6: an extent function's keys
+- **Section.** 16.1 (`extent`: "functions taking exactly the class keys, in class order, and
+  returning a boolean"), 16.2 step 6 (a method's keys carry the class's normalisation).
+- **Problem.** `keys` is "a stored function whose recorded cells are the class's objects", which
+  does not fit "returning a boolean". The `all-members` vector's `exists` function takes its keys
+  without `key_normalisation`, which step 6 does not require of an extent function.
+- **Resolution.** `exists` takes the class keys in class order with their types and returns a
+  boolean; `keys` takes the class keys in class order and its return is not checked; neither has
+  to carry the class's normalisation.
+
+### RS-54. 10.3: input licences for a receipt with no inputs
+- **Section.** 10.3 ("A non-empty L given for an R whose `inputs` is empty is the caller's
+  error").
+- **Problem.** `check_entitlement` returns `Result<Entitlement, WrongPublisher>` and has no
+  variant for this. `inherit_licence` has no `Result` at all. Adding a variant would break the
+  API.
+- **Resolution.** `try_check_entitlement` (new, additive) returns `EntitlementError`, which has
+  both caller's errors. `check_entitlement` is unchanged and documents that it does not report it.
+
+### RS-55. 2.5: `is_unrooted` on what is not a namespace
+- **Section.** 2.5 ("`invalid` alone is neither rooted nor unrooted").
+- **Problem.** `is_unrooted` (0.3.x) answers for any string: `is_unrooted("invalid")` is `true`.
+- **Resolution.** `is_unrooted` is unchanged, since changing it would change behaviour in a patch
+  release; `is_unrooted_namespace` checks the namespace first (`E_CANON_NAME`) and then answers.
+
+### RS-56. Section 14: the `spec-0.5.0` entry is the first part only
+- **Section.** 14 ("`spec-0.5.0` (in progress, part one)").
+- **Problem.** The entry says classes are "to follow"; the classes, the object keys and the
+  describe answers are in the revision, and the entry does not list them.
+- **Resolution.** The implementation follows SPEC.md and the vectors. The entry should say the
+  revision is complete, and list part two.

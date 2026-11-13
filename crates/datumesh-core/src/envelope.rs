@@ -261,17 +261,17 @@ impl Resolution {
     /// A resolution of any kind but `lookup`; `E_ENVELOPE` for `lookup` (use
     /// [`Resolution::lookup`], which needs the `asof`).
     pub fn new(from: &str, kind: ResolutionKind, to: &str) -> Result<Resolution> {
-        let _ = (from, kind, to);
-        // STUB (0.3.8 tests first).
-        todo!("5.5: build a resolution")
+        if kind == ResolutionKind::Lookup {
+            return env_err("$.resolutions", "a lookup resolution carries its asof: Resolution::lookup");
+        }
+        Ok(Resolution { from: from.into(), kind, to: to.into(), asof: None })
     }
 
     /// A `lookup` resolution: the label, the key encoding it resolved to, and the instant its
     /// lookup cell was read as of (`E_ENVELOPE` when `asof` is not an instant).
     pub fn lookup(label: &str, key: &str, asof: &str) -> Result<Resolution> {
-        let _ = (label, key, asof);
-        // STUB (0.3.8 tests first).
-        todo!("5.5: build a lookup resolution")
+        lexical::check_instant(asof, "$.resolutions.asof").map_err(|e| e.recode(ErrorCode::Envelope))?;
+        Ok(Resolution { from: label.into(), kind: ResolutionKind::Lookup, to: key.into(), asof: Some(asof.into()) })
     }
 }
 
@@ -291,17 +291,17 @@ pub struct Resolved {
 impl Resolved {
     /// `call` (non-empty) and its resolutions; `E_ENVELOPE` otherwise.
     pub fn new(call: &str, resolutions: Vec<Resolution>) -> Result<Resolved> {
-        let _ = (call, resolutions);
-        // STUB (0.3.8 tests first).
-        todo!("5.5: build resolved")
+        if call.is_empty() {
+            return env_err("$.resolved.call", "call is a non-empty string");
+        }
+        Ok(Resolved { call: call.into(), resolutions, aliases_tx: None })
     }
 
     /// With `aliases_tx`, the instant of the alias snapshot used (`E_ENVELOPE` when it is not
     /// an instant).
     pub fn with_aliases_tx(self, instant: &str) -> Result<Resolved> {
-        let _ = instant;
-        // STUB (0.3.8 tests first).
-        todo!("5.5: resolved.aliases_tx")
+        lexical::check_instant(instant, "$.resolved.aliases_tx").map_err(|e| e.recode(ErrorCode::Envelope))?;
+        Ok(Resolved { aliases_tx: Some(instant.into()), ..self })
     }
 }
 
@@ -320,9 +320,9 @@ impl Shadows {
     /// Builds `shadows`; `E_ENVELOPE` for a class that is not a full name or a reference that is
     /// not 64 lowercase hex digits.
     pub fn new(class: &str, reference: &str) -> Result<Shadows> {
-        let _ = (class, reference);
-        // STUB (0.3.8 tests first).
-        todo!("5.5: build shadows")
+        lexical::check_function_name(class, "$.shadows.class").map_err(|e| e.recode(ErrorCode::Envelope))?;
+        lexical::check_hex(reference, 64, "$.shadows.reference").map_err(|e| e.recode(ErrorCode::Envelope))?;
+        Ok(Shadows { class: class.into(), reference: reference.into() })
     }
 }
 
@@ -591,7 +591,7 @@ impl Pending {
     /// `/jobs/<job>`. That `poll` names the mesh's own host is the caller's to ensure. A failure
     /// is `E_ENVELOPE`, at the member's path.
     pub fn new(job: &str, estimate_seconds: u64, poll: &str, request: Request) -> Result<Pending> {
-        check_job_and_poll(job, poll)?;
+        check_job_and_poll_for(job, poll, request.mesh())?;
         if estimate_seconds > limits::BLOB_LENGTH {
             return env_err("$.estimate_seconds", "estimate_seconds is at most 2^53 - 1");
         }
@@ -631,9 +631,20 @@ impl Pending {
     }
 }
 
-pub(crate) fn check_job_and_poll(job: &str, poll: &str) -> Result<()> {
+/// Checks a job id and its `poll` URL (5.5). A request sent to `mesh` (`spec-0.5.0`) may have a
+/// loopback `poll` (9.6) only when `mesh` names an unrooted host.
+pub(crate) fn check_job_and_poll_for(job: &str, poll: &str, mesh: Option<&str>) -> Result<()> {
     if !is_job(job) {
         return env_err("$.job", "job is 32 to 64 lowercase hex digits");
+    }
+    if poll.starts_with("http://") {
+        if !mesh.is_some_and(lexical::is_unrooted) {
+            return env_err("$.poll", "a loopback poll is only for an unrooted mesh the request names");
+        }
+        if lexical::loopback_origin(poll).is_none() || !poll.ends_with(&format!("/jobs/{job}")) {
+            return env_err("$.poll", "poll is a loopback URL ending /jobs/<job>");
+        }
+        return Ok(());
     }
     let url_ok =
         poll.strip_prefix("https://").is_some_and(|r| !r.is_empty() && r.bytes().all(|c| (0x21..=0x7E).contains(&c)))

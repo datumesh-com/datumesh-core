@@ -49,5 +49,12 @@ for path in sorted(glob.glob(os.path.join(root, "spec", "vectors", "*", "*.json"
         if '"pending"' in raw.decode("utf-8", "surrogatepass"):
             for mode in (0, 16, 32): put("mesh", f"{name}_{mode}", bytes([mode]) + raw)
         put("envelope", name, v["status"].to_bytes(2, "little") + raw)
+    elif v["kind"] == "class":
+        put("class", name, raw)
+    elif v["kind"] == "key":
+        put("key", name, raw)
+    elif v["kind"] == "normalisation":
+        rules = ["none", "upper_ascii", "nfc_strict", "arabic_skeleton", "hebrew_consonantal", "greek_unaccented"]
+        put("normalisation", name, bytes([rules.index(v["rule"])]) + v["text"].encode("utf-8", "surrogatepass"))
     if raw:
         put("json", name, raw)

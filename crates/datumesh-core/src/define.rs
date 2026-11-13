@@ -2,7 +2,8 @@
 //! `spec-0.5.0`).
 
 use crate::descriptor::FunctionDescriptor;
-use crate::error::Result;
+use crate::error::{err, index, ErrorCode, Result};
+use crate::lexical;
 
 /// The checks define makes before it stores a function, in this order, reporting the first
 /// failure: `name` is a full function name (2.3, `E_CANON_NAME`); `descriptor_json` is a
@@ -12,7 +13,16 @@ use crate::error::Result;
 /// function may read both. Formula descriptors' own define-time rules (15.6) are not checked
 /// here. Returns the descriptor, whose canonical bytes and hash are the vector's outputs.
 pub fn check_define(name: &str, descriptor_json: &[u8]) -> Result<FunctionDescriptor> {
-    let _ = (name, descriptor_json);
-    // STUB (0.3.8 tests first).
-    todo!("2.5: the define-time check")
+    lexical::check_function_name(name, "$.name")?;
+    let descriptor = FunctionDescriptor::from_json(descriptor_json)?;
+    if !lexical::is_unrooted(name) {
+        if let Some(i) = descriptor.inputs.iter().position(|input| lexical::is_unrooted(input)) {
+            return err(
+                ErrorCode::UnrootedInput,
+                &index("$.inputs", i),
+                format!("the rooted function {name:?} reads the unrooted function {:?}", descriptor.inputs[i]),
+            );
+        }
+    }
+    Ok(descriptor)
 }

@@ -179,7 +179,16 @@ impl Descriptor {
 
     /// The JSON form.
     pub fn to_value(&self) -> Value {
-        descriptor_value(&self.lang, &self.body, &self.inputs, &self.signature, None, &BTreeMap::new())
+        descriptor_value(
+            &self.lang,
+            &self.body,
+            &self.inputs,
+            &self.signature,
+            None,
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            None,
+        )
     }
 
     /// The canonical bytes (6.2).
@@ -263,7 +272,16 @@ impl FunctionDescriptor {
 
     /// The JSON form.
     pub fn to_value(&self) -> Value {
-        descriptor_value(&self.lang, &self.body, &self.inputs, &self.signature, self.order.as_deref(), &self.extents)
+        descriptor_value(
+            &self.lang,
+            &self.body,
+            &self.inputs,
+            &self.signature,
+            self.order.as_deref(),
+            &self.extents,
+            &self.arg_extras,
+            self.returns_classes.as_deref(),
+        )
     }
 
     /// The canonical bytes (6.2).
@@ -308,6 +326,7 @@ impl From<Descriptor> for FunctionDescriptor {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn descriptor_value(
     lang: &str,
     body: &str,
@@ -315,14 +334,38 @@ fn descriptor_value(
     sig: &Signature,
     order: Option<&[String]>,
     extents: &BTreeMap<String, Extent>,
+    extras: &BTreeMap<String, ArgExtras>,
+    returns_classes: Option<&[String]>,
 ) -> Value {
+    let strings = |v: &[String]| Value::Array(v.iter().map(|s| Value::String(s.clone())).collect());
     let mut sig_v = sig.to_value();
     if let Value::Object(m) = &mut sig_v {
         if let Some((_, Value::Object(args))) = m.iter_mut().find(|(k, _)| k == "args") {
             for (name, decl) in args.iter_mut() {
-                if let (Some(e), Value::Object(dm)) = (extents.get(name), decl) {
-                    dm.push(("extent".into(), e.to_value()));
+                if let Value::Object(dm) = decl {
+                    if let Some(e) = extents.get(name) {
+                        dm.push(("extent".into(), e.to_value()));
+                    }
+                    if let Some(x) = extras.get(name) {
+                        if let Some(c) = &x.classes {
+                            dm.push(("classes".into(), strings(c)));
+                        }
+                        if x.default_asof {
+                            dm.push(("default".into(), Value::String("asof".into())));
+                        }
+                        if let Some(r) = x.key_normalisation {
+                            dm.push(("key_normalisation".into(), Value::String(r.as_str().into())));
+                        }
+                    }
                 }
+            }
+        }
+        if let Some(c) = returns_classes {
+            let returns =
+                Value::Object(vec![("classes".into(), strings(c)), ("type".into(), Value::String("string".into()))]);
+            match m.iter_mut().find(|(k, _)| k == "returns") {
+                Some((_, slot)) => *slot = returns,
+                None => m.push(("returns".into(), returns)),
             }
         }
         if let Some(o) = order {
@@ -342,7 +385,7 @@ fn descriptor_value(
     ])
 }
 
-fn unit_shape(v: &Value, path: &str) -> Result<()> {
+pub(crate) fn unit_shape(v: &Value, path: &str) -> Result<()> {
     let bad = || err(ErrorCode::Schema, path, "a unit is a string, {\"arg\": name} or {\"of\", \"per\"}");
     match v {
         Value::String(_) => Ok(()),
@@ -395,7 +438,9 @@ fn extent_shape(v: &Value, path: &str) -> Result<()> {
 /// the members of `spec-0.4.0` (`signature.order`, argument `extent`) are allowed.
 pub(crate) fn descriptor_structure(v: &Value, extended: bool) -> Result<()> {
     let new_sig: &[&str] = if extended { &["order"] } else { &[] };
-    let new_arg: &[&str] = if extended { &["extent", "unit"] } else { &["unit"] };
+    let new_arg: &[&str] =
+        if extended { &["extent", "unit", "classes", "default", "key_normalisation"] } else { &["unit"] };
+    let new_ret: &[&str] = if extended { &["unit", "classes"] } else { &["unit"] };
     let m = schema::object(v, "$")?;
     schema::exact(m, &["code", "inputs", "signature"], &[], "$", ErrorCode::Schema)?;
     let code = schema::object(schema::get(m, "code"), "$.code")?;
@@ -416,6 +461,26 @@ pub(crate) fn descriptor_structure(v: &Value, extended: bool) -> Result<()> {
         if let Some(e) = schema::opt(dm, "extent") {
             extent_shape(e, &member(&p, "extent"))?;
         }
+        if let Some(c) = schema::opt(dm, "classes") {
+            names_shape(c, &member(&p, "classes"))?;
+        }
+        if let Some(d) = schema::opt(dm, "default") {
+            if d.as_str() != Some("asof") {
+                return err(ErrorCode::Schema, &member(&p, "default"), "the only default is \"asof\"");
+            }
+        }
+        if let Some(k) = schema::opt(dm, "key_normalisation") {
+            match k.as_str().and_then(KeyNormalisation::from_name) {
+                Some(r) if r != KeyNormalisation::NoRule => {}
+                _ => {
+                    return err(
+                        ErrorCode::Schema,
+                        &member(&p, "key_normalisation"),
+                        "a rule of 16.4 other than none (an absent member means none)",
+                    )
+                }
+            }
+        }
         schema::string(dm, "type", &p)?;
         if !matches!(schema::get(dm, "valid"), Value::Bool(_)) {
             return err(ErrorCode::Schema, &member(&p, "valid"), "valid must be a boolean");
@@ -433,8 +498,11 @@ pub(crate) fn descriptor_structure(v: &Value, extended: bool) -> Result<()> {
     match schema::get(sig, "returns") {
         Value::String(_) => {}
         Value::Object(rm) => {
-            schema::exact(rm, &["type"], &["unit"], rp, ErrorCode::Schema)?;
+            schema::exact(rm, &["type"], new_ret, rp, ErrorCode::Schema)?;
             schema::string(rm, "type", rp)?;
+            if let Some(c) = schema::opt(rm, "classes") {
+                names_shape(c, &member(rp, "classes"))?;
+            }
             if let Some(u) = schema::opt(rm, "unit") {
                 unit_shape(u, &member(rp, "unit"))?;
             }
@@ -442,6 +510,30 @@ pub(crate) fn descriptor_structure(v: &Value, extended: bool) -> Result<()> {
         _ => return err(ErrorCode::Schema, rp, "returns must be a type name or an object"),
     }
     Ok(())
+}
+
+/// The shape of a `classes` member (`E_SCHEMA`): an array of strings.
+fn names_shape(v: &Value, path: &str) -> Result<()> {
+    match v {
+        Value::Array(items) if items.iter().all(|i| matches!(i, Value::String(_))) => Ok(()),
+        _ => err(ErrorCode::Schema, path, "classes is an array of class names"),
+    }
+}
+
+/// The class names of a structurally valid `classes` member (16): each a full name
+/// (`E_CANON_NAME`), then ascending and unique, at least one (`E_CANON_SET`).
+fn class_names(v: &Value, path: &str) -> Result<Vec<String>> {
+    let names: Vec<&str> = match v {
+        Value::Array(items) => items.iter().filter_map(Value::as_str).collect(),
+        _ => Vec::new(),
+    };
+    for (i, n) in names.iter().enumerate() {
+        lexical::check_function_name(n, &index(path, i))?;
+    }
+    if names.is_empty() || names.windows(2).any(|w| w[0] >= w[1]) {
+        return err(ErrorCode::CanonSet, path, "classes is a non-empty array, ascending and unique");
+    }
+    Ok(names.iter().map(|n| n.to_string()).collect())
 }
 
 fn unit_arg_ref(name: &str, args: &[(String, Value)], path: &str) -> Result<()> {
@@ -463,7 +555,7 @@ fn side_value(v: &Value) -> RateSide {
 }
 
 /// Checks a structurally valid unit against 7.1 and returns it.
-fn unit_canonical(v: &Value, args: &[(String, Value)], path: &str) -> Result<Unit> {
+pub(crate) fn unit_canonical(v: &Value, args: &[(String, Value)], path: &str) -> Result<Unit> {
     match v {
         Value::String(s) => {
             if !lexical::is_literal_unit(s) {
@@ -577,6 +669,7 @@ pub(crate) fn descriptor_canonical(v: &Value) -> Result<FunctionDescriptor> {
     }
     let mut decls = BTreeMap::new();
     let mut extents = BTreeMap::new();
+    let mut arg_extras = BTreeMap::new();
     for (k, d) in jcs_sorted(args) {
         let p = member("$.signature.args", k);
         lexical::check_arg_name(k, &p)?;
@@ -591,6 +684,36 @@ pub(crate) fn descriptor_canonical(v: &Value) -> Result<FunctionDescriptor> {
         let valid = matches!(schema::get(dm, "valid"), Value::Bool(true));
         if valid && !ty.may_be_valid_time() {
             return err(ErrorCode::CanonType, &p, "a valid-time argument must be a date, instant or string");
+        }
+        let mut extras = ArgExtras::default();
+        if let Some(c) = schema::opt(dm, "classes") {
+            if ty != Type::String {
+                return err(ErrorCode::CanonType, &member(&p, "classes"), "classes is on a string argument");
+            }
+            extras.classes = Some(class_names(c, &member(&p, "classes"))?);
+        }
+        if schema::opt(dm, "default").is_some() {
+            if !valid || !matches!(ty, Type::Date | Type::Instant) {
+                return err(
+                    ErrorCode::CanonType,
+                    &member(&p, "default"),
+                    "default asof is on a valid-time date or instant",
+                );
+            }
+            extras.default_asof = true;
+        }
+        if let Some(k) = schema::opt(dm, "key_normalisation") {
+            if ty != Type::String || extras.classes.is_some() {
+                return err(
+                    ErrorCode::CanonType,
+                    &member(&p, "key_normalisation"),
+                    "key_normalisation is on a string argument without classes",
+                );
+            }
+            extras.key_normalisation = k.as_str().and_then(KeyNormalisation::from_name);
+        }
+        if extras != ArgExtras::default() {
+            arg_extras.insert(k.clone(), extras);
         }
         if let Some(e) = schema::opt(dm, "extent") {
             extents.insert(k.clone(), extent_canonical(e, ty, &member(&p, "extent"))?);
@@ -615,7 +738,20 @@ pub(crate) fn descriptor_canonical(v: &Value) -> Result<FunctionDescriptor> {
     };
 
     let rp = "$.signature.returns";
+    let mut returns_classes = None;
+    if let Value::Object(rm) = schema::get(sig, "returns") {
+        if let Some(c) = schema::opt(rm, "classes") {
+            if Type::parse(schema::string(rm, "type", rp)?, &member(rp, "type"))? != Type::String {
+                return err(ErrorCode::CanonType, rp, "a returned key is a string");
+            }
+            if schema::opt(rm, "unit").is_some() {
+                return err(ErrorCode::CanonUnit, rp, "a returned key has no unit");
+            }
+            returns_classes = Some(class_names(c, &member(rp, "classes"))?);
+        }
+    }
     let returns = match schema::get(sig, "returns") {
+        Value::Object(_) if returns_classes.is_some() => Returns { ty: Type::String, unit: None },
         Value::String(name) => {
             let ty = Type::parse(name, rp)?;
             if ty == Type::Number {
@@ -646,9 +782,8 @@ pub(crate) fn descriptor_canonical(v: &Value) -> Result<FunctionDescriptor> {
         signature: Signature { args: decls, returns },
         order,
         extents,
-        // STUB (0.3.8 tests first): the implementation parses classes/default/key_normalisation.
-        arg_extras: BTreeMap::new(),
-        returns_classes: None,
+        arg_extras,
+        returns_classes,
     })
 }
 

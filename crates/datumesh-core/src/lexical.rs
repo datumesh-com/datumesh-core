@@ -136,6 +136,15 @@ pub fn check_namespace(s: &str, path: &str) -> Result<()> {
     Ok(())
 }
 
+/// [`is_unrooted`] for a namespace given as text (2.5, `spec-0.5.0`): the namespace is checked
+/// first, so that a name which is not a namespace (`invalid`, one label; `LOCAL.INVALID`,
+/// uppercase) is `E_CANON_NAME`, not an answer. [`is_unrooted`] itself answers for any string,
+/// as `spec-0.4.3` defined it, and says `true` for `invalid`.
+pub fn is_unrooted_namespace(namespace: &str) -> Result<bool> {
+    check_namespace(namespace, "$")?;
+    Ok(is_unrooted(namespace))
+}
+
 /// The host of a namespace: its DNS name.
 pub(crate) fn host_of(namespace: &str) -> &str {
     namespace.split('/').next().unwrap_or(namespace)
@@ -147,9 +156,44 @@ pub(crate) fn host_of(namespace: &str) -> &str {
 /// namespace is rooted. The name is not checked: check it with [`check_namespace`] (a namespace)
 /// or [`check_dns_name`] (a host) first; `local.invalid` passes both. A mesh refuses at define
 /// time a rooted function whose `inputs` name an unrooted one; a verifier never checks this.
+/// Unchanged since `spec-0.4.3`: it answers for any string, so `is_unrooted("invalid")` is
+/// `true`. Use [`is_unrooted_namespace`] to check the namespace first.
 pub fn is_unrooted(name: &str) -> bool {
     let host = name.split('/').next().unwrap_or("");
     host.rsplit('.').next() == Some("invalid")
+}
+
+/// The origin of a loopback URL of an unrooted host (9.6, `spec-0.5.0`): `http://`, then exactly
+/// `127.0.0.1`, `[::1]` or `localhost` (lowercase), optionally `:` and a port of 1 to 65535
+/// without leading zeros, then `/`; printable ASCII, at most 512 characters in all. Returns the
+/// origin, the text before the `/` after the authority. `None` for anything else.
+pub(crate) fn loopback_origin(u: &str) -> Option<&str> {
+    if u.len() > limits::LICENCE_URL || !u.bytes().all(|c| (0x21..=0x7E).contains(&c)) {
+        return None;
+    }
+    let rest = u.strip_prefix("http://")?;
+    let (authority, path) = rest.split_once('/')?;
+    let (host, after) = match authority.strip_prefix("[::1]") {
+        Some(after) => ("[::1]", after),
+        None => {
+            let i = authority.find(':').unwrap_or(authority.len());
+            (&authority[..i], &authority[i..])
+        }
+    };
+    if !matches!(host, "127.0.0.1" | "[::1]" | "localhost") {
+        return None;
+    }
+    if !after.is_empty() {
+        let port = after.strip_prefix(':')?;
+        if port.is_empty() || !port.bytes().all(|c| c.is_ascii_digit()) || (port.len() > 1 && port.starts_with('0')) {
+            return None;
+        }
+        match port.parse::<u32>() {
+            Ok(1..=65535) => {}
+            _ => return None,
+        }
+    }
+    Some(&u[..u.len() - path.len() - 1])
 }
 
 /// A fully qualified function name (2.3): namespace, `/`, name; at most 512 characters.

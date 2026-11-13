@@ -101,10 +101,10 @@ pub use mesh::{resolve_mesh, MeshDoc, ResolvedMesh, Retrieval};
 #[allow(deprecated)]
 pub use fetch::fetch_keys;
 pub use keys::{key_document_from_response, keys_from_response, Key, KeyDoc, KeyDocument, Keys};
-pub use lexical::is_unrooted;
+pub use lexical::{is_unrooted, is_unrooted_namespace};
 pub use licence::{
-    check_entitlement, inherit_licence, Declaration, Declarations, Entitlement, Inheritance, LicenceReason,
-    WrongPublisher,
+    check_entitlement, inherit_licence, try_check_entitlement, Declaration, Declarations, Entitlement,
+    EntitlementError, Inheritance, LicenceReason, WrongPublisher,
 };
 pub use model::{Arg, Args, Cell, CellRef, Reference, Scalar, Type};
 pub use normalisation::KeyNormalisation;

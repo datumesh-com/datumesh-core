@@ -3,6 +3,66 @@
 All notable changes to `datumesh-core`. The crate follows the specification revision named in
 each entry; the public API is frozen from 0.3.0 until 1.0 except for additions.
 
+## 0.3.8
+
+Specification: `spec-0.5.0` (`7bed002`, with the classes of part two); all 778 vectors for verifier
+libraries pass (648 for formula evaluators skipped; 1426 in all), the new kinds `class`,
+`normalisation`, `key`, `describe`, `define`, `envelope`, `mesh`, `function`, `licence` and
+`entitlement` included. Additions only (`API-CHANGES-0.3.8.md` has the `cargo public-api diff`
+against 0.3.7: 300 added lines, none removed or changed, with and without `--all-features`).
+
+**A mesh that serves a loopback URL for an unrooted host, `resolved`, `shadows`, classes or
+`E_NAMESPACE_SUSPENDED` is unverifiable by clients on core < 0.3.8 or datumesh < 0.5.0; publishers
+should wait for their consumers to upgrade.** Clients on libraries before their `spec-0.5.0`
+releases reject a loopback mesh document of an unrooted host (`E_MESH_DOC`), and a loopback `poll`
+or `next` (`E_ENVELOPE`); nor do they know `E_UNROOTED_INPUT` and `E_NAMESPACE_SUSPENDED`. They also
+reject descriptors with `classes`, `default` or `key_normalisation` (`E_SCHEMA`), envelopes with
+`resolved` or `shadows`, with `E_SHORT_ID_AMBIGUOUS`, or with the faults `E_FORMULA_KEY` and
+`E_FORMULA_DISPATCH_KEY` (`E_ENVELOPE`), and the class vector kinds.
+
+### Added
+- Codes of SPEC 10.2 in the table's order, after `E_FOREIGN_UNAVAILABLE`: `UnrootedInput`,
+  `NamespaceSuspended`, the eight class codes (`ClassMember`, `ClassParent`, `ClassInherit`,
+  `ClassOverride`, `ClassFinal`, `ClassMethod`, `ClassInterface`, `ClassOwner`),
+  `KeyNormalisation`, `KeyEncoding`, `ShortIdAmbiguous` and `Describe`. `Fault::Key`
+  (`E_FORMULA_KEY`) and `Fault::DispatchKey` (`E_FORMULA_DISPATCH_KEY`); `Fault::ALL` has eight
+  entries. None of them is a verification result.
+- Envelopes (SPEC 5.5): `Answer::resolved` (`Resolved`, `Resolution`, `ResolutionKind`) and
+  `Answer::shadows` (`Shadows`), with the builders `with_resolved`, `with_shadows`,
+  `Resolved::new`, `with_aliases_tx`, `Resolution::new`, `Resolution::lookup`, `Shadows::new`;
+  `not_covered` with `error` `E_NAMESPACE_SUSPENDED` (`Answer::with_error` takes it too).
+- Classes (SPEC 16.1, 16.2): `ClassDescriptor` (`from_json`, `from_value`, `to_value`,
+  `canonical`, `hash`), `ClassKey`, `Steward`, `ClassExtent`, and `define_class` with `ClassEnv`:
+  the flattened descriptor and the class hash.
+- Key normalisation (SPEC 16.4): `KeyNormalisation` (the closed list, `check`).
+- Object keys (SPEC 16.5, 16.8): `parse_object_key`, `format_object_key`, `ObjectKey` (`new`,
+  `to_value`, `object_value`, `object_id`, `call_form`), `KeyValue`, `short_id`.
+- describe (SPEC 16.8): `check_describe` with `DescribeKind` and `Described`.
+- The define-time check (SPEC 2.5): `check_define` (`E_UNROOTED_INPUT` for a rooted function
+  reading an unrooted one).
+- Function descriptors (SPEC 7): `classes` on a `string` argument and on `returns`, `default`
+  (`"asof"`) and `key_normalisation` on arguments; `FunctionDescriptor::arg_extras` (`ArgExtras`)
+  and `returns_classes`.
+- Loopback URLs for unrooted hosts (SPEC 9.6): a mesh document's URLs, `poll` and `next` may be
+  `http://` on `127.0.0.1`, `[::1]` or `localhost`, all on one origin; `lexical` checks them
+  through `resolve_mesh` and the envelope checks. The mesh document's `describe` endpoint.
+- `try_check_entitlement` and `EntitlementError` (SPEC 10.3): the same check as
+  `check_entitlement`, with the caller's errors reported (a key document of another host, and
+  input licences for a receipt with no inputs). `check_entitlement` is unchanged.
+- `is_unrooted_namespace` (SPEC 2.5): checks the namespace first (`E_CANON_NAME`). `is_unrooted`
+  is unchanged: it answers for any string, `is_unrooted("invalid")` is `true`.
+
+### Changed (behaviour, following the specification)
+- A `poll` of an unrooted mesh's pending answer and a slice page's `next` may be a loopback URL
+  when the request names that unrooted mesh; otherwise a loopback URL is `E_ENVELOPE`.
+- `bad_request` also carries `E_SHORT_ID_AMBIGUOUS`; `error` refuses the define and write codes,
+  the class codes and `E_DESCRIBE`, which are not read-envelope codes.
+- The envelope checker and builder: `resolved` and `shadows` on `ok`, `stale`, `not_covered`,
+  `unlicensed`, `payment_required` and `error`.
+- `datumesh-cli`: the kinds `class`, `normalisation`, `key`, `describe` and `define`; `envelope`,
+  `mesh`, `function`, `licence` and `entitlement` with the 0.5.0 rules. Vectors the library does
+  not run (`formula`, `formula-eval`, `excel`, `decimal`, `call`) are skipped, as before.
+
 ## 0.3.7 (unreleased)
 
 Specification: `spec-0.4.3` (`99123b2`); all 651 vectors for verifier libraries pass (585 for

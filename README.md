@@ -1,12 +1,12 @@
 # datumesh-core
 
-The Rust core of the [Datumesh](https://datumesh.com) protocol: strict JSON and RFC 8785 canonical bytes, cell URIs, key documents, response envelopes, unit resolution, and offline verification of signed receipts. It implements the [specification](https://github.com/datumesh-com/datumesh-spec) (`SPEC.md` and `units.md`, revision `spec-0.4.3`), including receipts whose lineage cites whole slices of cells, `pending` envelopes, pinned references, slice pages, batches, cross-mesh resolution, licence inheritance and the entitlement check, and passes every one of its 651 test vectors for verifier libraries (the 585 `formula`, `formula-eval`, `excel`, `decimal` and `call` vectors are for formula evaluators; this crate evaluates no functions and parses no calls).
+The Rust core of the [Datumesh](https://datumesh.com) protocol: strict JSON and RFC 8785 canonical bytes, cell URIs, key documents, response envelopes, unit resolution, and offline verification of signed receipts. It implements the [specification](https://github.com/datumesh-com/datumesh-spec) (`SPEC.md` and `units.md`, revision `spec-0.5.0`), including receipts whose lineage cites whole slices of cells, `pending` envelopes, pinned references, slice pages, batches, cross-mesh resolution, licence inheritance and the entitlement check, and passes every one of its 778 test vectors for verifier libraries (the 648 `formula`, `formula-eval`, `excel`, `decimal` and `call` vectors are for formula evaluators; this crate evaluates no functions and parses no calls).
 
 ## Example
 
 ```toml
 [dependencies]
-datumesh-core = "0.3.7"
+datumesh-core = "0.3.8"
 ```
 
 Verify the receipt of `spec/vectors/receipt/stored-number.json` against the key documents the vector carries, then recompute it with the descriptor and value the vector's `recompute` object supplies:
@@ -67,6 +67,9 @@ With feature `sign`, an engine makes receipts: `SigningKey::from_seed` (determin
 - `Reference`, `parse_reference`, `format_reference` (`spec-0.4.2`): references and cell URIs pinned to a function hash (`fn_hash=`). `CellRef` and `parse_uri` stay the unpinned form and refuse a pin. The call form (`name@<fn_hash>(args)`, SPEC 5.8) is parsed by the formula crate, not here: it is the dialect's read with its lexer and literals, and its result is a `Reference`, which `format_reference` writes.
 - `resolve_mesh` (`spec-0.4.1`): cross-mesh resolution of a host from its key document and mesh document responses (`Retrieval`), in the order of SPEC 9.6, giving its `KeyDoc` and `MeshDoc` (bindings URL, endpoint templates; `MeshDoc::url` fills one in). `MeshDoc::from_json` reads a mesh document on its own. Separate from verification, which never needs it.
 - `resolved_unit`: the unit of a cell's value.
+- Classes (SPEC 16, `spec-0.5.0`): `ClassDescriptor::from_json` checks a class descriptor (16.1); `define_class` (with `ClassEnv`) defines and flattens it (16.2), and `ClassDescriptor::hash` is the class hash. `KeyNormalisation::check` is the closed list of 16.4. `parse_object_key`, `format_object_key`, `ObjectKey` and `short_id` are the key encodings and object ids of 16.5 and 16.8; `check_describe` checks a describe answer (16.8). `check_define` is the define-time check of 2.5 (`E_UNROOTED_INPUT`). These are pure checks: nothing here evaluates a method, dispatches a call or resolves a short call.
+- Envelopes of `spec-0.5.0`: `Answer` carries `resolved` (what a short call resolved, 16.7) and `shadows` (16.9), and `not_covered` may carry `E_NAMESPACE_SUSPENDED`. Loopback URLs of an unrooted host (9.6) are accepted in its mesh document, `poll` and `next`, all on one origin; rooted hosts stay https-only.
+- `try_check_entitlement` (SPEC 10.3, `spec-0.5.0`) reports the caller's errors of the entitlement check as `EntitlementError`; `check_entitlement` is unchanged. `is_unrooted_namespace` (2.5) checks the namespace before answering; `is_unrooted` is unchanged, and answers for any string.
 - `Error` with an `ErrorCode` for every code of SPEC 10.2 (`E_EVAL_UNAVAILABLE`, `E_SLICE_MEMBER`, `E_INPUT_SUPERSEDED`, `E_JOB_UNKNOWN`, `E_MESH_DOC`, `E_SLICE_AT_CELL`, `E_NAME_UNBOUND` and `E_FOREIGN_UNAVAILABLE` included), and a JSON path.
 
 No `unsafe`, no panics on any input, no global state, no logging, no network outside the deprecated `fetch_keys`. Builds for `wasm32-unknown-unknown`, with or without `sign` and `testkit`. Minimum Rust version 1.97. The public API is frozen until 1.0 except for additions; `API-CHANGES-0.3.0.md` lists what changed from 0.2.1, `API-CHANGES-0.3.1.md` what was added in 0.3.1, `API-CHANGES-0.3.2.md` the (empty) diff of 0.3.2, `API-CHANGES-0.3.3.md` the additions in 0.3.3, `API-CHANGES-0.3.4.md` the additions in 0.3.4, `API-CHANGES-0.3.5.md` the additions in 0.3.5, `API-CHANGES-0.3.6.md` the additions in 0.3.6, `API-CHANGES-0.3.7.md` the additions in 0.3.7, and `CHANGELOG.md` the history.
@@ -77,7 +80,7 @@ A `Resolver` (a store, a cache, an engine's lookup) can check itself against the
 
 ```toml
 [dev-dependencies]
-datumesh-core = { version = "0.3.7", features = ["testkit"] }
+datumesh-core = { version = "0.3.8", features = ["testkit"] }
 ```
 
 The kit never writes through the resolver. It gives you `Fixtures` (descriptors, receipts and the versions of stored cells, all canonical JSON, from the specification's vectors plus a few receipts signed for the kit), you load them, and it verifies receipts through your resolver and looks things up in it:
@@ -106,7 +109,7 @@ A resolver that supplies manifests (0.3.4) also loads `fixtures.slices` (descrip
 - `crates/datumesh-cli`: `datumesh-cli run-vectors` (JSON lines in, one result per line out) and `datumesh-cli check [DIR]`, for the cross-language harness. Not published.
 - `spec/`: the specification, a git submodule.
 - `DEFECTS.md`: every place the specification text was not enough to decide something.
-- `public-api.txt`, `public-api-all-features.txt`: the public API (`cargo public-api -ss`) with default features and with `--all-features`; `API-CHANGES-0.3.0.md`: the diff against 0.2.1, justified; `API-CHANGES-0.3.1.md`: the additions in 0.3.1; `API-CHANGES-0.3.2.md`: the diff of 0.3.2 against 0.3.1; `API-CHANGES-0.3.3.md`: the additions in 0.3.3; `API-CHANGES-0.3.4.md`: the additions in 0.3.4; `API-CHANGES-0.3.5.md`: the additions in 0.3.5; `API-CHANGES-0.3.6.md`: the additions in 0.3.6; `API-CHANGES-0.3.7.md`: the additions in 0.3.7.
+- `public-api.txt`, `public-api-all-features.txt`: the public API (`cargo public-api -ss`) with default features and with `--all-features`; `API-CHANGES-0.3.0.md`: the diff against 0.2.1, justified; `API-CHANGES-0.3.1.md`: the additions in 0.3.1; `API-CHANGES-0.3.2.md`: the diff of 0.3.2 against 0.3.1; `API-CHANGES-0.3.3.md`: the additions in 0.3.3; `API-CHANGES-0.3.4.md`: the additions in 0.3.4; `API-CHANGES-0.3.5.md`: the additions in 0.3.5; `API-CHANGES-0.3.6.md`: the additions in 0.3.6; `API-CHANGES-0.3.7.md`: the additions in 0.3.7; `API-CHANGES-0.3.8.md`: the additions in 0.3.8.
 - `crates/datumesh-core/src/testkit/data.rs`: the kit's fixtures, generated from `spec/` (and signed with feature `sign`) by `tests/testkit_data.rs`, which fails if they drift.
 - `fuzz/`: cargo-fuzz targets. `wasm-smoke/`: the WebAssembly smoke test.
 - `tools/gen_tables.py`: regenerates the embedded unit list and Unicode 15.1 table from `spec/`.
