@@ -35,9 +35,15 @@ pub struct ObjectKey {
 /// strictly ascending, no space, strings quoted with `"` doubled, a class-typed key its own
 /// encoding unquoted. Anything that is not exactly the canonical encoding of what it decodes
 /// to (a bare class name, an unquoted string, a space, trailing text, unsorted or repeated
-/// names, a number not in canonical form) is `E_KEY_ENCODING`. The 1024-byte limit of a
-/// `string` argument (4.5) is the caller's, since the encoding is one string there.
+/// names, a number not in canonical form) is `E_KEY_ENCODING`.
+///
+/// Since `spec-0.5.0` (16.5) an encoding is one string value: as a whole it is at most 1024
+/// bytes, holds no control character, is in NFC and is assigned in Unicode 15.1; that bounds
+/// each string inside it too. Every failure of these checks is `E_KEY_ENCODING` as well.
 pub fn parse_object_key(text: &str) -> Result<ObjectKey> {
+    if let Err(e) = lexical::check_string(text, "$") {
+        return err(ErrorCode::KeyEncoding, "$", format!("the encoding is not one string value: {}", e.detail()));
+    }
     let mut p = Parser { s: text, i: 0 };
     let key = p.object()?;
     if p.i != text.len() {

@@ -1490,6 +1490,7 @@ pub fn datumesh_core::check_answer(u16, &[u8], &datumesh_core::Keys, &datumesh_c
 pub fn datumesh_core::check_batch(u16, &[u8], &datumesh_core::Keys, &[datumesh_core::Request]) -> datumesh_core::Result<datumesh_core::Batch>
 pub fn datumesh_core::check_define(&str, &[u8]) -> datumesh_core::Result<datumesh_core::FunctionDescriptor>
 pub fn datumesh_core::check_describe(&[u8], &alloc::collections::btree::map::BTreeMap<alloc::string::String, datumesh_core::ClassDescriptor>) -> datumesh_core::Result<datumesh_core::Described>
+pub fn datumesh_core::check_describe_with(&[u8], &alloc::collections::btree::map::BTreeMap<alloc::string::String, datumesh_core::ClassDescriptor>, &[datumesh_core::FunctionDescriptor]) -> datumesh_core::Result<datumesh_core::Described>
 pub fn datumesh_core::check_entitlement<I, S>(&datumesh_core::Receipt, I, &datumesh_core::KeyDocument) -> core::result::Result<datumesh_core::Entitlement, datumesh_core::WrongPublisher> where I: core::iter::traits::collect::IntoIterator<Item = S>, S: core::convert::AsRef<str>
 pub fn datumesh_core::check_envelope(u16, &[u8], &datumesh_core::Keys, &datumesh_core::Request) -> datumesh_core::Result<datumesh_core::Envelope>
 pub fn datumesh_core::check_envelope_any(u16, &[u8], &datumesh_core::Keys, &datumesh_core::Request) -> datumesh_core::Result<datumesh_core::AnyEnvelope>

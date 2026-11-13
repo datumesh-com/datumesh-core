@@ -2,6 +2,7 @@
 //! be canonical under, and the pure check of a value against one.
 
 use crate::error::{ErrorCode, Result};
+use crate::lexical;
 
 /// One rule of the closed list of 16.4. The list grows only through revisions of the
 /// specification, so the enum is `#[non_exhaustive]`.
@@ -12,8 +13,10 @@ pub enum KeyNormalisation {
     NoRule,
     /// `upper_ascii`: printable ASCII only (U+0021 to U+007E), no lowercase `a`-`z`.
     UpperAscii,
-    /// `nfc_strict`: no format character (Cf), no line or paragraph separator, no space other
-    /// than U+0020, and no leading, trailing or repeated U+0020.
+    /// `nfc_strict`: no format character (Cf), no White_Space character (Unicode 15.1) other than
+    /// U+0020, and no leading, trailing or repeated U+0020. The White_Space characters that 3.5
+    /// does not already refuse are U+00A0, U+1680, U+2002-U+200A, U+2028, U+2029, U+202F, U+205F
+    /// and U+3000 (U+0009-U+000D and U+0085 are controls; U+2000 and U+2001 are not NFC).
     NfcStrict,
     /// `arabic_skeleton`: no Arabic mark (U+0610-U+061A, U+064B-U+065F, U+0670, U+06D6-U+06DC,
     /// U+06DF-U+06E8, U+06EA-U+06ED) and no tatweel U+0640.
@@ -54,10 +57,13 @@ impl KeyNormalisation {
         KeyNormalisation::ALL.iter().copied().find(|r| r.as_str() == text)
     }
 
-    /// Checks that `text` is canonical under this rule (16.4): a pure function. A value that is
-    /// not canonical is `E_KEY_NORMALISATION`, never repaired. Every rule but `none` rejects the
-    /// empty string and a value that is not NFC.
+    /// Checks that `text` is canonical under this rule (16.4): a pure function. The text is first
+    /// a string value by 3.5 under every rule, with 3.5's codes (`E_CANON_STRING`, `E_CANON_LIMIT`,
+    /// never `E_KEY_NORMALISATION`). Then the rule: `none` accepts what 3.5 accepts, the empty
+    /// string included; every other rule rejects the empty string, and a value the rule forbids
+    /// is `E_KEY_NORMALISATION`, never repaired.
     pub fn check(self, text: &str) -> Result<()> {
+        lexical::check_string(text, "$")?;
         if self == KeyNormalisation::NoRule {
             return Ok(());
         }
@@ -77,7 +83,7 @@ impl KeyNormalisation {
         let forbidden = |c: char| match self {
             KeyNormalisation::NoRule => false,
             KeyNormalisation::UpperAscii => !(('!'..='~').contains(&c) && !c.is_ascii_lowercase()),
-            KeyNormalisation::NfcStrict => is_format_character(c) || (c.is_whitespace() && c != ' '),
+            KeyNormalisation::NfcStrict => is_format_character(c) || (is_white_space(c) && c != ' '),
             KeyNormalisation::ArabicSkeleton => ARABIC_MARKS.iter().any(|r| r.contains(&(c as u32))),
             KeyNormalisation::HebrewConsonantal => {
                 let cp = c as u32;
@@ -146,6 +152,24 @@ const FORMAT_CHARACTERS: &[(u32, u32)] = &[
     (0xE0001, 0xE0001),
     (0xE0020, 0xE007F),
 ];
+
+/// The White_Space property of Unicode 15.1 (the list of 16.4 `nfc_strict`).
+fn is_white_space(c: char) -> bool {
+    matches!(
+        c as u32,
+        0x0009..=0x000D
+            | 0x0020
+            | 0x0085
+            | 0x00A0
+            | 0x1680
+            | 0x2000..=0x200A
+            | 0x2028
+            | 0x2029
+            | 0x202F
+            | 0x205F
+            | 0x3000
+    )
+}
 
 fn is_format_character(c: char) -> bool {
     let cp = c as u32;

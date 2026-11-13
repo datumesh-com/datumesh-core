@@ -5,11 +5,12 @@ each entry; the public API is frozen from 0.3.0 until 1.0 except for additions.
 
 ## 0.3.8
 
-Specification: `spec-0.5.0` (`7bed002`, with the classes of part two); all 778 vectors for verifier
-libraries pass (648 for formula evaluators skipped; 1426 in all), the new kinds `class`,
-`normalisation`, `key`, `describe`, `define`, `envelope`, `mesh`, `function`, `licence` and
-`entitlement` included. Additions only (`API-CHANGES-0.3.8.md` has the `cargo public-api diff`
-against 0.3.7: 300 added lines, none removed or changed, with and without `--all-features`).
+Specification: `spec-0.5.0` (`6d5633e`: the library findings of `7bed002`, re-pinned; 40 vectors
+added, none changed, the classes of part two included). All 818 vectors for verifier libraries pass
+(648 for formula evaluators skipped; 1466 in all), the new kinds `class`, `normalisation`, `key`,
+`describe`, `define`, `envelope`, `mesh`, `function`, `licence` and `entitlement` included. Additions
+only (`API-CHANGES-0.3.8.md` has the `cargo public-api diff` against 0.3.7: 301 added lines, none
+removed or changed, with and without `--all-features`).
 
 **A mesh that serves a loopback URL for an unrooted host, `resolved`, `shadows`, classes or
 `E_NAMESPACE_SUSPENDED` is unverifiable by clients on core < 0.3.8 or datumesh < 0.5.0; publishers
@@ -17,8 +18,9 @@ should wait for their consumers to upgrade.** Clients on libraries before their 
 releases reject a loopback mesh document of an unrooted host (`E_MESH_DOC`), and a loopback `poll`
 or `next` (`E_ENVELOPE`); nor do they know `E_UNROOTED_INPUT` and `E_NAMESPACE_SUSPENDED`. They also
 reject descriptors with `classes`, `default` or `key_normalisation` (`E_SCHEMA`), envelopes with
-`resolved` or `shadows`, with `E_SHORT_ID_AMBIGUOUS`, or with the faults `E_FORMULA_KEY` and
-`E_FORMULA_DISPATCH_KEY` (`E_ENVELOPE`), and the class vector kinds.
+`resolved` or `shadows`, with `E_SHORT_ID_AMBIGUOUS`, `E_KEY_NORMALISATION` or `E_KEY_ENCODING`
+(`bad_request`), or with the faults `E_FORMULA_KEY` and `E_FORMULA_DISPATCH_KEY` (`E_ENVELOPE`), and
+the class vector kinds.
 
 ### Added
 - Codes of SPEC 10.2 in the table's order, after `E_FOREIGN_UNAVAILABLE`: `UnrootedInput`,
@@ -37,7 +39,8 @@ reject descriptors with `classes`, `default` or `key_normalisation` (`E_SCHEMA`)
 - Key normalisation (SPEC 16.4): `KeyNormalisation` (the closed list, `check`).
 - Object keys (SPEC 16.5, 16.8): `parse_object_key`, `format_object_key`, `ObjectKey` (`new`,
   `to_value`, `object_value`, `object_id`, `call_form`), `KeyValue`, `short_id`.
-- describe (SPEC 16.8): `check_describe` with `DescribeKind` and `Described`.
+- describe (SPEC 16.8): `check_describe` with `DescribeKind` and `Described`, and
+  `check_describe_with`, the same check with the method functions the client holds (step 6).
 - The define-time check (SPEC 2.5): `check_define` (`E_UNROOTED_INPUT` for a rooted function
   reading an unrooted one).
 - Function descriptors (SPEC 7): `classes` on a `string` argument and on `returns`, `default`
@@ -51,6 +54,26 @@ reject descriptors with `classes`, `default` or `key_normalisation` (`E_SCHEMA`)
   input licences for a receipt with no inputs). `check_entitlement` is unchanged.
 - `is_unrooted_namespace` (SPEC 2.5): checks the namespace first (`E_CANON_NAME`). `is_unrooted`
   is unchanged: it answers for any string, `is_unrooted("invalid")` is `true`.
+
+### Changed (clarifications of spec-0.5.0, 6d5633e: the verifier libraries' findings)
+- `E_KEY_NORMALISATION` and `E_KEY_ENCODING` are `bad_request` codes (SPEC 5.5, 5.8):
+  `Answer::bad_request` carries them, and `Answer::error` and `not_covered` refuse them.
+- The `error` envelope refuses exactly these codes of 10.2: `E_ENVELOPE`, `E_DESCRIBE`,
+  `E_JOB_UNKNOWN`, `E_SLICE_AT_CELL`, `E_NAME_UNBOUND`, `E_SHORT_ID_AMBIGUOUS`,
+  `E_KEY_NORMALISATION`, `E_KEY_ENCODING`, `E_UNROOTED_INPUT`, `E_NAMESPACE_SUSPENDED` and the
+  eight `E_CLASS_*` codes.
+- `KeyNormalisation::check` (16.4) checks the text as a string value by 3.5 under every rule first,
+  with 3.5's codes (`E_CANON_STRING`, `E_CANON_LIMIT`): a tab, a line feed, NUL or a string that
+  is not NFC is never `E_KEY_NORMALISATION`. `none` accepts the empty string; every other rule
+  refuses it. `nfc_strict` refuses the Unicode 15.1 White_Space characters other than U+0020
+  (listed in 16.4).
+- `parse_object_key` (16.5): an encoding is one string value, at most 1024 bytes as a whole, with
+  no control character, in NFC and assigned; every failure to decode is `E_KEY_ENCODING`.
+- `check_describe` (16.8) follows the six numbered steps and reports the first failure. Parse
+  failures keep their 6.1 codes (`E_PARSE_JSON`, `E_PARSE_DUPLICATE_KEY`), not `E_DESCRIBE`. The
+  held class is found by its class hash, never by name; a client holding no class stops after
+  step 3. A `description` is 1 to 1024 bytes; `same_as` is non-empty, ascending and unique. An
+  object's keys are checked by type and by their key normalisation.
 
 ### Changed (behaviour, following the specification)
 - A `poll` of an unrooted mesh's pending answer and a slice page's `next` may be a loopback URL

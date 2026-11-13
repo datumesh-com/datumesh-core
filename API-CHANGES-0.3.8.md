@@ -3,8 +3,8 @@
 Generated with `cargo public-api -p datumesh-core -ss diff 0.3.7` and
 `cargo public-api -p datumesh-core --all-features -ss diff 0.3.7` (cargo-public-api 0.52.0)
 against the 0.3.7 release on crates.io. **Additions only: nothing was removed or changed** in
-either diff ("Removed items" and "Changed items" are empty). Each diff adds 300 lines, and
-`public-api.txt` and `public-api-all-features.txt` gain exactly the added lines.
+either diff ("Removed items" and "Changed items" are empty). Each diff adds 301 lines (300 at the implementation commit, plus `check_describe_with`, added by the
+spec-0.5.0 re-pin), and `public-api.txt` and `public-api-all-features.txt` gain exactly the added lines.
 
 The types that gain members are `#[non_exhaustive]`, so a new variant or field is an addition
 for the callers that already exist: `ErrorCode`, `Fault`, `Answer` (`resolved`, `shadows`),
@@ -20,7 +20,7 @@ longer (63 and 8 entries; the same signature).
 | `ClassDescriptor`, `ClassKey`, `Steward`, `ClassExtent`, `ClassEnv`, `define_class` | Classes (16.1, 16.2). `ClassDescriptor` and `ClassKey` are `#[non_exhaustive]`. |
 | `KeyNormalisation` | The closed list of 16.4 (`#[non_exhaustive]`), `ALL`, `as_str`, `from_name`, `check`. |
 | `ObjectKey`, `KeyValue`, `parse_object_key`, `format_object_key`, `short_id` | Key encodings and object ids (16.5, 16.8). |
-| `check_describe`, `DescribeKind`, `Described` | describe answers (16.8). |
+| `check_describe`, `check_describe_with`, `DescribeKind`, `Described` | describe answers (16.8). `check_describe_with` is the six-step check with the method functions the client holds (step 6; an empty slice is `check_describe`). Added by the spec-0.5.0 re-pin (6d5633e). |
 | `check_define` | The define-time check (2.5). |
 | `FunctionDescriptor::arg_extras`, `ArgExtras`, `FunctionDescriptor::returns_classes` | `classes`, `default` and `key_normalisation` (7). `ArgDecl` and `Returns` are unchanged. |
 | `Resolution::lookup`, `Resolved::with_aliases_tx`, `Shadows::new`, and the others above | The constructors of the envelope members. |
@@ -325,6 +325,7 @@ Added lines of `cargo public-api -p datumesh-core -ss diff 0.3.7`:
 +impl core::marker::StructuralPartialEq for datumesh_core::Steward
 +pub fn datumesh_core::check_define(&str, &[u8]) -> datumesh_core::Result<datumesh_core::FunctionDescriptor>
 +pub fn datumesh_core::check_describe(&[u8], &alloc::collections::btree::map::BTreeMap<alloc::string::String, datumesh_core::ClassDescriptor>) -> datumesh_core::Result<datumesh_core::Described>
++pub fn datumesh_core::check_describe_with(&[u8], &alloc::collections::btree::map::BTreeMap<alloc::string::String, datumesh_core::ClassDescriptor>, &[datumesh_core::FunctionDescriptor]) -> datumesh_core::Result<datumesh_core::Described>
 +pub fn datumesh_core::define_class(&str, &[u8], &datumesh_core::ClassEnv) -> datumesh_core::Result<datumesh_core::ClassDescriptor>
 +pub fn datumesh_core::format_object_key(&datumesh_core::ObjectKey) -> alloc::string::String
 +pub fn datumesh_core::is_unrooted_namespace(&str) -> datumesh_core::Result<bool>

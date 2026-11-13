@@ -245,18 +245,28 @@ fn code_allowed(outcome: AnswerOutcome, code: ErrorCode, job_url: bool) -> bool 
     match outcome {
         AnswerOutcome::BadRequest => {
             BAD_REQUEST_CODES.contains(&code)
-                || matches!(code, ErrorCode::CanonHex | ErrorCode::SliceAtCell | ErrorCode::ShortIdAmbiguous)
+                || matches!(
+                    code,
+                    ErrorCode::CanonHex
+                        | ErrorCode::SliceAtCell
+                        | ErrorCode::ShortIdAmbiguous
+                        | ErrorCode::KeyNormalisation
+                        | ErrorCode::KeyEncoding
+                )
                 || (code == ErrorCode::JobUnknown && job_url)
         }
         AnswerOutcome::NotCovered => matches!(code, ErrorCode::NameUnbound | ErrorCode::NamespaceSuspended),
-        // 5.5: the define and write codes are never in a read envelope; the class codes are
-        // define's and E_DESCRIBE a client's (DEFECTS, spec-0.5.0).
+        // 5.5 (spec-0.5.0): every code of 10.2 but exactly these. The define and write codes are
+        // never in a read envelope; the class codes are define's, E_DESCRIBE a client's, and the
+        // two key codes are `bad_request`'s when a call raises them.
         AnswerOutcome::Error => !matches!(
             code,
             ErrorCode::Envelope
                 | ErrorCode::JobUnknown
                 | ErrorCode::SliceAtCell
                 | ErrorCode::NameUnbound
+                | ErrorCode::KeyNormalisation
+                | ErrorCode::KeyEncoding
                 | ErrorCode::UnrootedInput
                 | ErrorCode::NamespaceSuspended
                 | ErrorCode::ClassMember
@@ -311,7 +321,8 @@ impl Answer {
     }
 
     /// `bad_request` (400) with a code it can carry (5.5: a parse code, `E_CANON_HEX`,
-    /// `E_SLICE_AT_CELL`, or `E_JOB_UNKNOWN` at a job URL); `E_ENVELOPE` otherwise.
+    /// `E_SLICE_AT_CELL`, `E_SHORT_ID_AMBIGUOUS`, `E_KEY_NORMALISATION` or `E_KEY_ENCODING`
+    /// (since `spec-0.5.0`), or `E_JOB_UNKNOWN` at a job URL); `E_ENVELOPE` otherwise.
     pub fn bad_request(code: ErrorCode) -> Result<Answer> {
         if !code_allowed(AnswerOutcome::BadRequest, code, true) {
             return env_err("$.error", format!("bad_request cannot carry {code}"));
@@ -320,7 +331,8 @@ impl Answer {
     }
 
     /// `error` (500; see [`Answer::with_status`]) with a code it can carry (any of 10.2 but
-    /// `E_ENVELOPE`, `E_JOB_UNKNOWN`, `E_SLICE_AT_CELL` and `E_NAME_UNBOUND`).
+    /// the codes 5.5 refuses in an `error` envelope: `E_ENVELOPE`, `E_DESCRIBE`, the request
+    /// codes, the define and write codes and the class codes, since `spec-0.5.0`).
     /// `E_FOREIGN_UNAVAILABLE` needs a `detail` and HTTP 502: build it with
     /// [`Answer::foreign_unavailable`] (here it is `E_ENVELOPE`).
     pub fn error(code: ErrorCode) -> Result<Answer> {

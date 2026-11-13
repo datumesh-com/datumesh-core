@@ -816,3 +816,48 @@ not read. Each entry is resolved in the implementation as stated.
   describe answers are in the revision, and the entry does not list them.
 - **Resolution.** The implementation follows SPEC.md and the vectors. The entry should say the
   revision is complete, and list part two.
+
+## spec-0.5.0 (`6d5633e`), the re-pin in datumesh-core 0.3.8
+
+Found while implementing the clarifications of `6d5633e` (the verifier libraries' points 1 to 8).
+Each entry is resolved in the implementation as stated.
+
+### RS-57. 16.8 step 6: what "its arguments" are for a held method function
+- **Section.** 16.8 ("`args` (the method function's arguments after the keys, with types and
+  units)"; step 6: "`args` and `returns` exactly its `returns`").
+- **Problem.** The object of the answer's `args` could hold each argument's type and unit only, or
+  the whole declaration as the function descriptor writes it (with `valid`, and `classes`,
+  `default` and `key_normalisation` where it has them). The text says both "with types and units"
+  and "exactly that function's arguments", and `returns` is "exactly its `returns`" with its
+  `classes` where it has them.
+- **Resolution.** `args` are compared as the function descriptor writes them (every member of each
+  declaration except the class keys, which are left out), and `returns` as the descriptor's
+  `returns` member, by canonical JSON. Vectors agree: `describe/class-functions` has `valid` on
+  each argument and a `classes` return.
+
+### RS-58. 16.8 step 5: a class-typed key's nested keys are not checked
+- **Section.** 16.8 step 5 ("a class-typed key's is a `string` that is the key encoding of an
+  object of that class").
+- **Problem.** The encoding names its class; the nested object's own keys are checked only
+  against that class, which the client may not hold. The text does not say whether they are.
+- **Resolution.** Only the nested encoding's class name is compared with the key's class, and the
+  encoding is decoded (a malformed one is `E_DESCRIBE`). A nested object's keys are not checked
+  against its class. A check of them is possible only when the nested class is held, and the text
+  does not ask for that.
+
+### RS-59. 16.8 step 1 and the 6.1 codes
+- **Section.** 16.8 step 1 ("parse the text as strict JSON (6.1), with that section's codes").
+- **Problem.** 6.1 gives the parse codes and the depth code, but says nothing about which code a
+  top-level value that is valid JSON but not an object gets: the text says `E_DESCRIBE` at step 2.
+- **Resolution.** Parse failures (including a depth overflow and a duplicate member) keep their 6.1
+  codes; a valid JSON value that is not an object, or has no `kind` of `class` or `object`, is
+  `E_DESCRIBE`.
+
+### RS-60. 16.4 and 3.5: `nfc_strict` and the White_Space characters
+- **Section.** 16.4 (`nfc_strict`: "no White_Space character (the Unicode 15.1 property) other
+  than U+0020").
+- **Problem.** None, once 3.5 is applied first: the controls among the White_Space characters
+  are refused by 3.5 (`E_CANON_STRING`), and U+2000 and U+2001 are not NFC. The remaining
+  characters are listed in 16.4, and the implementation lists the same ones.
+- **Resolution.** The White_Space set of Unicode 15.1 is written out in the crate (not read from
+  the platform's `char::is_whitespace`), so a later Rust release cannot change it.
