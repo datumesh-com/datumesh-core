@@ -5,9 +5,9 @@ each entry; the public API is frozen from 0.3.0 until 1.0 except for additions.
 
 ## 0.3.8
 
-Specification: `spec-0.5.0` (`6d5633e`: the library findings of `7bed002`, re-pinned; 40 vectors
-added, none changed, the classes of part two included). All 818 vectors for verifier libraries pass
-(648 for formula evaluators skipped; 1466 in all), the new kinds `class`, `normalisation`, `key`,
+Specification: `spec-0.5.0` (`c8896ad`: the library findings of `7bed002` and of the formula library,
+re-pinned; 48 vectors added, none changed). All 818 vectors for verifier libraries pass
+(656 for formula evaluators skipped; 1474 in all), the new kinds `class`, `normalisation`, `key`,
 `describe`, `define`, `envelope`, `mesh`, `function`, `licence` and `entitlement` included. Additions
 only (`API-CHANGES-0.3.8.md` has the `cargo public-api diff` against 0.3.7: 301 added lines, none
 removed or changed, with and without `--all-features`).

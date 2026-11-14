@@ -584,11 +584,17 @@
 {"error":null,"id":"invalid/call-argument-expression","skipped":"call"}
 {"error":null,"id":"invalid/call-arity","skipped":"call"}
 {"error":null,"id":"invalid/call-asof","skipped":"call"}
+{"error":null,"id":"invalid/call-class-default-no-now","skipped":"call"}
+{"error":null,"id":"invalid/call-class-extension-missing","skipped":"call"}
+{"error":null,"id":"invalid/call-class-extension-without-keys","skipped":"call"}
+{"error":null,"id":"invalid/call-class-lookup-no-now","skipped":"call"}
 {"error":null,"id":"invalid/call-class-lookup-none","skipped":"call"}
+{"error":null,"id":"invalid/call-class-lookup-on-object","skipped":"call"}
 {"error":null,"id":"invalid/call-class-lookup-unknown-label","skipped":"call"}
 {"error":null,"id":"invalid/call-class-no-method","skipped":"call"}
 {"error":null,"id":"invalid/call-class-normalisation","skipped":"call"}
 {"error":null,"id":"invalid/call-class-plain-normalisation","skipped":"call"}
+{"error":null,"id":"invalid/call-class-quoted-key-normalisation","skipped":"call"}
 {"error":null,"id":"invalid/call-class-unquoted-needs-quotes","skipped":"call"}
 {"error":null,"id":"invalid/call-class-unquoted-normalisation","skipped":"call"}
 {"error":null,"id":"invalid/call-class-without-method","skipped":"call"}
@@ -814,6 +820,7 @@
 {"error":null,"id":"invalid/formula-class-object-outside-classes","skipped":"formula"}
 {"error":null,"id":"invalid/formula-class-pin-in-body","skipped":"formula"}
 {"error":null,"id":"invalid/formula-class-plain-key-literal","skipped":"formula"}
+{"error":null,"id":"invalid/formula-class-quoted-key-not-canonical","skipped":"formula"}
 {"error":null,"id":"invalid/formula-class-super-without-parent","skipped":"formula"}
 {"error":null,"id":"invalid/formula-class-this-outside-method","skipped":"formula"}
 {"error":null,"id":"invalid/formula-comparison-chain","skipped":"formula"}
@@ -836,6 +843,7 @@
 {"error":null,"id":"invalid/formula-eval-class-dispatch-keys","skipped":"formula-eval"}
 {"error":null,"id":"invalid/formula-eval-class-dispatch-malformed","skipped":"formula-eval"}
 {"error":null,"id":"invalid/formula-eval-class-dispatch-outside","skipped":"formula-eval"}
+{"error":null,"id":"invalid/formula-eval-class-dispatch-rebound","skipped":"formula-eval"}
 {"error":null,"id":"invalid/formula-eval-class-key-computed","skipped":"formula-eval"}
 {"error":null,"id":"invalid/formula-eval-cycle","skipped":"formula-eval"}
 {"error":null,"id":"invalid/formula-eval-date-domain","skipped":"formula-eval"}
