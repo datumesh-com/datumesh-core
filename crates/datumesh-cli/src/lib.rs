@@ -336,6 +336,8 @@ pub fn run(v: &Value) -> Result<Outputs, Error> {
             if let Some(class_hash) = v.get("class_hash").and_then(Value::as_str) {
                 out.push(("object".into(), key.object_value(class_hash)?));
                 out.push(("object_id".into(), s(&key.object_id(class_hash)?)));
+                // Echoed, as the reference's output form has it.
+                out.push(("class_hash".into(), s(class_hash)));
             }
             Ok(out)
         }
