@@ -135,7 +135,8 @@ fn receipt_source_accessors() {
 fn every_other_receipt_has_no_source() {
     let mut n = 0;
     for v in vectors("receipt") {
-        if matches!(str_of(&v, "id"), "receipt/relayed-full" | "receipt/relayed-required") {
+        if matches!(str_of(&v, "id"), "receipt/relayed-full" | "receipt/relayed-required" | "receipt/dns-segment-relay")
+        {
             continue;
         }
         let r = Receipt::from_json(input(&v)).unwrap();

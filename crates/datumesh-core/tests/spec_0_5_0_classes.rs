@@ -81,8 +81,8 @@ mod classes {
     #[test]
     fn every_class_vector_defines_or_fails_with_its_code() {
         let all = vectors_of_kind("class");
-        // 12 valid, 32 invalid (every class code of 10.2 among them).
-        assert_eq!(all.len(), 45);
+        // 12 valid, 32 invalid (every class code of 10.2 among them); spec-0.6.1 adds 5 (2 valid, 3 invalid).
+        assert_eq!(all.len(), 50);
         for v in &all {
             let id = str_of(v, "id");
             let got = define_class(str_of(v, "name"), str_of(v, "input").as_bytes(), &env_of(v));
@@ -898,7 +898,7 @@ mod describe {
     #[test]
     fn every_describe_vector() {
         let all = vectors_of_kind("describe");
-        assert_eq!(all.len(), 46); // 12 valid, 34 invalid (spec-0.6.0 added 6 valid, 16 invalid)
+        assert_eq!(all.len(), 65); // 12 valid, 34 invalid (spec-0.6.0 added 6 valid, 16 invalid); spec-0.6.1 adds 19 (9 valid, 10 invalid)
         for v in &all {
             let id = str_of(v, "id");
             // 6d5633e (16.8 step 6): a vector's held function descriptors go to check_describe_with
@@ -1087,7 +1087,7 @@ mod define {
     #[test]
     fn every_define_vector() {
         let all = vectors_of_kind("define");
-        assert_eq!(all.len(), 7); // 3 valid, 4 invalid
+        assert_eq!(all.len(), 35); // 3 valid, 4 invalid; spec-0.6.1 adds 28 (10 valid, 18 invalid)
         for v in &all {
             let id = str_of(v, "id");
             let got = check_define(str_of(v, "name"), str_of(v, "input").as_bytes());
