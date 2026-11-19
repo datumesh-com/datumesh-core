@@ -9,7 +9,7 @@ Specification: `spec-0.6.0` (part one of Build 2: `source` and the trust value `
 scenarios, cycles that name their path, digit-led words in requests (the formula library, not this
 crate), tests for public functions (a mesh's rule, not this crate's) and no backdating (a mesh's
 rule)). Additions only: `API-CHANGES-0.3.9.md` has the `cargo public-api diff` against 0.3.8.
-The existing vectors are unchanged, and the 90 new ones pass: 79 of the kinds a verifier library
+The existing vectors are unchanged, and the 95 new ones pass: 84 of the kinds a verifier library
 runs (`receipt`, `envelope`, `describe`, `mesh`), and the 11 `call` vectors stay skipped.
 
 **A mesh that serves receipts with `source` is unverifiable by clients on core < 0.3.9 or datumesh < 0.6.0 (@datumesh/verify < 0.6.0); such receipts are new, and every receipt signed before them verifies unchanged.**
@@ -26,7 +26,8 @@ Clients on older libraries reject a receipt with `source` (`E_SCHEMA`), the trus
   refuses any unknown trust value: relayed receipts are read through `check_answer`.
 - **`whatif` (5.9).** `Request::with_whatif` (overrides and `solve`), `Request::overrides()` and
   `solve()`. `AnswerOutcome::Scenario` with `Scenario` and `Solved`, built by `Answer::scenario`. A
-  scenario is its own type: it has no receipt and no trust, and cannot be turned into one. Codes:
+  scenario is its own type: it has no receipt and no trust, and cannot be turned into one. Empty
+  `overrides` are sent only with `solve`: `with_whatif(&[], None)` is an `InvalidRequest`. Codes:
   `ErrorCode::WhatifUnsupported` (a `bad_request` of a whatif request with `solve`) and
   `ErrorCode::WhatifNoSolution` (`Fault::WhatifNoSolution`, a `not_covered` fault of a request with
   `solve`); neither is a verification result. The mesh document's optional `whatif` endpoint is read

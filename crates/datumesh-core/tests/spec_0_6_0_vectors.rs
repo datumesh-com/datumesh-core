@@ -1,4 +1,4 @@
-//! spec-0.6.0 (640898c): every new vector of the kinds this library runs is run through the
+//! spec-0.6.0 (941d9b5): every new vector of the kinds this library runs is run through the
 //! public API and compared with its expected result: `receipt` (`verify`), `envelope`
 //! (`check_answer`, with the request's `overrides` and `solve`), `describe` (`check_describe_with`,
 //! the function answer included) and `mesh` (`resolve_mesh`, with the `whatif` endpoint). The 11
@@ -17,8 +17,9 @@ use datumesh_core::{
     FunctionDescriptor, Request, Retrieval, TrustLabel,
 };
 
-/// The 90 vectors spec-0.6.0 added, as `(kind, id)`: `git diff --name-only c8896ad..640898c -- vectors`.
-const NEW: [(&str, &str); 90] = [
+/// The 95 vectors spec-0.6.0 added, as `(kind, id)`: 90 by `git diff --name-only c8896ad..640898c -- vectors`,
+/// and 5 more at 941d9b5 (the whatif envelopes).
+const NEW: [(&str, &str); 95] = [
     ("call", "call/digit-led-1cor"),
     ("call", "call/digit-led-2chr"),
     ("call", "call/digit-led-3john"),
@@ -61,6 +62,9 @@ const NEW: [(&str, &str); 90] = [
     ("envelope", "envelope/scenario-slice-override"),
     ("envelope", "envelope/scenario-solved"),
     ("envelope", "envelope/scenario-value-override"),
+    ("envelope", "envelope/whatif-bad-request-slice-member"),
+    ("envelope", "envelope/whatif-bad-request-unsupported"),
+    ("envelope", "envelope/whatif-not-covered-no-solution"),
     ("envelope", "invalid/envelope-cycle-extra-member"),
     ("envelope", "invalid/envelope-cycle-fix-unknown"),
     ("envelope", "invalid/envelope-cycle-fixes-duplicate"),
@@ -72,6 +76,8 @@ const NEW: [(&str, &str); 90] = [
     ("envelope", "invalid/envelope-cycle-path-ends-differ"),
     ("envelope", "invalid/envelope-cycle-path-not-string"),
     ("envelope", "invalid/envelope-cycle-path-of-one"),
+    ("envelope", "invalid/envelope-error-whatif-unsupported"),
+    ("envelope", "invalid/envelope-no-solution-without-solve"),
     ("envelope", "invalid/envelope-ok-with-overrides"),
     ("envelope", "invalid/envelope-scenario-extra-member"),
     ("envelope", "invalid/envelope-scenario-missing-member"),
@@ -118,7 +124,7 @@ fn is_new(v: &Value) -> bool {
 fn new_vectors(kind: &str) -> Vec<Value> {
     let all: Vec<Value> = vectors_of_kind(kind).into_iter().filter(is_new).collect();
     let want = NEW.iter().filter(|(k, _)| *k == kind).count();
-    assert_eq!(all.len(), want, "the new {kind} vectors are all there (spec submodule at 640898c)");
+    assert_eq!(all.len(), want, "the new {kind} vectors are all there (spec submodule at 941d9b5)");
     all
 }
 
@@ -292,5 +298,5 @@ fn the_new_call_vectors_are_not_this_librarys() {
     // `call` stays skipped by verifier libraries (the CLI runner reports them as skipped).
     let calls = NEW.iter().filter(|(k, _)| *k == "call").count();
     assert_eq!(calls, 11);
-    assert_eq!(NEW.len() - calls, 79, "79 of the 90 are of the kinds core runs");
+    assert_eq!(NEW.len() - calls, 84, "84 of the 95 are of the kinds core runs");
 }

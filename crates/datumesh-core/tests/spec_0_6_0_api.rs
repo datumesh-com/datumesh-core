@@ -216,15 +216,16 @@ fn a_request_may_carry_overrides_and_solve() {
     assert_eq!(plain.overrides(), None);
     assert_eq!(plain.solve(), None);
 
+    // 5.9 (final spec-0.6.0): empty overrides are only sent with solve, so without it they are
+    // the caller's error (InvalidRequest), not a request.
     let empty = json::parse(b"[]").unwrap();
-    let r = plain.clone().with_whatif(&empty, None).unwrap();
-    assert_eq!(r.overrides().map(jcs).as_deref(), Some("[]"));
-    assert_eq!(r.solve(), None);
-    assert_eq!(r.cell_id(), cid);
+    assert!(plain.clone().with_whatif(&empty, None).is_err(), "empty overrides without solve");
 
     let vary = "f".repeat(64);
     let r = plain.clone().with_whatif(&empty, Some(&vary)).unwrap();
+    assert_eq!(r.overrides().map(jcs).as_deref(), Some("[]"));
     assert_eq!(r.solve(), Some(vary.as_str()));
+    assert_eq!(r.cell_id(), cid);
 }
 
 #[test]

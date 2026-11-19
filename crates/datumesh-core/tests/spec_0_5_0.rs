@@ -94,14 +94,13 @@ mod codes {
             .map(|rest| rest.trim_end_matches('`'))
             .collect();
         let start = table.iter().position(|c| *c == "FOREIGN_UNAVAILABLE").expect("10.2 lists E_FOREIGN_UNAVAILABLE");
-        // The table ends with E_DESCRIBE (the formula codes of 15.11 follow in another table).
-        let end = table.iter().position(|c| *c == "DESCRIBE").expect("10.2 lists E_DESCRIBE");
-        // spec-0.6.0 places its two whatif codes in this table too (before SHORT_ID_AMBIGUOUS);
-        // they are checked in spec_0_6_0_api.rs, against ErrorCode::ALL's order.
-        let after: Vec<String> =
-            table[start + 1..=end].iter().filter(|c| !c.starts_with("WHATIF_")).map(|c| format!("E_{c}")).collect();
-        let want: Vec<&str> = NEW_CODES.iter().map(|(t, _)| *t).collect();
-        assert_eq!(after, want, "10.2 order of the codes of spec-0.5.0");
+        // The table ends with the two whatif codes of spec-0.6.0 (the formula codes of 15.11
+        // follow in another table), after E_DESCRIBE.
+        let end = table.iter().position(|c| *c == "WHATIF_NO_SOLUTION").expect("10.2 lists E_WHATIF_NO_SOLUTION");
+        let after: Vec<String> = table[start + 1..=end].iter().map(|c| format!("E_{c}")).collect();
+        let want: Vec<&str> =
+            NEW_CODES.iter().map(|(t, _)| *t).chain(["E_WHATIF_UNSUPPORTED", "E_WHATIF_NO_SOLUTION"]).collect();
+        assert_eq!(after, want, "10.2 order of the codes since spec-0.5.0, then the whatif codes of spec-0.6.0");
 
         // spec-0.6.0 appends the two whatif codes (spec_0_6_0_api.rs): 65 codes.
         assert_eq!(ErrorCode::ALL.len(), 65);

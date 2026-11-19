@@ -168,6 +168,9 @@
 {"error":null,"id":"envelope/stale-verified","outcome":"stale","receipt_hash":"9f4d8814808d783e83b0424f90439fbbedc5f73457828d0ed346b0f424a85527","trust":"verified"}
 {"error":null,"id":"envelope/stale","outcome":"stale","receipt_hash":"19a5fe3a744c5792f747fb4c286ce396ab44b95922de4f07937502fe595b6f81","trust":"primary"}
 {"error":null,"id":"envelope/unlicensed","outcome":"unlicensed"}
+{"error":null,"id":"envelope/whatif-bad-request-slice-member","outcome":"bad_request"}
+{"error":null,"id":"envelope/whatif-bad-request-unsupported","outcome":"bad_request"}
+{"error":null,"id":"envelope/whatif-not-covered-no-solution","outcome":"not_covered"}
 {"error":null,"id":"excel/abs","skipped":"excel"}
 {"error":null,"id":"excel/acos","skipped":"excel"}
 {"error":null,"id":"excel/and","skipped":"excel"}
@@ -756,6 +759,7 @@
 {"error":"E_ENVELOPE","id":"invalid/envelope-error-name-unbound"}
 {"error":"E_ENVELOPE","id":"invalid/envelope-error-slice-at-cell"}
 {"error":"E_ENVELOPE","id":"invalid/envelope-error-unknown-code"}
+{"error":"E_ENVELOPE","id":"invalid/envelope-error-whatif-unsupported"}
 {"error":"E_ENVELOPE","id":"invalid/envelope-foreign-unavailable-bad-detail"}
 {"error":"E_ENVELOPE","id":"invalid/envelope-foreign-unavailable-detail-other-code"}
 {"error":"E_ENVELOPE","id":"invalid/envelope-foreign-unavailable-no-detail"}
@@ -767,6 +771,7 @@
 {"error":"E_ENVELOPE","id":"invalid/envelope-key-encoding-in-error"}
 {"error":"E_ENVELOPE","id":"invalid/envelope-key-normalisation-in-error"}
 {"error":"E_ENVELOPE","id":"invalid/envelope-namespace-suspended-in-error"}
+{"error":"E_ENVELOPE","id":"invalid/envelope-no-solution-without-solve"}
 {"error":"E_ENVELOPE","id":"invalid/envelope-not-covered-error-and-fault"}
 {"error":"E_ENVELOPE","id":"invalid/envelope-not-covered-fault-unknown"}
 {"error":"E_ENVELOPE","id":"invalid/envelope-not-covered-other-code"}
