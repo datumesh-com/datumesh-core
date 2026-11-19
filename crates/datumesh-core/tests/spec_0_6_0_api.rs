@@ -25,7 +25,7 @@ use datumesh_core::json::{self, Value};
 use datumesh_core::{
     check_answer, check_describe_with, check_envelope, Answer, AnswerOutcome, Cell, Cycle, CycleFix, DescribeKind,
     DescribeSource, DescribeTests, ErrorCode, Fault, FunctionAnswer, FunctionDescriptor, MeshDoc, Receipt, Request,
-    Scalar, Scenario, Solved, Source, Trust, TrustLabel, Type,
+    Scalar, Scenario, Solved, Source, TrustLabel, Type,
 };
 
 fn status(v: &Value) -> u16 {
@@ -172,12 +172,12 @@ fn source_values_are_built_member_by_member() {
 
 #[test]
 fn trust_relayed() {
-    assert_eq!(Trust::Relayed.as_str(), "relayed");
     assert_eq!(TrustLabel::Relayed.as_str(), "relayed");
-    // Through the 0.3.x function and through Answer: envelope/relayed.
+    // The 0.3.x envelope (`Trust`, exhaustive) refuses the value `relayed` as an unknown trust
+    // value, as it did before spec-0.6.0. Relayed envelopes are read through `check_answer`.
     let v = vector_by_id("envelope/relayed");
-    let env = check_envelope(status(&v), input(&v), &keys(&v), &plain_request(&v)).unwrap();
-    assert_eq!(env.trust, Some(Trust::Relayed));
+    let e = check_envelope(status(&v), input(&v), &keys(&v), &plain_request(&v)).unwrap_err();
+    assert_eq!(e.code(), ErrorCode::Envelope);
     let a = check_answer(status(&v), input(&v), &keys(&v), &plain_request(&v)).unwrap();
     assert_eq!(a.trust, Some(TrustLabel::Relayed));
     assert_eq!(a.receipt.as_ref().unwrap().source().unwrap().name(), "bank.example.com");

@@ -27,6 +27,9 @@
 //! an `error` envelope may say a foreign mesh was unreachable (`E_FOREIGN_UNAVAILABLE`,
 //! [`ForeignDetail`]), and names under `.invalid` are unrooted ([`is_unrooted`]). Feature `sign` adds `SigningKey` and
 //! `ReceiptBuilder`, which make receipts that verify byte for byte like the specification's.
+//! Since `spec-0.6.0` a stored receipt may carry a `source` ([`Source`]), with the trust value
+//! `relayed` ([`TrustLabel::Relayed`]); a `whatif` read answers a [`Scenario`], which is never a
+//! receipt; and an evaluation cycle names its path ([`Cycle`]). [`check_answer`] reads all of them.
 //! Feature `fetch` (`fetch_keys`) is deprecated since 0.3.1 and removed at 1.0: fetch key
 //! documents with your own HTTP client and pass the response to [`keys_from_response`].
 //!
@@ -78,13 +81,15 @@ mod uri;
 mod verify;
 
 pub use answer::{
-    batch_body, check_answer, check_batch, check_slice_answer, Answer, AnswerOutcome, Batch, SlicePage, SliceRequest,
-    TrustLabel,
+    batch_body, check_answer, check_batch, check_slice_answer, Answer, AnswerOutcome, Batch, Cycle, CycleFix, Scenario,
+    SlicePage, SliceRequest, Solved, TrustLabel,
 };
 pub use class::{define_class, ClassDescriptor, ClassEnv, ClassExtent, ClassKey, Steward};
 pub use crypto::{key_id, sha256, sha256_hex, verify_ed25519};
 pub use define::check_define;
-pub use describe::{check_describe, check_describe_with, DescribeKind, Described};
+pub use describe::{
+    check_describe, check_describe_with, DescribeKind, DescribeSource, DescribeTests, Described, FunctionAnswer,
+};
 pub use descriptor::{
     resolve_with, resolved_unit, resolved_unit_value, ArgDecl, ArgExtras, Descriptor, Extent, FunctionDescriptor,
     RateSide, Returns, Signature, Unit,
@@ -109,7 +114,7 @@ pub use licence::{
 pub use model::{Arg, Args, Cell, CellRef, Reference, Scalar, Type};
 pub use normalisation::KeyNormalisation;
 pub use object::{format_object_key, parse_object_key, short_id, KeyValue, ObjectKey};
-pub use receipt::{receipt_hash, receipt_payload, Receipt};
+pub use receipt::{receipt_hash, receipt_payload, Receipt, Source};
 #[cfg(feature = "sign")]
 pub use sign::{ReceiptBuilder, SigningKey};
 pub use slice::{Manifest, Slice};

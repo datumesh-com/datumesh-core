@@ -20,6 +20,13 @@ doc = false
 bench = false
 
 [[bin]]
+name = "receipt_source"
+path = "fuzz_targets/receipt_source.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
 name = "uri"
 path = "fuzz_targets/uri.rs"
 test = false

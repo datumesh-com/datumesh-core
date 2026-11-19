@@ -11,7 +11,7 @@ use crate::licence::Declarations;
 use crate::schema;
 
 /// The endpoints of 9.6: name, placeholders, whether required.
-const ENDPOINTS: [(&str, &[&str], bool); 13] = [
+const ENDPOINTS: [(&str, &[&str], bool); 14] = [
     ("blob", &["sha256"], false),
     ("cell", &["cell"], true),
     ("cells", &[], false),
@@ -25,6 +25,8 @@ const ENDPOINTS: [(&str, &[&str], bool); 13] = [
     ("slice", &["cell"], false),
     ("verify", &[], false),
     ("versions", &["cell"], false),
+    // spec-0.6.0: a read with overrides (5.9); no placeholders, and optional.
+    ("whatif", &[], false),
 ];
 
 /// What one HTTPS `GET` of a document gave, as the caller's HTTP client saw it.

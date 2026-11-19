@@ -11,7 +11,7 @@ use crate::error::Result;
 use crate::json::Value;
 use crate::lexical::to_hex;
 use crate::model::{args_to_value, Args, Cell, Scalar};
-use crate::receipt::Receipt;
+use crate::receipt::{Receipt, Source};
 
 /// An Ed25519 signing key, from its 32-byte seed (RFC 8032 5.1.5).
 ///
@@ -71,6 +71,7 @@ pub struct ReceiptBuilder {
     inputs: Vec<String>,
     licence: Option<String>,
     summary: Option<String>,
+    source: Option<Source>,
 }
 
 impl ReceiptBuilder {
@@ -150,6 +151,13 @@ impl ReceiptBuilder {
         self
     }
 
+    /// The `source` member (8.1, `spec-0.6.0`): where the value was taken from. Only with no
+    /// inputs; `sign` refuses it otherwise (`E_SCHEMA`).
+    pub fn source(mut self, source: Source) -> Self {
+        self.source = Some(source);
+        self
+    }
+
     /// Checks the members as [`Receipt::from_json`] does, then signs the payload (8.3) with
     /// `key`. The receipt's `computed_by` is `<signer host>#<key.key_id()>`.
     ///
@@ -180,6 +188,7 @@ impl ReceiptBuilder {
             ("proto", Some(Value::String("datumesh/1".into()))),
             ("publisher", s(&self.publisher)),
             ("sig", Some(Value::String(placeholder))),
+            ("source", self.source.as_ref().map(Source::to_value)),
             ("summary", s(&self.summary)),
             ("tx", s(&self.tx)),
             ("type", ty),

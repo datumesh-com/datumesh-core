@@ -201,7 +201,9 @@ fn every_envelope_vector_checks_as_expected() {
 /// An envelope vector of spec-0.6.0 that only `check_answer` reads: the request has `overrides`
 /// (the scenario outcome), or the error envelope names a `cycle`.
 fn since_0_6_0(v: &Value) -> bool {
-    v.get("request").unwrap().get("overrides").is_some() || str_of(v, "input").contains("\"cycle\"")
+    v.get("request").unwrap().get("overrides").is_some()
+        || str_of(v, "input").contains("\"cycle\"")
+        || str_of(v, "input").contains("\"relayed\"")
 }
 
 /// An envelope vector of spec-0.4.2: trust computed, a pin, the mesh asked or a slice request.

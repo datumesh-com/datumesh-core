@@ -861,3 +861,28 @@ Each entry is resolved in the implementation as stated.
   characters are listed in 16.4, and the implementation lists the same ones.
 - **Resolution.** The White_Space set of Unicode 15.1 is written out in the crate (not read from
   the platform's `char::is_whitespace`), so a later Rust release cannot change it.
+
+## spec-0.6.0 (`05172a4`), implemented in datumesh-core 0.3.9
+
+- **DF-06-1, release line.** Section 14's verbatim line says "clients on core < 0.4.0"; the release is
+  0.3.9. This crate's CHANGELOG says `core < 0.3.9`, as the coordinator decided. Round 2 changes the
+  spec text to match.
+- **DF-06-2, the error envelope's codes (5.5).** The list of codes an `error` envelope may not carry
+  names only `E_WHATIF_UNSUPPORTED`. The tests (`spec_0_5_0_repin`, `spec_0_6_0_api`) and 15.11 treat
+  `E_WHATIF_NO_SOLUTION` the same way: neither is an `error`'s. This crate refuses both. The list
+  should name both.
+- **DF-06-3, `E_WHATIF_UNSUPPORTED` and `E_SLICE_MEMBER` in `bad_request` (5.5, 5.9).** The text says
+  "at whatif". This crate allows `E_WHATIF_UNSUPPORTED` only when the request has `solve`, and
+  `E_SLICE_MEMBER` only when it has overrides, as the coordinator decided. `E_WHATIF_NO_SOLUTION` is a
+  `not_covered` fault only with `solve`.
+- **DF-06-4, empty overrides (5.9).** The text says `overrides` may be empty only with `solve`. The
+  test `spec_0_6_0_api::a_request_may_carry_overrides_and_solve` expects `Request::with_whatif` to
+  accept `[]` without `solve`, which this crate now refuses as a malformed request (`InvalidRequest`),
+  following the text and the coordinator. The test line is reported, not changed.
+- **DF-06-5, the 10.2 table order.** The table places `E_WHATIF_UNSUPPORTED` and
+  `E_WHATIF_NO_SOLUTION` before `E_SHORT_ID_AMBIGUOUS`. `ErrorCode::ALL` keeps them last, after
+  `E_DESCRIBE`, as the coordinator and the tests decided. The 0.5.0 order test filters them out.
+- **DF-06-6, function answers and `Described`.** `Described.class` and `class_hash` are not optional, so a
+  function answer carries empty strings there. Its name is in `function`.
+- **DF-06-7, the legacy envelope.** `check_envelope` refuses `relayed`, `scenario` and `cycle` as
+  unknown members or values, as the coordinator decided. `Trust` is exhaustive and is not changed.

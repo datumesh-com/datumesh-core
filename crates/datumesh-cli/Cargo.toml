@@ -1,6 +1,6 @@
 [package]
 name = "datumesh-cli"
-version = "0.3.8"
+version = "0.3.9"
 description = "Vector runner for datumesh-core (not published)."
 edition.workspace = true
 rust-version.workspace = true

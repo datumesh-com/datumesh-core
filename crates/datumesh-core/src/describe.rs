@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 
 use crate::class::{ClassDescriptor, ClassKey};
 use crate::descriptor::FunctionDescriptor;
+use crate::envelope::integer_member;
 use crate::error::{err, Error, ErrorCode, Result};
 use crate::json::{self, Value};
 use crate::lexical;
@@ -20,6 +21,97 @@ pub enum DescribeKind {
     Class,
     /// `"kind": "object"`.
     Object,
+    /// `"kind": "function"` (since `spec-0.6.0`): a function name, with its `fn_hash`, `args`
+    /// and `returns`.
+    Function,
+}
+
+/// The `tests` member of a method entry or a function answer (16.8, `spec-0.6.0`): the mesh's
+/// statement of the tests it holds for the function hash (7.2). Four integers: `covered` is at
+/// most `branches`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct DescribeTests {
+    /// The tests held.
+    pub count: u64,
+    /// The branches of the function.
+    pub branches: u64,
+    /// The branches the tests cover, at most `branches`.
+    pub covered: u64,
+    /// The tests whose expected result the function did not give.
+    pub counterexamples: u64,
+}
+
+impl DescribeTests {
+    fn check(&self) -> Result<()> {
+        if self.covered > self.branches {
+            return err(ErrorCode::Describe, "$.tests", "covered is at most branches");
+        }
+        Ok(())
+    }
+}
+
+/// The `source` member of a relayed function (16.8, `spec-0.6.0`): where the function's value is
+/// taken from, the mesh that relays it, and where the source can take over publishing.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct DescribeSource {
+    /// The source's DNS name (2.1).
+    pub name: String,
+    /// The mesh's own host, which relays the function.
+    pub relayed_by: String,
+    /// An `https://` URL where the source can take over publishing these cells.
+    pub takeover: String,
+}
+
+impl DescribeSource {
+    fn check(&self) -> Result<()> {
+        lexical::check_dns_name(&self.name, "$.source.name").map_err(|e| e.recode(ErrorCode::Describe))?;
+        lexical::check_dns_name(&self.relayed_by, "$.source.relayed_by").map_err(|e| e.recode(ErrorCode::Describe))?;
+        takeover_check(&self.takeover, "$.source.takeover")
+    }
+}
+
+/// A takeover URL (16.8, 8.1): `https://` by the licence URL rule, else `E_DESCRIBE`.
+fn takeover_check(u: &str, path: &str) -> Result<()> {
+    if !u.starts_with("https://") {
+        return err(ErrorCode::Describe, path, "takeover is an https:// URL");
+    }
+    lexical::check_licence(u, path).map_err(|e| e.recode(ErrorCode::Describe))
+}
+
+fn tests_of(v: &Value, p: &str) -> Result<DescribeTests> {
+    let m = schema::object_or(v, p, ErrorCode::Describe, "tests")?;
+    schema::exact(m, &["branches", "count", "counterexamples", "covered"], &[], p, ErrorCode::Describe)?;
+    let int =
+        |k: &str| integer_member(schema::get(m, k), &format!("{p}.{k}")).map_err(|e| e.recode(ErrorCode::Describe));
+    let t = DescribeTests {
+        count: int("count")?,
+        branches: int("branches")?,
+        covered: int("covered")?,
+        counterexamples: int("counterexamples")?,
+    };
+    t.check()?;
+    Ok(t)
+}
+
+fn source_of(v: &Value, p: &str) -> Result<DescribeSource> {
+    let m = schema::object_or(v, p, ErrorCode::Describe, "source")?;
+    schema::exact(m, &["name", "relayed_by", "takeover"], &[], p, ErrorCode::Describe)?;
+    let t = DescribeSource {
+        name: schema::string_or(m, "name", p, ErrorCode::Describe)?.into(),
+        relayed_by: schema::string_or(m, "relayed_by", p, ErrorCode::Describe)?.into(),
+        takeover: schema::string_or(m, "takeover", p, ErrorCode::Describe)?.into(),
+    };
+    t.check()?;
+    Ok(t)
+}
+
+/// A function's `args` and `returns`, as its descriptor's signature gives them (7).
+fn signature(f: &FunctionDescriptor) -> Result<(Value, Value)> {
+    let fv = f.to_value();
+    let top = schema::object_or(&fv, "$", ErrorCode::Describe, "a function")?;
+    let sig = schema::object_or(schema::get(top, "signature"), "$.signature", ErrorCode::Describe, "a signature")?;
+    let pick = |name: &str| sig.iter().find(|(k, _)| k == name).map(|(_, v)| v.clone()).unwrap_or(Value::Null);
+    Ok((pick("args"), pick("returns")))
 }
 
 /// A describe answer that passed [`check_describe`].
@@ -34,6 +126,15 @@ pub struct Described {
     pub class_hash: String,
     /// The object id (an object answer only).
     pub object_id: Option<String>,
+    /// The function name (a function answer only, `spec-0.6.0`).
+    pub function: Option<String>,
+    /// The function hash (a function answer only, `spec-0.6.0`).
+    pub fn_hash: Option<String>,
+    /// The tests the mesh holds (a function answer's, or a method entry's, `spec-0.6.0`).
+    /// `None` for an object answer, a class, and any entry without `tests`.
+    pub tests: Option<DescribeTests>,
+    /// Where a relayed function's value is taken from (`spec-0.6.0`); `None` when not relayed.
+    pub source: Option<DescribeSource>,
 }
 
 /// Checks a describe answer (16.8) given as JSON text against the classes the caller holds
@@ -74,6 +175,7 @@ pub fn check_describe_with(
     match schema::string_or(m, "kind", "$", ErrorCode::Describe)? {
         "class" => check_class(m, held, functions),
         "object" => check_object(m, held),
+        "function" => check_function(m, functions),
         other => err(ErrorCode::Describe, "$.kind", format!("kind is class or object, not {other:?}")),
     }
 }
@@ -111,7 +213,13 @@ fn check_class(
         };
         let e = schema::object_or(entry, &p, ErrorCode::Describe, "a method entry")?;
         let members: &[&str] = &["fn", "fn_hash", "args", "returns"];
-        schema::exact(e, members, &["description"], &p, ErrorCode::Describe)?;
+        schema::exact(e, members, &["description", "tests", "source"], &p, ErrorCode::Describe)?;
+        if let Some(t) = schema::opt(e, "tests") {
+            tests_of(t, &format!("{p}.tests"))?;
+        }
+        if let Some(src) = schema::opt(e, "source") {
+            source_of(src, &format!("{p}.source"))?;
+        }
         if schema::string_or(e, "fn", &p, ErrorCode::Describe)? != format!("{class}/{name}") {
             return err(ErrorCode::Describe, &p, "fn is the class's name and the method's");
         }
@@ -140,6 +248,10 @@ fn check_class(
             class: class.into(),
             class_hash: class_hash.into(),
             object_id: None,
+            function: None,
+            fn_hash: None,
+            tests: None,
+            source: None,
         });
     };
     // Step 5: the descriptor is the held one (equal hashes: equal canonical bytes).
@@ -181,7 +293,16 @@ fn check_class(
             return err(ErrorCode::Describe, &p, "returns is the function's returns");
         }
     }
-    Ok(Described { kind: DescribeKind::Class, class: class.into(), class_hash: class_hash.into(), object_id: None })
+    Ok(Described {
+        kind: DescribeKind::Class,
+        class: class.into(),
+        class_hash: class_hash.into(),
+        object_id: None,
+        function: None,
+        fn_hash: None,
+        tests: None,
+        source: None,
+    })
 }
 
 /// An object answer (16.8): steps 2 and 3, then 4 and 5 against the held class.
@@ -278,6 +399,10 @@ fn check_object(m: &[(String, Value)], held: &BTreeMap<String, ClassDescriptor>)
             class: class.into(),
             class_hash: class_hash.into(),
             object_id: Some(object_id),
+            function: None,
+            fn_hash: None,
+            tests: None,
+            source: None,
         });
     };
     // Step 5: the keys are the class's, of their types, and the methods are the class's.
@@ -318,5 +443,169 @@ fn check_object(m: &[(String, Value)], held: &BTreeMap<String, ClassDescriptor>)
         class: class.into(),
         class_hash: class_hash.into(),
         object_id: Some(object_id),
+        function: None,
+        fn_hash: None,
+        tests: None,
+        source: None,
     })
+}
+
+/// A function answer (16.8, `spec-0.6.0`): the shape, then step 6 against the held function
+/// descriptor when one is held: its `args`, all of them, and its `returns`.
+fn check_function(m: &[(String, Value)], functions: &[FunctionDescriptor]) -> Result<Described> {
+    schema::exact(
+        m,
+        &["kind", "fn", "fn_hash", "args", "returns"],
+        &["description", "tests", "source"],
+        "$",
+        ErrorCode::Describe,
+    )?;
+    let name = schema::string_or(m, "fn", "$", ErrorCode::Describe)?;
+    lexical::check_function_name(name, "$.fn").map_err(|e| e.recode(ErrorCode::Describe))?;
+    let fn_hash = schema::string_or(m, "fn_hash", "$", ErrorCode::Describe)?;
+    lexical::check_hex(fn_hash, 64, "$.fn_hash").map_err(|e| e.recode(ErrorCode::Describe))?;
+    let args = schema::get(m, "args");
+    schema::object_or(args, "$.args", ErrorCode::Describe, "args")?;
+    let returns = schema::get(m, "returns");
+    match returns {
+        Value::String(_) | Value::Object(_) => {}
+        _ => return err(ErrorCode::Describe, "$.returns", "returns is a type name or an object"),
+    }
+    if let Some(d) = schema::opt(m, "description") {
+        let Value::String(d) = d else { return err(ErrorCode::Describe, "$.description", "description is a string") };
+        if d.is_empty() || d.len() > 1024 || lexical::check_string(d, "$.description").is_err() {
+            return err(ErrorCode::Describe, "$.description", "description is a string of 1 to 1024 bytes");
+        }
+    }
+    let tests = match schema::opt(m, "tests") {
+        Some(t) => Some(tests_of(t, "$.tests")?),
+        None => None,
+    };
+    let source = match schema::opt(m, "source") {
+        Some(src) => Some(source_of(src, "$.source")?),
+        None => None,
+    };
+    // Step 6: the held function with this hash (none held: unchecked).
+    if let Some(f) = functions.iter().find(|f| f.hash() == fn_hash) {
+        let (want_args, want_returns) = signature(f)?;
+        if args.to_jcs() != want_args.to_jcs() {
+            return err(ErrorCode::Describe, "$.args", "args are the function's arguments");
+        }
+        if returns.to_jcs() != want_returns.to_jcs() {
+            return err(ErrorCode::Describe, "$.returns", "returns is the function's returns");
+        }
+    }
+    Ok(Described {
+        kind: DescribeKind::Function,
+        class: String::new(),
+        class_hash: String::new(),
+        object_id: None,
+        function: Some(name.into()),
+        fn_hash: Some(fn_hash.into()),
+        tests,
+        source,
+    })
+}
+
+/// A function answer (16.8, `spec-0.6.0`) built from its descriptor, with the members of
+/// [`check_describe_with`]: `kind` `"function"`, `fn`, `fn_hash`, `args` and `returns`, and
+/// optionally `description`, `tests` and `source`. The name is a function name (2.3); the
+/// description, tests and source are checked as the client checks them.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FunctionAnswer {
+    name: String,
+    fn_hash: String,
+    args: Value,
+    returns: Value,
+    description: Option<String>,
+    tests: Option<DescribeTests>,
+    source: Option<DescribeSource>,
+}
+
+impl FunctionAnswer {
+    /// The answer for the function named `name` (a function name, 2.3) with descriptor `d`.
+    pub fn new(name: &str, d: &FunctionDescriptor) -> Result<FunctionAnswer> {
+        lexical::check_function_name(name, "$.fn").map_err(|e| e.recode(ErrorCode::Describe))?;
+        let (args, returns) = signature(d)?;
+        Ok(FunctionAnswer {
+            name: name.into(),
+            fn_hash: d.hash(),
+            args,
+            returns,
+            description: None,
+            tests: None,
+            source: None,
+        })
+    }
+
+    /// With `description`: 1 to 1024 bytes, valid by 3.5 (`E_DESCRIBE` otherwise).
+    pub fn with_description(self, description: &str) -> Result<FunctionAnswer> {
+        if description.is_empty()
+            || description.len() > 1024
+            || lexical::check_string(description, "$.description").is_err()
+        {
+            return err(ErrorCode::Describe, "$.description", "description is a string of 1 to 1024 bytes");
+        }
+        Ok(FunctionAnswer { description: Some(description.into()), ..self })
+    }
+
+    /// With `tests` (`E_DESCRIBE` when `covered` exceeds `branches`).
+    pub fn with_tests(self, tests: DescribeTests) -> Result<FunctionAnswer> {
+        tests.check()?;
+        Ok(FunctionAnswer { tests: Some(tests), ..self })
+    }
+
+    /// With `source`, for a relayed function (`E_DESCRIBE` for a name that is not a DNS name, a
+    /// `relayed_by` that is not one, or a takeover that is not `https://`).
+    pub fn with_source(self, source: DescribeSource) -> Result<FunctionAnswer> {
+        source.check()?;
+        Ok(FunctionAnswer { source: Some(source), ..self })
+    }
+
+    /// The answer as a JSON value.
+    pub fn to_value(&self) -> Value {
+        let s = |x: &str| Value::String(x.into());
+        let mut m = vec![
+            ("kind".to_string(), s("function")),
+            ("fn".to_string(), s(&self.name)),
+            ("fn_hash".to_string(), s(&self.fn_hash)),
+            ("args".to_string(), self.args.clone()),
+            ("returns".to_string(), self.returns.clone()),
+        ];
+        if let Some(d) = &self.description {
+            m.push(("description".into(), s(d)));
+        }
+        if let Some(t) = &self.tests {
+            m.push((
+                "tests".into(),
+                Value::Object(vec![
+                    ("branches".into(), num(t.branches)),
+                    ("count".into(), num(t.count)),
+                    ("counterexamples".into(), num(t.counterexamples)),
+                    ("covered".into(), num(t.covered)),
+                ]),
+            ));
+        }
+        if let Some(src) = &self.source {
+            m.push((
+                "source".into(),
+                Value::Object(vec![
+                    ("name".into(), s(&src.name)),
+                    ("relayed_by".into(), s(&src.relayed_by)),
+                    ("takeover".into(), s(&src.takeover)),
+                ]),
+            ));
+        }
+        Value::Object(m)
+    }
+
+    /// The answer's body: its canonical JSON text (JCS).
+    pub fn to_json(&self) -> Vec<u8> {
+        self.to_value().to_jcs()
+    }
+}
+
+/// A count as a JSON number (its canonical text).
+fn num(x: u64) -> Value {
+    json::parse(x.to_string().as_bytes()).unwrap_or(Value::Null)
 }

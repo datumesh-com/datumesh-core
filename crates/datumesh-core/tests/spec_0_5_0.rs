@@ -96,11 +96,15 @@ mod codes {
         let start = table.iter().position(|c| *c == "FOREIGN_UNAVAILABLE").expect("10.2 lists E_FOREIGN_UNAVAILABLE");
         // The table ends with E_DESCRIBE (the formula codes of 15.11 follow in another table).
         let end = table.iter().position(|c| *c == "DESCRIBE").expect("10.2 lists E_DESCRIBE");
-        let after: Vec<String> = table[start + 1..=end].iter().map(|c| format!("E_{c}")).collect();
+        // spec-0.6.0 places its two whatif codes in this table too (before SHORT_ID_AMBIGUOUS);
+        // they are checked in spec_0_6_0_api.rs, against ErrorCode::ALL's order.
+        let after: Vec<String> =
+            table[start + 1..=end].iter().filter(|c| !c.starts_with("WHATIF_")).map(|c| format!("E_{c}")).collect();
         let want: Vec<&str> = NEW_CODES.iter().map(|(t, _)| *t).collect();
         assert_eq!(after, want, "10.2 order of the codes of spec-0.5.0");
 
-        assert_eq!(ErrorCode::ALL.len(), 63);
+        // spec-0.6.0 appends the two whatif codes (spec_0_6_0_api.rs): 65 codes.
+        assert_eq!(ErrorCode::ALL.len(), 65);
         assert_eq!(ErrorCode::ALL[48], ErrorCode::ForeignUnavailable);
         for (i, (text, code)) in NEW_CODES.iter().enumerate() {
             assert_eq!(ErrorCode::ALL[49 + i], *code);
@@ -125,6 +129,8 @@ mod codes {
             "E_FORMULA_FUTURE",
             "E_FORMULA_KEY",
             "E_FORMULA_DISPATCH_KEY",
+            // spec-0.6.0: the whatif fault, last (spec_0_6_0_api.rs).
+            "E_WHATIF_NO_SOLUTION",
         ];
         let got: Vec<&str> = Fault::ALL.iter().map(|f| f.as_str()).collect();
         assert_eq!(got, want);
@@ -486,7 +492,9 @@ mod envelopes {
             (a.outcome, a.error, a.fault),
             (AnswerOutcome::NotCovered, Some(ErrorCode::NamespaceSuspended), None)
         );
-        for f in Fault::ALL {
+        // spec-0.6.0: E_WHATIF_NO_SOLUTION is a fault only of a whatif request with solve
+        // (spec_0_6_0_api.rs), so it is not a plain not_covered fault here.
+        for f in Fault::ALL.iter().filter(|f| **f != Fault::WhatifNoSolution) {
             let body = format!(r#"{{"fault":"{}","outcome":"not_covered"}}"#, f.as_str());
             let a = check(404, &body).unwrap_or_else(|e| panic!("{f}: {e}"));
             assert_eq!(a.fault, Some(*f));

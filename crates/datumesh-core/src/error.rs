@@ -17,7 +17,8 @@ macro_rules! codes {
         /// `spec-0.4.2`, after `E_MESH_DOC`), then `ForeignUnavailable` (0.3.7, `spec-0.4.3`, last in
         /// 10.2 too), then, since 0.3.8 (`spec-0.5.0`), in the order of 10.2: `UnrootedInput`,
         /// `NamespaceSuspended`, the class codes `ClassMember` to `ClassOwner`,
-        /// `KeyNormalisation`, `KeyEncoding`, `ShortIdAmbiguous` and `Describe`. The formula
+        /// `KeyNormalisation`, `KeyEncoding`, `ShortIdAmbiguous` and `Describe`, then, since 0.3.9
+        /// (`spec-0.6.0`), `WhatifUnsupported` and `WhatifNoSolution`. The formula
         /// codes of SPEC 15.11 are not verification codes
         /// and have no variant; the envelope's `fault` is a [`crate::Fault`].
         #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -196,6 +197,12 @@ codes! {
     ShortIdAmbiguous = "E_SHORT_ID_AMBIGUOUS",
     /// A client's check of a describe answer failed (16.8, `spec-0.5.0`).
     Describe = "E_DESCRIBE",
+    /// A `whatif` request whose `solve` the mesh does not offer (5.9; `spec-0.6.0`). In a
+    /// `bad_request` envelope only; never a verification result.
+    WhatifUnsupported = "E_WHATIF_UNSUPPORTED",
+    /// A `whatif` `solve` found no value of `vary` within its bounds and fuel (5.9; `spec-0.6.0`).
+    /// The fault of a `not_covered` envelope; never a verification result.
+    WhatifNoSolution = "E_WHATIF_NO_SOLUTION",
 }
 
 impl fmt::Display for ErrorCode {

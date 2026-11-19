@@ -3,6 +3,41 @@
 All notable changes to `datumesh-core`. The crate follows the specification revision named in
 each entry; the public API is frozen from 0.3.0 until 1.0 except for additions.
 
+## 0.3.9
+
+Specification: `spec-0.6.0` (part one of Build 2: `source` and the trust value `relayed`, `whatif`
+scenarios, cycles that name their path, digit-led words in requests (the formula library, not this
+crate), tests for public functions (a mesh's rule, not this crate's) and no backdating (a mesh's
+rule)). Additions only: `API-CHANGES-0.3.9.md` has the `cargo public-api diff` against 0.3.8.
+The existing vectors are unchanged, and the 90 new ones pass: 79 of the kinds a verifier library
+runs (`receipt`, `envelope`, `describe`, `mesh`), and the 11 `call` vectors stay skipped.
+
+**A mesh that serves receipts with `source` is unverifiable by clients on core < 0.3.9 or datumesh < 0.6.0 (@datumesh/verify < 0.6.0); such receipts are new, and every receipt signed before them verifies unchanged.**
+Clients on older libraries reject a receipt with `source` (`E_SCHEMA`), the trust value `relayed`
+(`E_ENVELOPE`), a `scenario` envelope and a `cycle` (`E_ENVELOPE`), and the describe additions
+(`E_DESCRIBE`).
+
+- **`source` (8.1, 8.2, 10.1).** `Source` (`new`, `with_sha256`, `with_takeover`, and the getters),
+  `Receipt::source()` and `ReceiptBuilder::source` (feature `sign`). Checked by the members' codes of
+  10.1 step 3 and `retrieved <= issued` (`E_TIME_ORDER`); hashed and signed. Verification never
+  fetches its `url`.
+- **Trust `relayed` (5.5, step 6).** `TrustLabel::Relayed`, and `primary` now requires that the
+  receipt has no `source`. The 0.3.x envelope (`check_envelope`, `Trust`) refuses `relayed`, as it
+  refuses any unknown trust value: relayed receipts are read through `check_answer`.
+- **`whatif` (5.9).** `Request::with_whatif` (overrides and `solve`), `Request::overrides()` and
+  `solve()`. `AnswerOutcome::Scenario` with `Scenario` and `Solved`, built by `Answer::scenario`. A
+  scenario is its own type: it has no receipt and no trust, and cannot be turned into one. Codes:
+  `ErrorCode::WhatifUnsupported` (a `bad_request` of a whatif request with `solve`) and
+  `ErrorCode::WhatifNoSolution` (`Fault::WhatifNoSolution`, a `not_covered` fault of a request with
+  `solve`); neither is a verification result. The mesh document's optional `whatif` endpoint is read
+  by `MeshDoc` like the others.
+- **`cycle` (5.5, 15.12).** `Cycle` (`path`, `fixes`) and `CycleFix`, with `Answer::with_cycle`, on
+  `error` with `E_EVAL_UNAVAILABLE` only.
+- **describe (16.8).** `DescribeKind::Function`, `FunctionAnswer` (the builder of a function answer),
+  `DescribeTests` and `DescribeSource`, in `Described` (`function`, `fn_hash`, `tests`, `source`).
+  A function answer is checked against a held descriptor by `check_describe_with`.
+- Fuzz target `receipt_source` for receipts with `source`.
+
 ## 0.3.8
 
 Specification: `spec-0.5.0` (`c8896ad`: the library findings of `7bed002` and of the formula library,

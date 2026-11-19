@@ -94,6 +94,9 @@ pub enum Fault {
     Key,
     /// `E_FORMULA_DISPATCH_KEY` (since `spec-0.5.0`): a value outside the dispatch set (16.6).
     DispatchKey,
+    /// `E_WHATIF_NO_SOLUTION` (since `spec-0.6.0`, 5.9): a `whatif` request with `solve` found no
+    /// value of `vary` within its bounds and fuel. A request fault, not a formula fault.
+    WhatifNoSolution,
 }
 
 impl Fault {
@@ -107,6 +110,7 @@ impl Fault {
         Fault::Future,
         Fault::Key,
         Fault::DispatchKey,
+        Fault::WhatifNoSolution,
     ];
 
     /// The code as written, e.g. `"E_FORMULA_DIV_ZERO"`.
@@ -120,6 +124,7 @@ impl Fault {
             Fault::Future => "E_FORMULA_FUTURE",
             Fault::Key => "E_FORMULA_KEY",
             Fault::DispatchKey => "E_FORMULA_DISPATCH_KEY",
+            Fault::WhatifNoSolution => "E_WHATIF_NO_SOLUTION",
         }
     }
 
@@ -337,6 +342,26 @@ pub struct Quote {
     pub authorise: String,
 }
 
+/// The override array of a `whatif` request or scenario (5.9, `spec-0.6.0`). Held as a JSON value;
+/// equal and hashed by its canonical text (JCS), so that the request keeps its `Eq` and `Hash`
+/// and member order never matters.
+#[derive(Clone, Debug)]
+pub(crate) struct Overrides(pub(crate) Value);
+
+impl PartialEq for Overrides {
+    fn eq(&self, other: &Overrides) -> bool {
+        self.0.to_jcs() == other.0.to_jcs()
+    }
+}
+
+impl Eq for Overrides {}
+
+impl core::hash::Hash for Overrides {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+        self.0.to_jcs().hash(state);
+    }
+}
+
 /// What the client asked for, for the binding of 5.5 step 5.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Request {
@@ -345,6 +370,8 @@ pub struct Request {
     pub(crate) job: Option<String>,
     pub(crate) pin: Option<String>,
     pub(crate) mesh: Option<String>,
+    pub(crate) overrides: Option<Overrides>,
+    pub(crate) solve: Option<String>,
 }
 
 /// A malformed request description (5.5 step 5): the caller's mistake, not an `E_*` code.
@@ -372,7 +399,15 @@ impl Request {
                 return Err(InvalidRequest(format!("asof must be an instant: {a:?}")));
             }
         }
-        Ok(Request { cell_id: cell_id.into(), asof: asof.map(String::from), job: None, pin: None, mesh: None })
+        Ok(Request {
+            cell_id: cell_id.into(),
+            asof: asof.map(String::from),
+            job: None,
+            pin: None,
+            mesh: None,
+            overrides: None,
+            solve: None,
+        })
     }
 
     /// The request description for `GET` of a job's `poll` URL (5.5, `spec-0.4.1`): the
@@ -407,6 +442,37 @@ impl Request {
             return Err(InvalidRequest(format!("mesh must be a DNS name: {host:?}")));
         }
         Ok(Request { mesh: Some(host.into()), ..self })
+    }
+
+    /// The same request as a `whatif` read (5.9, `spec-0.6.0`): `overrides` is the canonical
+    /// override array (at most 64 objects, otherwise [`InvalidRequest`]), and `solve`, when given,
+    /// the id of the cell to vary (64 lowercase hex digits). The answer is a scenario, checked
+    /// against these by [`crate::check_answer`].
+    pub fn with_whatif(self, overrides: &Value, solve: Option<&str>) -> core::result::Result<Request, InvalidRequest> {
+        let Value::Array(items) = overrides else {
+            return Err(InvalidRequest("overrides is an array of overrides".into()));
+        };
+        // 5.9: empty only with solve; at most 64, well formed, canonical order, distinct.
+        if items.is_empty() && solve.is_none() {
+            return Err(InvalidRequest("empty overrides need solve".into()));
+        }
+        crate::answer::check_overrides(overrides).map_err(|e| InvalidRequest(e.to_string()))?;
+        if let Some(v) = solve {
+            if lexical::check_hex(v, 64, "").is_err() {
+                return Err(InvalidRequest(format!("solve must be 64 lowercase hex digits: {v:?}")));
+            }
+        }
+        Ok(Request { overrides: Some(Overrides(overrides.clone())), solve: solve.map(String::from), ..self })
+    }
+
+    /// The overrides of a `whatif` request ([`Request::with_whatif`]).
+    pub fn overrides(&self) -> Option<&Value> {
+        self.overrides.as_ref().map(|o| &o.0)
+    }
+
+    /// The vary cell's id of a `whatif` request's `solve`, when it has one.
+    pub fn solve(&self) -> Option<&str> {
+        self.solve.as_deref()
     }
 
     /// The pin, for a pinned request ([`Request::with_pin`]).
@@ -497,6 +563,11 @@ pub(crate) fn integer_member(v: &Value, path: &str) -> Result<u64> {
 /// HTTP status, the receipt through step 6 of 10.1, the binding to `request`, then `trust`
 /// and `superseded_by`. Never touches the network. A `not_covered` envelope's `fault`
 /// (`spec-0.4.0`) is checked and accepted; [`check_envelope_extras`] also returns it.
+///
+/// Since `spec-0.6.0` this function refuses what it has no field for, as it refuses any unknown
+/// value: a receipt with `source` and the trust `relayed`, the outcome `scenario` (a `whatif`
+/// request's answer), and a `cycle` member. Read those through [`crate::check_answer`]
+/// (`TrustLabel::Relayed`, `AnswerOutcome::Scenario`, [`crate::Cycle`]).
 pub fn check_envelope(status: u16, body: &[u8], keys: &Keys, request: &Request) -> Result<Envelope> {
     check_envelope_extras(status, body, keys, request).map(|(env, _)| env)
 }

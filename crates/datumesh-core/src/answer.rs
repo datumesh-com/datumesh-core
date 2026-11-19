@@ -5,14 +5,14 @@ use std::collections::BTreeMap;
 
 use crate::descriptor::cmp_lexical;
 use crate::envelope::{
-    check_job_and_poll_for, env_err, integer_member, quote, EnvelopeExtras, Fault, ForeignDetail, Outcome, Pending,
-    Quote, Request, Resolution, ResolutionKind, Resolved, Shadows, Trust, BAD_REQUEST_CODES,
+    check_job_and_poll_for, env_err, integer_member, quote, EnvelopeExtras, Fault, ForeignDetail, Outcome, Overrides,
+    Pending, Quote, Request, Resolution, ResolutionKind, Resolved, Shadows, Trust, BAD_REQUEST_CODES,
 };
 use crate::error::{Error, ErrorCode, Result};
 use crate::json::{self, Value};
 use crate::keys::Keys;
 use crate::lexical::{self, limits};
-use crate::model::{Arg, Scalar};
+use crate::model::{scalar_canonical, Arg, Cell, Scalar, Type};
 use crate::receipt::Receipt;
 use crate::schema;
 use crate::slice::Slice;
@@ -40,6 +40,8 @@ pub enum AnswerOutcome {
     Error,
     /// 202.
     Pending,
+    /// 200 (since `spec-0.6.0`): the answer to a `whatif` request, a scenario (5.9). Never a fact.
+    Scenario,
 }
 
 impl AnswerOutcome {
@@ -55,6 +57,7 @@ impl AnswerOutcome {
             AnswerOutcome::BadRequest => "bad_request",
             AnswerOutcome::Error => "error",
             AnswerOutcome::Pending => "pending",
+            AnswerOutcome::Scenario => "scenario",
         }
     }
 
@@ -70,6 +73,7 @@ impl AnswerOutcome {
             "bad_request" => AnswerOutcome::BadRequest,
             "error" => AnswerOutcome::Error,
             "pending" => AnswerOutcome::Pending,
+            "scenario" => AnswerOutcome::Scenario,
             _ => return None,
         })
     }
@@ -85,6 +89,7 @@ impl AnswerOutcome {
             AnswerOutcome::BadRequest => 400,
             AnswerOutcome::Error => 500,
             AnswerOutcome::Pending => 202,
+            AnswerOutcome::Scenario => 200,
         }
     }
 
@@ -109,8 +114,10 @@ impl AnswerOutcome {
             AnswerOutcome::RateLimited => (&["retry_after_seconds"], &["fn_hash"]),
             AnswerOutcome::BadRequest => (&["error"], &["fn_hash"]),
             // spec-0.4.3: detail, with E_FOREIGN_UNAVAILABLE only.
-            AnswerOutcome::Error => (&["error"], &["detail", "fn_hash", "resolved", "shadows"]),
+            // spec-0.6.0: cycle, with E_EVAL_UNAVAILABLE only.
+            AnswerOutcome::Error => (&["error"], &["cycle", "detail", "fn_hash", "resolved", "shadows"]),
             AnswerOutcome::Pending => (&["estimate_seconds", "job", "poll", "request"], &[]),
+            AnswerOutcome::Scenario => (&["scenario"], &["fn_hash", "resolved"]),
         }
     }
 }
@@ -127,6 +134,9 @@ pub enum TrustLabel {
     Verified,
     /// Not primary, signed by another host, not recomputed.
     Unverified,
+    /// The publisher's host signed a stored receipt that has a `source` (5.5, `spec-0.6.0`): a
+    /// value the publisher took from another party. Not `computed`, never `primary`.
+    Relayed,
 }
 
 impl TrustLabel {
@@ -137,6 +147,7 @@ impl TrustLabel {
             TrustLabel::Computed => "computed",
             TrustLabel::Verified => "verified",
             TrustLabel::Unverified => "unverified",
+            TrustLabel::Relayed => "relayed",
         }
     }
 
@@ -146,6 +157,7 @@ impl TrustLabel {
             "computed" => TrustLabel::Computed,
             "verified" => TrustLabel::Verified,
             "unverified" => TrustLabel::Unverified,
+            "relayed" => TrustLabel::Relayed,
             _ => return None,
         })
     }
@@ -215,6 +227,10 @@ pub struct Answer {
     /// The class this mesh binds to another hash than its reference class (the same outcomes as
     /// `resolved`; 5.5, 16.9, `spec-0.5.0`).
     pub shadows: Option<Shadows>,
+    /// The scenario of a `whatif` request (`scenario`, 5.9, `spec-0.6.0`).
+    pub scenario: Option<Scenario>,
+    /// The path of an evaluation cycle (`error` with `E_EVAL_UNAVAILABLE`, 5.5, `spec-0.6.0`).
+    pub cycle: Option<Cycle>,
     /// The HTTP status to send (`error`'s exact 5xx); checked answers carry the one received.
     status: u16,
 }
@@ -237,6 +253,8 @@ fn bare(outcome: AnswerOutcome) -> Answer {
         page: None,
         resolved: None,
         shadows: None,
+        scenario: None,
+        cycle: None,
         status: outcome.status(),
     }
 }
@@ -254,6 +272,8 @@ fn code_allowed(outcome: AnswerOutcome, code: ErrorCode, job_url: bool) -> bool 
                         | ErrorCode::KeyEncoding
                 )
                 || (code == ErrorCode::JobUnknown && job_url)
+                // spec-0.6.0: the whatif codes, in a whatif request only (checked by the caller).
+                || matches!(code, ErrorCode::WhatifUnsupported | ErrorCode::SliceMember)
         }
         AnswerOutcome::NotCovered => matches!(code, ErrorCode::NameUnbound | ErrorCode::NamespaceSuspended),
         // 5.5 (spec-0.5.0): every code of 10.2 but exactly these. The define and write codes are
@@ -279,6 +299,10 @@ fn code_allowed(outcome: AnswerOutcome, code: ErrorCode, job_url: bool) -> bool 
                 | ErrorCode::ClassOwner
                 | ErrorCode::ShortIdAmbiguous
                 | ErrorCode::Describe
+                // spec-0.6.0: the two whatif codes are a bad_request's and a not_covered
+                // fault's, never an error's (5.5; the 10.2 table's "whatif" codes).
+                | ErrorCode::WhatifUnsupported
+                | ErrorCode::WhatifNoSolution
         ),
         _ => false,
     }
@@ -366,6 +390,21 @@ impl Answer {
     /// The `ok` answer of the slice endpoint (5.6).
     pub fn page(page: SlicePage) -> Answer {
         Answer { page: Some(page), ..bare(AnswerOutcome::Ok) }
+    }
+
+    /// `scenario` (200, 5.9, `spec-0.6.0`): the answer to a `whatif` request. It has no receipt
+    /// and no trust; [`check_answer`] accepts it only for a request with overrides.
+    pub fn scenario(scenario: Scenario) -> Answer {
+        Answer { scenario: Some(scenario), ..bare(AnswerOutcome::Scenario) }
+    }
+
+    /// With the `cycle` member (5.5, `spec-0.6.0`): only on `error` with `E_EVAL_UNAVAILABLE`;
+    /// `E_ENVELOPE` otherwise.
+    pub fn with_cycle(self, cycle: Cycle) -> Result<Answer> {
+        if self.outcome != AnswerOutcome::Error || self.error != Some(ErrorCode::EvalUnavailable) {
+            return env_err("$.cycle", "cycle is carried by error with E_EVAL_UNAVAILABLE only");
+        }
+        Ok(Answer { cycle: Some(cycle), ..self })
     }
 
     /// With the `fn_hash` echo (64 lowercase hex digits; not on `pending`); `E_ENVELOPE`
@@ -509,6 +548,12 @@ impl Answer {
                 Value::Object(vec![("class".into(), s(&sh.class)), ("reference".into(), s(&sh.reference))]),
             ));
         }
+        if let Some(sc) = &self.scenario {
+            m.push(("scenario".into(), sc.to_value()));
+        }
+        if let Some(c) = &self.cycle {
+            m.push(("cycle".into(), c.to_value()));
+        }
         if let Some(p) = &self.page {
             m.push(("slice".into(), p.slice.to_value()));
             m.push(("members".into(), Value::Array(p.members.iter().map(Answer::to_value).collect())));
@@ -526,6 +571,10 @@ impl Answer {
 
     /// The `spec-0.4.1` form, for the 0.3.x functions: not `pending`, not `computed`.
     pub(crate) fn into_envelope(self) -> Result<(Envelope, EnvelopeExtras)> {
+        // spec-0.6.0 members are read by check_answer only: the 0.3.x envelope refuses them.
+        if self.cycle.is_some() {
+            return env_err("$.cycle", "cycle is read by check_answer");
+        }
         let outcome = match self.outcome {
             AnswerOutcome::Ok => Outcome::Ok,
             AnswerOutcome::Stale => Outcome::Stale,
@@ -536,6 +585,7 @@ impl Answer {
             AnswerOutcome::BadRequest => Outcome::BadRequest,
             AnswerOutcome::Error => Outcome::Error,
             AnswerOutcome::Pending => return env_err("$.outcome", "unknown outcome \"pending\""),
+            AnswerOutcome::Scenario => return env_err("$.outcome", "unknown outcome \"scenario\""),
         };
         let trust = match self.trust {
             None => None,
@@ -592,6 +642,28 @@ impl Ctx<'_> {
 
     fn job_url(&self) -> bool {
         matches!(self, Ctx::Cell(r) if r.job.is_some())
+    }
+
+    /// A `whatif` request: one with overrides (5.9, `spec-0.6.0`).
+    fn whatif(&self) -> bool {
+        matches!(self, Ctx::Cell(r) if r.overrides.is_some())
+    }
+
+    fn solve(&self) -> Option<&str> {
+        match self {
+            Ctx::Cell(r) => r.solve.as_deref(),
+            _ => None,
+        }
+    }
+}
+
+/// The whatif codes a `bad_request` carries only in a whatif request (5.5, 5.9): with
+/// `E_WHATIF_UNSUPPORTED`, a request with `solve`; with `E_SLICE_MEMBER`, one with overrides.
+fn whatif_code_ok(outcome: AnswerOutcome, code: ErrorCode, ctx: &Ctx<'_>) -> bool {
+    match (outcome, code) {
+        (AnswerOutcome::BadRequest, ErrorCode::WhatifUnsupported) => ctx.solve().is_some(),
+        (AnswerOutcome::BadRequest, ErrorCode::SliceMember) => ctx.whatif(),
+        _ => true,
     }
 }
 
@@ -791,6 +863,15 @@ fn check_inner(status: u16, v: &Value, keys: &Keys, ctx: &Ctx<'_>) -> Result<Ans
     if slice_ctx && matches!(outcome, AnswerOutcome::Stale | AnswerOutcome::Pending) {
         return env_err("$.outcome", "stale and pending are not answers of the slice endpoint");
     }
+    // 5.9 (spec-0.6.0): with overrides, ok, stale and pending are not answers; scenario is only
+    // an answer to a request with overrides.
+    let whatif = ctx.whatif();
+    if whatif && matches!(outcome, AnswerOutcome::Ok | AnswerOutcome::Stale | AnswerOutcome::Pending) {
+        return env_err("$.outcome", format!("{oname} is not an answer to a whatif request"));
+    }
+    if outcome == AnswerOutcome::Scenario && !whatif {
+        return env_err("$.outcome", "scenario is the answer to a request with overrides");
+    }
     if outcome == AnswerOutcome::Pending {
         return check_pending(status, m, ctx);
     }
@@ -811,6 +892,13 @@ fn check_inner(status: u16, v: &Value, keys: &Keys, ctx: &Ctx<'_>) -> Result<Ans
     if is_page {
         let Ctx::Slice(req) = ctx else { return env_err("$", "a page answers a slice request") };
         return check_page(m, a, keys, req);
+    }
+    // 5 for a scenario (5.9): the scenario binds to the request, and holds no receipt.
+    if outcome == AnswerOutcome::Scenario {
+        if let Ctx::Cell(req) = ctx {
+            bind_scenario(&a, req)?;
+        }
+        return Ok(a);
     }
     // 4.
     if let Some(rv) = schema::opt(m, "receipt") {
@@ -845,6 +933,7 @@ fn outcome_has_resolved(outcome: AnswerOutcome) -> bool {
             | AnswerOutcome::Unlicensed
             | AnswerOutcome::PaymentRequired
             | AnswerOutcome::Error
+            | AnswerOutcome::Scenario
     )
 }
 
@@ -936,9 +1025,16 @@ fn check_members(m: &[(String, Value)], outcome: AnswerOutcome, ctx: &Ctx<'_>, i
     if let Some(e) = schema::opt(m, "error") {
         let code = e.as_str().and_then(ErrorCode::from_code);
         match code {
-            Some(c) if code_allowed(outcome, c, ctx.job_url()) => a.error = Some(c),
+            Some(c) if code_allowed(outcome, c, ctx.job_url()) && whatif_code_ok(outcome, c, ctx) => a.error = Some(c),
             _ => return env_err("$.error", format!("{e:?} is not a code this outcome can carry")),
         }
+    }
+    if let Some(sc) = schema::opt(m, "scenario") {
+        a.scenario = Some(scenario_of(sc)?);
+    }
+    if let Some(c) = schema::opt(m, "cycle") {
+        let cycle = cycle_of(c)?;
+        a = a.with_cycle(cycle)?;
     }
     // spec-0.4.3: detail, one of the closed list, present exactly with E_FOREIGN_UNAVAILABLE.
     if let Some(r) = schema::opt(m, "resolved") {
@@ -966,6 +1062,10 @@ fn check_members(m: &[(String, Value)], outcome: AnswerOutcome, ctx: &Ctx<'_>, i
         };
         if a.error.is_some() {
             return env_err("$.fault", "not_covered carries a fault or an error, not both");
+        }
+        // 5.9: E_WHATIF_NO_SOLUTION is the fault of a whatif request with solve, and no other.
+        if fault == Fault::WhatifNoSolution && ctx.solve().is_none() {
+            return env_err("$.fault", "E_WHATIF_NO_SOLUTION answers a whatif request with solve");
         }
         a.fault = Some(fault);
     }
@@ -1019,12 +1119,22 @@ fn pin_echo(a: &Answer, pin: Option<&str>, path: &str) -> Result<()> {
 /// against the receipt's `cell.fn_hash`, then `superseded_by`.
 fn trust_check(a: &Answer, r: &Receipt, mesh: Option<&str>, at: &str) -> Result<()> {
     let p = |m: &str| format!("{at}.{m}");
-    let primary = r.signer_host() == lexical::host_of(&r.cell().ns) && r.inputs().is_empty();
+    // 5.5 step 6 (spec-0.6.0): primary and relayed are the publisher's own, with no inputs; the
+    // receipt's source tells them apart.
+    let own = r.signer_host() == lexical::host_of(&r.cell().ns) && r.inputs().is_empty();
+    let primary = own && r.source().is_none();
+    let relayed = own && r.source().is_some();
     let t = a.trust.unwrap_or(TrustLabel::Unverified);
     if (t == TrustLabel::Primary) != primary {
         return env_err(
             &p("trust"),
             if primary { "a primary receipt is labelled primary" } else { "the receipt is not primary" },
+        );
+    }
+    if (t == TrustLabel::Relayed) != relayed {
+        return env_err(
+            &p("trust"),
+            if relayed { "a relayed receipt is labelled relayed" } else { "the receipt is not relayed" },
         );
     }
     if let Some(host) = mesh {
@@ -1186,4 +1296,339 @@ fn check_page(m: &[(String, Value)], mut a: Answer, keys: &Keys, req: &SliceRequ
     }
     a.page = Some(SlicePage { slice, members: out, next });
     Ok(a)
+}
+
+/// A fix a cycle admits (5.5, 15.12; `spec-0.6.0`), in the order 5.5 lists them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[non_exhaustive]
+pub enum CycleFix {
+    /// `asof`: read the cell as of an earlier instant, `asof(c, T)`.
+    Asof,
+    /// `lag`: read the previous period.
+    Lag,
+    /// `step`: add an iteration argument.
+    Step,
+    /// `solver`: use `whatif` with `solve` (5.9).
+    Solver,
+}
+
+impl CycleFix {
+    /// Every fix, in the order of 5.5: `asof`, `lag`, `step`, `solver`.
+    pub const ALL: &'static [CycleFix] = &[CycleFix::Asof, CycleFix::Lag, CycleFix::Step, CycleFix::Solver];
+
+    /// The fix as written in JSON.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            CycleFix::Asof => "asof",
+            CycleFix::Lag => "lag",
+            CycleFix::Step => "step",
+            CycleFix::Solver => "solver",
+        }
+    }
+
+    /// The fix of its JSON name; `None` for anything else (case included).
+    pub fn from_name(s: &str) -> Option<CycleFix> {
+        CycleFix::ALL.iter().copied().find(|f| f.as_str() == s)
+    }
+}
+
+/// The `cycle` member of an `error` envelope (5.5, 15.12; `spec-0.6.0`): the path of calls
+/// around the cycle, and the fixes it admits. Exactly `path` and `fixes`.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub struct Cycle {
+    path: Vec<String>,
+    fixes: Vec<CycleFix>,
+}
+
+impl Cycle {
+    /// A cycle: `path` of at least two calls whose first and last are equal (`E_ENVELOPE`
+    /// otherwise), and `fixes`, non-empty, distinct and in the order of [`CycleFix::ALL`].
+    pub fn new(path: Vec<String>, fixes: Vec<CycleFix>) -> Result<Cycle> {
+        if path.len() < 2 {
+            return env_err("$.cycle.path", "a cycle's path has at least two calls");
+        }
+        if path.first() != path.last() {
+            return env_err("$.cycle.path", "a cycle's path starts and ends with the same call");
+        }
+        if path.iter().any(String::is_empty) {
+            return env_err("$.cycle.path", "a call is a non-empty string");
+        }
+        if fixes.is_empty() {
+            return env_err("$.cycle.fixes", "a cycle names at least one fix");
+        }
+        if fixes.windows(2).any(|w| w[0] >= w[1]) {
+            return env_err("$.cycle.fixes", "fixes are distinct and in the order asof, lag, step, solver");
+        }
+        Ok(Cycle { path, fixes })
+    }
+
+    /// The calls around the cycle, the first and last equal.
+    pub fn path(&self) -> &[String] {
+        &self.path
+    }
+
+    /// The fixes the cycle admits.
+    pub fn fixes(&self) -> &[CycleFix] {
+        &self.fixes
+    }
+
+    fn to_value(&self) -> Value {
+        let strings = |xs: Vec<&str>| Value::Array(xs.into_iter().map(|x| Value::String(x.into())).collect());
+        Value::Object(vec![
+            ("path".into(), strings(self.path.iter().map(String::as_str).collect())),
+            ("fixes".into(), strings(self.fixes.iter().map(|f| f.as_str()).collect())),
+        ])
+    }
+}
+
+/// The `solved` member of a scenario (5.9; `spec-0.6.0`): the value found for `vary`, and the
+/// target's value under it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct Solved {
+    vary: Cell,
+    value: Scalar,
+}
+
+impl Solved {
+    /// The cell varied.
+    pub fn vary(&self) -> &Cell {
+        &self.vary
+    }
+
+    /// The value found for it: a number.
+    pub fn value(&self) -> &Scalar {
+        &self.value
+    }
+}
+
+/// A scenario (5.9; `spec-0.6.0`): the value a cell would have under overrides. It is a
+/// statement of what-if, never a receipt: it has no signer, no trust and no hash, and cannot be
+/// turned into one. Built with [`Scenario::new`] and checked back by [`check_answer`] against
+/// the request.
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct Scenario {
+    cell: Cell,
+    value: Scalar,
+    asof: String,
+    overrides: Overrides,
+    solved: Option<Solved>,
+}
+
+impl Scenario {
+    /// A scenario of `cell` with `value`, as of `asof` (an instant), under `overrides` (the
+    /// canonical array: value overrides and slice overrides, sorted by cell or slice id, at most
+    /// 64). `E_ENVELOPE` for anything else.
+    pub fn new(cell: Cell, value: Scalar, asof: &str, overrides: &Value) -> Result<Scenario> {
+        lexical::check_instant(asof, "$.scenario.asof").map_err(|e| e.recode(ErrorCode::Envelope))?;
+        check_overrides(overrides)?;
+        Ok(Scenario { cell, value, asof: asof.into(), overrides: Overrides(overrides.clone()), solved: None })
+    }
+
+    /// With `solved`: the value found for `vary` (a cell, not a slice) and the target's value
+    /// under it, a number. `E_ENVELOPE` otherwise.
+    pub fn with_solved(self, vary: Cell, value: Scalar) -> Result<Scenario> {
+        if vary.is_slice() {
+            return env_err("$.scenario.solved.vary", "the varied cell is one cell, not a slice");
+        }
+        if value.ty() != Type::Number {
+            return env_err("$.scenario.solved.value", "the value found is a number");
+        }
+        Ok(Scenario { solved: Some(Solved { vary, value }), ..self })
+    }
+
+    /// The cell answered.
+    pub fn cell(&self) -> &Cell {
+        &self.cell
+    }
+
+    /// The scenario's value.
+    pub fn value(&self) -> &Scalar {
+        &self.value
+    }
+
+    /// The value's type.
+    pub fn ty(&self) -> Type {
+        self.value.ty()
+    }
+
+    /// The instant evaluated as of.
+    pub fn asof(&self) -> &str {
+        &self.asof
+    }
+
+    /// The overrides, canonical.
+    pub fn overrides(&self) -> &Value {
+        &self.overrides.0
+    }
+
+    /// The value found by `solve`, when the request had one.
+    pub fn solved(&self) -> Option<&Solved> {
+        self.solved.as_ref()
+    }
+
+    fn to_value(&self) -> Value {
+        let raw = match &self.value {
+            Scalar::Boolean(b) => Value::Bool(*b),
+            other => Value::String(other.lexical().to_string()),
+        };
+        let mut m = vec![
+            ("asof".to_string(), Value::String(self.asof.clone())),
+            ("cell".to_string(), self.cell.to_value()),
+            ("overrides".to_string(), self.overrides.0.clone()),
+            ("type".to_string(), Value::String(self.value.ty().as_str().into())),
+            ("value".to_string(), raw),
+        ];
+        if let Some(x) = &self.solved {
+            m.push((
+                "solved".into(),
+                Value::Object(vec![("vary".into(), x.vary.to_value()), ("value".into(), x.value.to_value())]),
+            ));
+        }
+        Value::Object(m)
+    }
+}
+
+fn cell_of(v: &Value, path: &str) -> Result<Cell> {
+    let c = Cell::from_value(v).map_err(|e| e.recode(ErrorCode::Envelope))?;
+    if c.is_slice() {
+        return env_err(path, "a cell, not a slice");
+    }
+    Ok(c)
+}
+
+/// A value of a scenario, read in its declared type: a boolean or a lexical string.
+fn typed_value(ty: Type, v: &Value, path: &str) -> Result<Scalar> {
+    match (ty, v) {
+        (Type::Boolean, Value::Bool(b)) => Ok(Scalar::Boolean(*b)),
+        (Type::Boolean, _) => env_err(path, "a boolean value is true or false"),
+        (t, Value::String(text)) => Scalar::from_lexical(t, text).map_err(|e| e.recode(ErrorCode::Envelope)),
+        _ => env_err(path, "a value is a string in its type's lexical form"),
+    }
+}
+
+/// Keeps `id` strictly after the previous id in `prev` (5.9: sorted, distinct).
+fn ascending(prev: &mut Option<String>, id: String, path: &str) -> Result<()> {
+    if prev.as_deref().is_some_and(|q| q >= id.as_str()) {
+        return env_err(path, "entries are distinct and sorted by cell id");
+    }
+    *prev = Some(id);
+    Ok(())
+}
+
+/// The id an override is sorted by, after its shape is checked (5.9): a value override's cell,
+/// or a slice override's slice.
+fn override_id(item: &Value, p: &str) -> Result<String> {
+    let m = schema::object_or(item, p, ErrorCode::Envelope, "an override")?;
+    if schema::opt(m, "slice").is_none() {
+        schema::exact(m, &["cell", "value"], &[], p, ErrorCode::Envelope)?;
+        let cell = cell_of(schema::get(m, "cell"), &format!("{p}.cell"))?;
+        scalar_canonical(schema::get(m, "value"), &format!("{p}.value")).map_err(|e| e.recode(ErrorCode::Envelope))?;
+        return Ok(cell.id());
+    }
+    schema::exact(m, &["add", "remove", "slice"], &[], p, ErrorCode::Envelope)?;
+    let slice = Slice::from_value(schema::get(m, "slice")).map_err(|e| e.recode(ErrorCode::Envelope))?;
+    let Value::Array(added) = schema::get(m, "add") else { return env_err(p, "add is an array of members") };
+    let mut prev = None;
+    for (i, a) in added.iter().enumerate() {
+        let ap = format!("{p}.add[{i}]");
+        let am = schema::object_or(a, &ap, ErrorCode::Envelope, "an added member")?;
+        schema::exact(am, &["cell", "value"], &[], &ap, ErrorCode::Envelope)?;
+        let cell = cell_of(schema::get(am, "cell"), &format!("{ap}.cell"))?;
+        scalar_canonical(schema::get(am, "value"), &format!("{ap}.value"))
+            .map_err(|e| e.recode(ErrorCode::Envelope))?;
+        ascending(&mut prev, cell.id(), &ap)?;
+    }
+    let Value::Array(removed) = schema::get(m, "remove") else { return env_err(p, "remove is an array of cells") };
+    let mut prev = None;
+    for (i, r) in removed.iter().enumerate() {
+        let rp = format!("{p}.remove[{i}]");
+        let cell = cell_of(r, &rp)?;
+        ascending(&mut prev, cell.id(), &rp)?;
+    }
+    Ok(slice.id().to_string())
+}
+
+/// The overrides of a scenario or a request (5.9): an array of at most 64 overrides, sorted by
+/// their cell or slice id and distinct.
+pub(crate) fn check_overrides(v: &Value) -> Result<()> {
+    let Value::Array(items) = v else { return env_err("$.overrides", "overrides is an array") };
+    if items.len() > 64 {
+        return env_err("$.overrides", "at most 64 overrides");
+    }
+    let mut prev = None;
+    for (i, item) in items.iter().enumerate() {
+        let p = format!("$.overrides[{i}]");
+        let id = override_id(item, &p)?;
+        ascending(&mut prev, id, &p)?;
+    }
+    Ok(())
+}
+
+/// A `scenario` member, read and checked by [`Scenario::new`] and [`Scenario::with_solved`].
+fn scenario_of(v: &Value) -> Result<Scenario> {
+    let m = schema::object_or(v, "$.scenario", ErrorCode::Envelope, "scenario")?;
+    schema::exact(m, &["asof", "cell", "overrides", "type", "value"], &["solved"], "$.scenario", ErrorCode::Envelope)?;
+    let cell = cell_of(schema::get(m, "cell"), "$.scenario.cell")?;
+    let ty_name = schema::string_or(m, "type", "$.scenario", ErrorCode::Envelope)?;
+    let Some(ty) = Type::from_name(ty_name) else {
+        return env_err("$.scenario.type", format!("{ty_name:?} is not a type"));
+    };
+    let value = typed_value(ty, schema::get(m, "value"), "$.scenario.value")?;
+    let asof = schema::string_or(m, "asof", "$.scenario", ErrorCode::Envelope)?;
+    let mut sc = Scenario::new(cell, value, asof, schema::get(m, "overrides"))?;
+    if let Some(sv) = schema::opt(m, "solved") {
+        let sm = schema::object_or(sv, "$.scenario.solved", ErrorCode::Envelope, "solved")?;
+        schema::exact(sm, &["vary", "value"], &[], "$.scenario.solved", ErrorCode::Envelope)?;
+        let vary = cell_of(schema::get(sm, "vary"), "$.scenario.solved.vary")?;
+        let value = scalar_canonical(schema::get(sm, "value"), "$.scenario.solved.value")
+            .map_err(|e| e.recode(ErrorCode::Envelope))?;
+        sc = sc.with_solved(vary, value)?;
+    }
+    Ok(sc)
+}
+
+/// A `cycle` member, read and checked by [`Cycle::new`].
+fn cycle_of(v: &Value) -> Result<Cycle> {
+    let m = schema::object_or(v, "$.cycle", ErrorCode::Envelope, "cycle")?;
+    schema::exact(m, &["fixes", "path"], &[], "$.cycle", ErrorCode::Envelope)?;
+    let Value::Array(calls) = schema::get(m, "path") else { return env_err("$.cycle.path", "path is an array") };
+    let mut path = Vec::with_capacity(calls.len());
+    for (i, c) in calls.iter().enumerate() {
+        let Some(t) = c.as_str() else { return env_err(&format!("$.cycle.path[{i}]"), "a call is a string") };
+        path.push(t.to_string());
+    }
+    let Value::Array(names) = schema::get(m, "fixes") else { return env_err("$.cycle.fixes", "fixes is an array") };
+    let mut fixes = Vec::with_capacity(names.len());
+    for (i, f) in names.iter().enumerate() {
+        match f.as_str().and_then(CycleFix::from_name) {
+            Some(fix) => fixes.push(fix),
+            None => return env_err(&format!("$.cycle.fixes[{i}]"), "a fix is asof, lag, step or solver"),
+        }
+    }
+    Cycle::new(path, fixes)
+}
+
+/// 5.9 step 5 for a scenario: its cell is the one requested, its asof the requested one when
+/// one was sent, its overrides the request's byte for byte after canonical JSON, and `solved`
+/// present exactly when `solve` was sent, with `vary` the requested cell.
+fn bind_scenario(a: &Answer, req: &Request) -> Result<()> {
+    let Some(s) = &a.scenario else { return Ok(()) };
+    if s.cell.id() != req.cell_id {
+        return env_err("$.scenario.cell", "the scenario is for another cell than the one requested");
+    }
+    if req.asof.as_deref().is_some_and(|asked| asked != s.asof) {
+        return env_err("$.scenario.asof", "the scenario's asof is not the requested asof");
+    }
+    let asked = req.overrides.as_ref().map(|o| o.0.to_jcs()).unwrap_or_default();
+    if s.overrides.0.to_jcs() != asked {
+        return env_err("$.scenario.overrides", "the scenario's overrides are not the request's");
+    }
+    match (&s.solved, req.solve.as_deref()) {
+        (Some(x), Some(v)) if x.vary.id() == v => Ok(()),
+        (None, None) => Ok(()),
+        _ => env_err("$.scenario.solved", "solved is present exactly when solve was sent, for the vary cell"),
+    }
 }
