@@ -111,7 +111,9 @@ fn every_valid_receipt_vector_with_a_keypair_round_trips_and_verifies() {
     // by hand, no seed).
     // spec-0.4.3 adds receipt/keydoc-declarations and receipt/unrooted-key-supplied.
     // spec-0.6.0 adds receipt/relayed-full and receipt/relayed-required (34).
-    assert_eq!(count, 34);
+    // spec-0.6.1 adds receipt/dns-segment-relay, -stored and -invalid-rooted, and
+    // receipt/test-case-true and -counterexample (39).
+    assert_eq!(count, 39);
 }
 
 #[test]
