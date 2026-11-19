@@ -1,4 +1,4 @@
-//! spec-0.6.1 (f78773a): every new vector of the kinds this library runs is run through the public
+//! spec-0.6.1 (42979b5): every new vector of the kinds this library runs is run through the public
 //! API and compared with its expected result: `cell`, `uri` (valid and invalid), `jcs`, `function`,
 //! `define`, `describe` (with `publisher`). The `receipt`, `envelope` and `class` vectors of the
 //! release are run by the all-vector tests of those kinds (`spec_0_3_0`, `spec_0_5_0_classes`), which
@@ -171,7 +171,7 @@ fn is_new(v: &Value) -> bool {
 fn new_vectors(kind: &str) -> Vec<Value> {
     let all: Vec<Value> = vectors_of_kind(kind).into_iter().filter(is_new).collect();
     let want = NEW.iter().filter(|(k, _)| *k == kind).count();
-    assert_eq!(all.len(), want, "the new {kind} vectors are all there (spec submodule at f78773a)");
+    assert_eq!(all.len(), want, "the new {kind} vectors are all there (spec submodule at 42979b5)");
     all
 }
 

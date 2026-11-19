@@ -16,7 +16,7 @@
 //! (`entitled`, `reason`) are run. Each revision's file keeps the previous one's lines
 //! unchanged; `run-vectors-0.5.0.jsonl` adds the kinds `class`, `normalisation`, `key`, `describe` and
 //! `define` (and a skipped line for each new `call` vector). `run-vectors-0.6.1.jsonl` (spec-0.6.1,
-//! f78773a) is derived by `tools/gen_golden.py` from the 1711 vector files; its lines of the 1569
+//! 42979b5) is derived by `tools/gen_golden.py` from the 1711 vector files; its lines of the 1569
 //! older vectors are the lines of `run-vectors-0.6.0.jsonl`, and the 20 `formula` and `formula-eval`
 //! vectors are skipped. The crosscheck harness depends on this interface, so any change to it must be
 //! deliberate.
