@@ -918,6 +918,7 @@ pub datumesh_core::Described::fn_hash: core::option::Option<alloc::string::Strin
 pub datumesh_core::Described::function: core::option::Option<alloc::string::String>
 pub datumesh_core::Described::kind: datumesh_core::DescribeKind
 pub datumesh_core::Described::object_id: core::option::Option<alloc::string::String>
+pub datumesh_core::Described::publisher: core::option::Option<alloc::string::String>
 pub datumesh_core::Described::source: core::option::Option<datumesh_core::DescribeSource>
 pub datumesh_core::Described::tests: core::option::Option<datumesh_core::DescribeTests>
 impl core::clone::Clone for datumesh_core::Described
@@ -1039,6 +1040,7 @@ pub fn datumesh_core::FunctionAnswer::new(&str, &datumesh_core::FunctionDescript
 pub fn datumesh_core::FunctionAnswer::to_json(&self) -> alloc::vec::Vec<u8>
 pub fn datumesh_core::FunctionAnswer::to_value(&self) -> datumesh_core::json::Value
 pub fn datumesh_core::FunctionAnswer::with_description(self, &str) -> datumesh_core::Result<datumesh_core::FunctionAnswer>
+pub fn datumesh_core::FunctionAnswer::with_publisher(self, &str) -> datumesh_core::Result<datumesh_core::FunctionAnswer>
 pub fn datumesh_core::FunctionAnswer::with_source(self, datumesh_core::DescribeSource) -> datumesh_core::Result<datumesh_core::FunctionAnswer>
 pub fn datumesh_core::FunctionAnswer::with_tests(self, datumesh_core::DescribeTests) -> datumesh_core::Result<datumesh_core::FunctionAnswer>
 impl core::clone::Clone for datumesh_core::FunctionAnswer

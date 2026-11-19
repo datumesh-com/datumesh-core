@@ -3,6 +3,18 @@
 All notable changes to `datumesh-core`. The crate follows the specification revision named in
 each entry; the public API is frozen from 0.3.0 until 1.0 except for additions.
 
+## 0.3.10 (unreleased)
+
+Specification: `spec-0.6.1` (`f78773a`, part of Build 2: DNS names as namespace segments after the host, the `test_case` convention and `publisher` in describe). Additions only: `API-CHANGES-0.3.10.md` has the `cargo public-api diff` against 0.3.9. Every existing name, receipt, descriptor and vector verifies unchanged and keeps its hash. The 142 new vectors pass: 122 of the kinds a verifier library runs (`cell`, `uri`, `define`, `function`, `jcs`, `describe`, `envelope`, `receipt`, `class`) and the 20 `formula` and `formula-eval` vectors stay skipped, as do the `call` vectors. All 1569 earlier vectors pass unchanged.
+
+**A mesh that serves a name with a DNS name in a later segment (for example `datumesh.com/relay/ecb.europa.eu/fx_reference`), or a describe answer with `publisher`, is unverifiable by clients on core < 0.3.10 or datumesh < 0.6.1 (@datumesh/verify < 0.6.1), and on formula < 0.5.1: such a name is refused with `E_CANON_NAME` (`E_FORMULA_NAME` in a formula body), and a describe answer with `publisher` with `E_DESCRIBE`.** Every name valid before is valid after, and every receipt signed before verifies unchanged.
+
+- **DNS names in later segments (2.3, 5.1).** A namespace segment after the host is a `name` (2.2, at most 64 characters) or a DNS name (2.1, at most 253). `check_namespace` and `check_function_name` (and so the cell URI parser, `define`, classes, descriptors' `inputs`, receipts and key documents) accept them; a segment that is neither, a DNS name in the last segment of a function, a class name or a method name, and a DNS segment with an uppercase letter, a trailing dot, an underscore, an empty label or a leading or trailing `-` are `E_CANON_NAME`. The 512-character limit of a whole function name is unchanged.
+- **The host alone decides (2.3, 2.5).** `is_unrooted` already read the host only, and it still does: `example.org/x/foo.invalid/f` is rooted. A later DNS segment is a label; nothing is fetched for it and it is no one's publisher.
+- **`publisher` in describe (16.8).** `Described::publisher` (`Option<String>`): the optional `publisher` of a class answer or a function answer, read as a DNS name and checked to be exactly the host of `class` or `fn` (`E_DESCRIBE` otherwise). An object answer has none, and a method entry of a class answer has none. `FunctionAnswer::with_publisher` builds it into a function answer, checked the same way; `FunctionAnswer::new` is unchanged and gives none.
+- **A class under a sub-namespace of its definer (16.2, `E_CLASS_OWNER`).** A namespace defines classes under itself: a class name whose namespace is the definer's or below it (`rates.example.org/relay/ecb.europa.eu/fx_pair` under `rates.example.org`) is accepted. Until 0.3.9 only the definer's own namespace was accepted, which the reference tools never did; `class/dns-segment-name` needs the wider rule. Every class vector of earlier revisions gives the same result.
+- **Tests.** `tests/spec_0_6_1_vectors.rs` runs the new `cell`, `uri`, `jcs`, `function`, `define` and `describe` vectors (and asserts the 142 ids); the `class`, `receipt` and `envelope` vectors are run by the all-vector tests of their kinds. `run-vectors-0.6.1.jsonl` is the golden output of `run-vectors` over the 1711 vectors. The per-kind counts of the existing tests are updated for the new vectors.
+
 ## 0.3.9
 
 Specification: `spec-0.6.0` (part one of Build 2: `source` and the trust value `relayed`, `whatif`

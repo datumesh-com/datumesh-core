@@ -126,14 +126,27 @@ pub fn check_dns_name(s: &str, path: &str) -> Result<()> {
     Ok(())
 }
 
-/// A namespace (2.3): a DNS name, then path segments that are names.
+/// A namespace (2.3, `spec-0.6.1`): a DNS name, then segments that are each a name (2.2, at most
+/// 64 characters) or a DNS name (2.1, at most 253). A segment that is neither is `E_CANON_NAME`:
+/// a segment with a `.` is a DNS name candidate, any other is a name. The host alone publishes
+/// keys and decides rooted or unrooted; a later DNS segment is a label only.
 pub fn check_namespace(s: &str, path: &str) -> Result<()> {
     let mut parts = s.split('/');
     check_dns_name(parts.next().unwrap_or(""), path)?;
     for seg in parts {
-        check_name(seg, path)?;
+        check_segment(seg, path)?;
     }
     Ok(())
+}
+
+/// A segment after the host of a namespace (2.3, `spec-0.6.1`): a name (2.2, 64 characters) or a
+/// DNS name (2.1, 253 characters). Neither is `E_CANON_NAME`, or `E_CANON_LIMIT` for a name over
+/// 64 characters.
+pub(crate) fn check_segment(seg: &str, path: &str) -> Result<()> {
+    if seg.contains('.') {
+        return check_dns_name(seg, path);
+    }
+    check_name(seg, path)
 }
 
 /// [`is_unrooted`] for a namespace given as text (2.5, `spec-0.5.0`): the namespace is checked

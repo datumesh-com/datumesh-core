@@ -114,6 +114,16 @@ fn signature(f: &FunctionDescriptor) -> Result<(Value, Value)> {
     Ok((pick("args"), pick("returns")))
 }
 
+/// The optional `publisher` of a class or function answer (16.8, `spec-0.6.1`): a DNS name (2.1),
+/// and the host of `name` exactly. A domain of a later segment is not the publisher.
+fn check_publisher(publisher: &str, name: &str) -> Result<()> {
+    lexical::check_dns_name(publisher, "$.publisher").map_err(|e| e.recode(ErrorCode::Describe))?;
+    if publisher != lexical::host_of(name) {
+        return err(ErrorCode::Describe, "$.publisher", "publisher is the host of the name's namespace");
+    }
+    Ok(())
+}
+
 /// A describe answer that passed [`check_describe`].
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
@@ -135,6 +145,9 @@ pub struct Described {
     pub tests: Option<DescribeTests>,
     /// Where a relayed function's value is taken from (`spec-0.6.0`); `None` when not relayed.
     pub source: Option<DescribeSource>,
+    /// The publisher (`spec-0.6.1`, 16.8): the host of a class's or a function's namespace, when the
+    /// answer gives one. `None` for an object answer and for an answer without `publisher`.
+    pub publisher: Option<String>,
 }
 
 /// Checks a describe answer (16.8) given as JSON text against the classes the caller holds
@@ -191,9 +204,23 @@ fn check_class(
     held: &BTreeMap<String, ClassDescriptor>,
     functions: &[FunctionDescriptor],
 ) -> Result<Described> {
-    schema::exact(m, &["kind", "class", "class_hash", "descriptor", "methods"], &[], "$", ErrorCode::Describe)?;
+    schema::exact(
+        m,
+        &["kind", "class", "class_hash", "descriptor", "methods"],
+        &["publisher"],
+        "$",
+        ErrorCode::Describe,
+    )?;
     let class = schema::string_or(m, "class", "$", ErrorCode::Describe)?;
     lexical::check_function_name(class, "$.class").map_err(|e| e.recode(ErrorCode::Describe))?;
+    let publisher = match schema::opt(m, "publisher") {
+        Some(Value::String(p)) => {
+            check_publisher(p, class)?;
+            Some(p.clone())
+        }
+        Some(_) => return err(ErrorCode::Describe, "$.publisher", "publisher is a string"),
+        None => None,
+    };
     let class_hash = schema::string_or(m, "class_hash", "$", ErrorCode::Describe)?;
     lexical::check_hex(class_hash, 64, "$.class_hash").map_err(|e| e.recode(ErrorCode::Describe))?;
     let descriptor =
@@ -252,6 +279,7 @@ fn check_class(
             fn_hash: None,
             tests: None,
             source: None,
+            publisher,
         });
     };
     // Step 5: the descriptor is the held one (equal hashes: equal canonical bytes).
@@ -302,6 +330,7 @@ fn check_class(
         fn_hash: None,
         tests: None,
         source: None,
+        publisher,
     })
 }
 
@@ -403,6 +432,7 @@ fn check_object(m: &[(String, Value)], held: &BTreeMap<String, ClassDescriptor>)
             fn_hash: None,
             tests: None,
             source: None,
+            publisher: None,
         });
     };
     // Step 5: the keys are the class's, of their types, and the methods are the class's.
@@ -447,6 +477,7 @@ fn check_object(m: &[(String, Value)], held: &BTreeMap<String, ClassDescriptor>)
         fn_hash: None,
         tests: None,
         source: None,
+        publisher: None,
     })
 }
 
@@ -456,12 +487,20 @@ fn check_function(m: &[(String, Value)], functions: &[FunctionDescriptor]) -> Re
     schema::exact(
         m,
         &["kind", "fn", "fn_hash", "args", "returns"],
-        &["description", "tests", "source"],
+        &["description", "tests", "source", "publisher"],
         "$",
         ErrorCode::Describe,
     )?;
     let name = schema::string_or(m, "fn", "$", ErrorCode::Describe)?;
     lexical::check_function_name(name, "$.fn").map_err(|e| e.recode(ErrorCode::Describe))?;
+    let publisher = match schema::opt(m, "publisher") {
+        Some(Value::String(p)) => {
+            check_publisher(p, name)?;
+            Some(p.clone())
+        }
+        Some(_) => return err(ErrorCode::Describe, "$.publisher", "publisher is a string"),
+        None => None,
+    };
     let fn_hash = schema::string_or(m, "fn_hash", "$", ErrorCode::Describe)?;
     lexical::check_hex(fn_hash, 64, "$.fn_hash").map_err(|e| e.recode(ErrorCode::Describe))?;
     let args = schema::get(m, "args");
@@ -504,6 +543,7 @@ fn check_function(m: &[(String, Value)], functions: &[FunctionDescriptor]) -> Re
         fn_hash: Some(fn_hash.into()),
         tests,
         source,
+        publisher,
     })
 }
 
@@ -520,6 +560,7 @@ pub struct FunctionAnswer {
     description: Option<String>,
     tests: Option<DescribeTests>,
     source: Option<DescribeSource>,
+    publisher: Option<String>,
 }
 
 impl FunctionAnswer {
@@ -535,6 +576,7 @@ impl FunctionAnswer {
             description: None,
             tests: None,
             source: None,
+            publisher: None,
         })
     }
 
@@ -562,6 +604,13 @@ impl FunctionAnswer {
         Ok(FunctionAnswer { source: Some(source), ..self })
     }
 
+    /// With `publisher` (`spec-0.6.1`): the host of the function's namespace, which must be exactly
+    /// that host (16.8; `E_DESCRIBE` for anything else, a domain of a later segment included).
+    pub fn with_publisher(self, publisher: &str) -> Result<FunctionAnswer> {
+        check_publisher(publisher, &self.name)?;
+        Ok(FunctionAnswer { publisher: Some(publisher.into()), ..self })
+    }
+
     /// The answer as a JSON value.
     pub fn to_value(&self) -> Value {
         let s = |x: &str| Value::String(x.into());
@@ -585,6 +634,9 @@ impl FunctionAnswer {
                     ("covered".into(), num(t.covered)),
                 ]),
             ));
+        }
+        if let Some(p) = &self.publisher {
+            m.push(("publisher".into(), s(p)));
         }
         if let Some(src) = &self.source {
             m.push((

@@ -6,7 +6,7 @@ The Rust core of the [Datumesh](https://datumesh.com) protocol: strict JSON and 
 
 ```toml
 [dependencies]
-datumesh-core = "0.3.9"
+datumesh-core = "0.3.10"
 ```
 
 Verify the receipt of `spec/vectors/receipt/stored-number.json` against the key documents the vector carries, then recompute it with the descriptor and value the vector's `recompute` object supplies:
@@ -80,7 +80,7 @@ A `Resolver` (a store, a cache, an engine's lookup) can check itself against the
 
 ```toml
 [dev-dependencies]
-datumesh-core = { version = "0.3.9", features = ["testkit"] }
+datumesh-core = { version = "0.3.10", features = ["testkit"] }
 ```
 
 The kit never writes through the resolver. It gives you `Fixtures` (descriptors, receipts and the versions of stored cells, all canonical JSON, from the specification's vectors plus a few receipts signed for the kit), you load them, and it verifies receipts through your resolver and looks things up in it:

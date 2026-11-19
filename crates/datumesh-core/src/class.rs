@@ -510,8 +510,8 @@ pub struct ClassEnv {
 }
 
 impl ClassEnv {
-    /// An environment for `definer`, the namespace defining (a class is defined under it
-    /// only: `E_CLASS_OWNER`).
+    /// An environment for `definer`, the namespace defining (a class is defined under it, its own
+    /// namespace or one below: `E_CLASS_OWNER`).
     pub fn new(definer: &str) -> ClassEnv {
         ClassEnv { definer: definer.into(), functions: BTreeMap::new(), classes: BTreeMap::new() }
     }
@@ -547,7 +547,8 @@ impl ClassEnv {
 /// its [`hash`](ClassDescriptor::hash) is the class hash. Checks in this order and reports the
 /// first failure:
 ///
-/// 1. `name` is a full name (2.3, `E_CANON_NAME`) under `env.definer()` (`E_CLASS_OWNER`);
+/// 1. `name` is a full name (2.3, `E_CANON_NAME`) under `env.definer()`, its namespace being the
+///    definer's or below it (`E_CLASS_OWNER`);
 /// 2. the descriptor as written ([`ClassDescriptor::from_json`]);
 /// 3. the parent, when there is one: known to `env` (`E_CLASS_PARENT`), no parent key declared
 ///    again (`E_CLASS_INHERIT`); then flattening (keys: the parent's then the class's own;
@@ -563,8 +564,12 @@ impl ClassEnv {
 pub fn define_class(name: &str, descriptor_json: &[u8], env: &ClassEnv) -> Result<ClassDescriptor> {
     // 1. the name, and the owner
     lexical::check_function_name(name, "$.name")?;
+    // A namespace defines classes under itself: its own namespace or one below it (16.2, as the
+    // reference tools check it since spec-0.5.0; `class/dns-segment-name` since spec-0.6.1).
     let owner = name.rsplit_once('/').map(|(ns, _)| ns).unwrap_or_default();
-    if owner != env.definer() {
+    let definer = env.definer();
+    let under = owner == definer || owner.strip_prefix(definer).is_some_and(|rest| rest.starts_with('/'));
+    if !under {
         return err(ErrorCode::ClassOwner, "$.name", format!("a namespace defines classes under itself: {name:?}"));
     }
     // 2. the descriptor as written
