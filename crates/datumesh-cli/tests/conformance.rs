@@ -4,6 +4,9 @@
 //! `excel`, `decimal`, `call`; SPEC 11), which a verifier library does not run: 818 of the 1474
 //! vectors of spec-0.5.0 apply (the kinds `licence`, `entitlement`, and since spec-0.5.0 `class`,
 //! `normalisation`, `key`, `describe` and `define` included), and the runner reports the others as skipped (656).
+//! spec-0.6.0 adds 90 vectors: 79 of the kinds a verifier runs (`receipt`, `envelope` with request
+//! `overrides` and `solve`, `describe` including the function answer, `mesh`) and 11 `call`, which
+//! stay skipped: 897 run, 667 skipped.
 
 use std::path::{Path, PathBuf};
 
@@ -23,7 +26,7 @@ const FORMULA_KINDS: [&str; 5] = ["formula", "formula-eval", "excel", "decimal",
 #[test]
 fn every_vector_passes() {
     let files = vectors();
-    assert_eq!(files.len(), 1474, "spec-0.5.0 (c8896ad) has 1474 vectors");
+    assert_eq!(files.len(), 1564, "spec-0.6.0 (640898c) has 1564 vectors: 1474 of spec-0.5.0 and 90 new");
     let mut failures = Vec::new();
     let mut applicable = 0;
     for f in &files {
@@ -37,8 +40,8 @@ fn every_vector_passes() {
             failures.push(format!("{}: {}", f.display(), problems.join("; ")));
         }
     }
-    assert_eq!(applicable, 818, "vectors a verifier library runs");
-    assert_eq!(files.len() - applicable, 656, "vectors skipped: the kinds for formula evaluators");
+    assert_eq!(applicable, 897, "vectors a verifier library runs");
+    assert_eq!(files.len() - applicable, 667, "vectors skipped: the kinds for formula evaluators");
     assert!(failures.is_empty(), "{} of {applicable} vectors fail:\n{}", failures.len(), failures.join("\n"));
 }
 

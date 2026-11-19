@@ -19,7 +19,7 @@ fn seed(v: &Value) -> [u8; 32] {
 
 /// A builder holding every member of `r` except `sig` and `computed_by`.
 fn builder_from(r: &Receipt) -> ReceiptBuilder {
-    ReceiptBuilder::new()
+    let b = ReceiptBuilder::new()
         .cell(r.cell().clone())
         .value(r.value().clone())
         .valid(r.valid().clone())
@@ -30,7 +30,12 @@ fn builder_from(r: &Receipt) -> ReceiptBuilder {
         .signer_host(r.signer_host())
         .inputs(r.inputs().iter().cloned())
         .licence(r.licence())
-        .summary(r.summary())
+        .summary(r.summary());
+    // spec-0.6.0: the optional `source` of a stored receipt.
+    match r.source() {
+        Some(source) => b.source(source.clone()),
+        None => b,
+    }
 }
 
 #[test]
@@ -105,7 +110,8 @@ fn every_valid_receipt_vector_with_a_keypair_round_trips_and_verifies() {
     // Every valid receipt vector (18 at spec-0.3.0) but receipt/ed25519-mixed-order-key (built
     // by hand, no seed).
     // spec-0.4.3 adds receipt/keydoc-declarations and receipt/unrooted-key-supplied.
-    assert_eq!(count, 32);
+    // spec-0.6.0 adds receipt/relayed-full and receipt/relayed-required (34).
+    assert_eq!(count, 34);
 }
 
 #[test]

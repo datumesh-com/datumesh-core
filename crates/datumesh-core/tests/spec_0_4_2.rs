@@ -89,6 +89,10 @@ fn every_envelope_vector_through_check_answer() {
     for v in &all {
         let id = str_of(v, "id");
         let req = v.get("request").unwrap();
+        // spec-0.6.0: a request with overrides is a whatif request (tests/spec_0_6_0_*.rs).
+        if req.get("overrides").is_some() {
+            continue;
+        }
         let input = str_of(v, "input").as_bytes();
         let got = if req.get("slice_id").is_some() {
             let mut s = SliceRequest::new(str_of(req, "slice_id"), req.get("asof").and_then(Value::as_str)).unwrap();

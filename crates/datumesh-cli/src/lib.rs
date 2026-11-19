@@ -378,13 +378,15 @@ fn status_of(v: &Value) -> u16 {
 
 /// A member a request description does not have, or one that is not a string where a string
 /// is due, is a malformed description: the caller's error (5.5, fc870ab), a malformed vector.
+/// `after` (a slice request) is an object and, since spec-0.6.0, `overrides` (the canonical
+/// override array, 5.9) is an array: `Request::with_whatif` holds it to its shape.
 fn known_members(req: &Value, names: &[&str]) -> Result<(), Error> {
     let Some(m) = req.as_object() else { return Err(vector_error("a request description is an object")) };
     for (k, v) in m {
         if !names.contains(&k.as_str()) {
             return Err(vector_error(&format!("a request description has no member {k:?}")));
         }
-        if k != "after" && !matches!(v, Value::String(_)) {
+        if k != "after" && k != "overrides" && !matches!(v, Value::String(_)) {
             return Err(vector_error(&format!("request member {k:?} is a string")));
         }
     }
@@ -392,9 +394,10 @@ fn known_members(req: &Value, names: &[&str]) -> Result<(), Error> {
 }
 
 /// A request description of SPEC 11: `cell_id`, `asof`, `job` (spec-0.4.1), `fn_hash` and
-/// `mesh` (spec-0.4.2).
+/// `mesh` (spec-0.4.2), and since spec-0.6.0 `overrides` (the canonical array) and `solve` (the
+/// vary cell id) of a request at the `whatif` endpoint. A malformed one is the caller's error.
 fn request_of(req: &Value) -> Result<Request, Error> {
-    known_members(req, &["cell_id", "asof", "job", "fn_hash", "mesh"])?;
+    known_members(req, &["cell_id", "asof", "job", "fn_hash", "mesh", "overrides", "solve"])?;
     let str_of = |k: &str| req.get(k).and_then(Value::as_str);
     let bad = |e: datumesh_core::InvalidRequest| vector_error(&e.to_string());
     let mut r = match str_of("job") {
@@ -407,6 +410,11 @@ fn request_of(req: &Value) -> Result<Request, Error> {
     }
     if let Some(m) = str_of("mesh") {
         r = r.with_mesh(m).map_err(bad)?;
+    }
+    match (req.get("overrides"), str_of("solve")) {
+        (Some(o), solve) => r = r.with_whatif(o, solve).map_err(bad)?,
+        (None, Some(_)) => return Err(vector_error("solve without overrides")),
+        (None, None) => {}
     }
     Ok(r)
 }

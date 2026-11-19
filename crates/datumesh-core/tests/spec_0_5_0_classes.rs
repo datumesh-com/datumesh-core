@@ -898,7 +898,7 @@ mod describe {
     #[test]
     fn every_describe_vector() {
         let all = vectors_of_kind("describe");
-        assert_eq!(all.len(), 24); // 6 valid, 18 invalid
+        assert_eq!(all.len(), 46); // 12 valid, 34 invalid (spec-0.6.0 added 6 valid, 16 invalid)
         for v in &all {
             let id = str_of(v, "id");
             // 6d5633e (16.8 step 6): a vector's held function descriptors go to check_describe_with

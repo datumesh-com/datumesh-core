@@ -174,6 +174,11 @@ fn every_envelope_vector_checks_as_expected() {
         if since_0_4_2(v) {
             continue;
         }
+        // spec-0.6.0: scenario (a request with overrides) and cycle envelopes are read by Answer
+        // (check_answer): tests/spec_0_6_0_*.rs.
+        if since_0_6_0(v) {
+            continue;
+        }
         // A pending envelope has no Envelope (no outcome variant for it in 0.3.x): check_envelope
         // refuses it; tests/spec_0_4_1.rs checks it through check_envelope_any.
         if str_of(v, "outcome") == "pending" {
@@ -191,6 +196,12 @@ fn every_envelope_vector_checks_as_expected() {
             (false, Err(e)) => assert_eq!(e.code_str(), str_of(v, "error"), "{id}"),
         }
     }
+}
+
+/// An envelope vector of spec-0.6.0 that only `check_answer` reads: the request has `overrides`
+/// (the scenario outcome), or the error envelope names a `cycle`.
+fn since_0_6_0(v: &Value) -> bool {
+    v.get("request").unwrap().get("overrides").is_some() || str_of(v, "input").contains("\"cycle\"")
 }
 
 /// An envelope vector of spec-0.4.2: trust computed, a pin, the mesh asked or a slice request.

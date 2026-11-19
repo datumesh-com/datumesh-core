@@ -5,7 +5,8 @@ output members the vector gives. A valid mesh vector without bindings and endpoi
 endpoints dropped; since 3f79313 the vectors carry them. Since spec-0.4.3: keys vectors
 with declarations carry them as an output; the kinds licence and entitlement. Since spec-0.5.0 the kinds
 class (flattened, class_hash), normalisation (no output), key (decoded; given class_hash also object, object_id and class_hash echoed), describe (no output) and
-define (canonical, sha256) are run. Usage: python3 tools/gen_golden.py spec/vectors"""
+define (canonical, sha256) are run. Since spec-0.6.0 the mesh endpoint whatif is known; scenario envelopes and the
+function describe answer add no output member (outcome only; describe none). Usage: python3 tools/gen_golden.py spec/vectors"""
 import json, os, sys
 OUT = {"jcs": ["canonical", "sha256"], "scalar": ["canonical", "sha256"], "cell": ["canonical", "sha256"],
        "ref": ["canonical", "sha256"], "function": ["canonical", "sha256"],
@@ -19,7 +20,7 @@ OUT = {"jcs": ["canonical", "sha256"], "scalar": ["canonical", "sha256"], "cell"
        "class": ["flattened", "class_hash"], "normalisation": [], "key": ["decoded", "object", "object_id", "class_hash"], "describe": [],
        "define": ["canonical", "sha256"]}
 KNOWN = {"blob", "cell", "cells", "descriptor", "explain", "find", "jobs", "manifest", "receipt", "slice", "verify",
-         "versions", "describe"}
+         "versions", "describe", "whatif"}
 SKIP = {"formula", "formula-eval", "excel", "decimal", "call"}
 root = sys.argv[1]
 files = []

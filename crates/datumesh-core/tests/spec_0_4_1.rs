@@ -71,6 +71,10 @@ fn every_envelope_vector_through_check_envelope_any() {
         // spec-0.4.2's envelopes (computed, pins, the mesh asked, slice pages): spec_0_4_2.rs.
         let req = v.get("request").unwrap();
         let input = str_of(&v, "input");
+        // spec-0.6.0: scenario and cycle envelopes are read by check_answer (tests/spec_0_6_0_*.rs).
+        if req.get("overrides").is_some() || input.contains("\"cycle\"") {
+            continue;
+        }
         if ["fn_hash", "mesh", "slice_id"].iter().any(|k| req.get(k).is_some())
             || ["\"computed\"", "\"fn_hash\"", "E_NAME_UNBOUND", "E_SLICE_AT_CELL"].iter().any(|t| input.contains(t))
         {

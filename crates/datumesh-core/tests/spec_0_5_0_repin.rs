@@ -113,7 +113,7 @@ mod point2 {
     use super::*;
 
     /// 5.5: "any code in 10.2 except exactly these".
-    const REFUSED: [&str; 18] = [
+    const REFUSED: [&str; 20] = [
         // the client's codes
         "E_ENVELOPE",
         "E_DESCRIBE",
@@ -135,6 +135,10 @@ mod point2 {
         "E_CLASS_METHOD",
         "E_CLASS_INTERFACE",
         "E_CLASS_OWNER",
+        // spec-0.6.0: whatif. E_WHATIF_UNSUPPORTED is a bad_request's, E_WHATIF_NO_SOLUTION a
+        // not_covered fault: neither is an error envelope's.
+        "E_WHATIF_UNSUPPORTED",
+        "E_WHATIF_NO_SOLUTION",
     ];
 
     #[test]
